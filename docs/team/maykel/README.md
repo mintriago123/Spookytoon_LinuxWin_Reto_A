@@ -17,12 +17,12 @@ Dueño del game loop, máquina de estados de zombies/sobrevivientes, eventos de 
 ## Secuencia obligatoria por turno
 
 1. Aplicar eventos efectivos del turno y mover zombies.
-2. Guardar transiciones zombie y sincronizar el snapshot con el motor.
+2. Guardar transiciones zombie y sincronizar el snapshot con el motor, incluyendo el agregado dormantUncertaintyNodeIds sin objetos/IDs de dormidos no despiertos.
 3. Consultar /paso en paralelo para cada sobreviviente vivo, con timeout de 500 ms.
 4. Validar las decisiones, mover sobrevivientes y resolver mordidas antes de refugios.
 5. Comprometer el estado completo, actualizar /estado, emitir TURN_UPDATE y encolar snapshot.
 
-Un timeout, error, respuesta tardía o movimiento inválido deja quieto al sobreviviente afectado. Una falla de sincronización hace que todos esperen; nunca usar una versión anterior del mundo.
+Un timeout, error, respuesta tardía o movimiento inválido deja quieto al sobreviviente afectado, usando su nodo actual. Una falla de sincronización hace que todos esperen; nunca usar una versión anterior del mundo.
 
 ## Reglas que no deben divergir
 
@@ -43,6 +43,7 @@ Un timeout, error, respuesta tardía o movimiento inválido deja quieto al sobre
 
 - 150 turnos de 2.000 ms seriales; nunca hay dos turnos simultáneos.
 - Hasta 200 solicitudes de ruta en paralelo, deadline individual de 500 ms y percentiles en ventana de 1.000 muestras.
+- Se consulta la tabla precomputada por worldVersion; no se ejecuta Dijkstra por sobreviviente.
 - Las tres rondas cumplen sus cantidades de sobrevivientes, composición y eventos de ciudad.
 - Mordidas, capacidad, pausa y semilla reproducible cumplen SPEC.md.
 - GET /estado y TURN_UPDATE describen el mismo turnId y worldVersion.

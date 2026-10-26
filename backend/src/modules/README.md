@@ -18,9 +18,10 @@ El Backend es un solo monolito modular: un proceso Fastify, un estado autoritati
 1. **app.ts** es el composition root: instancia y conecta módulos; ningún módulo crea otro servidor Fastify.
 2. **contracts/** contiene DTOs y validadores compartidos. Todos los módulos dependen de estos tipos públicos y de SPEC.md.
 3. **graph** expone datos inmutables. **routing** mantiene su snapshot de lectura y nunca muta WorldState.
-4. **simulator** es el único dueño de la escritura de WorldState. Invoca POST /motor/sincronizar y POST /paso por loopback con los contratos HTTP definidos; valida el resultado antes de aplicar un movimiento.
-5. **persistence** y **realtime** reciben snapshots ya comprometidos. No escriben de vuelta al simulador ni retrasan el loop por I/O.
-6. No importar archivos internos de otro módulo. Las integraciones pasan por su interfaz pública, contrato HTTP o snapshot tipado.
+4. **routing** calcula Dijkstra inverso una vez por worldVersion y publica bestMoveByNode a sus workers. Cada POST /paso es lookup O(1).
+5. **simulator** es el único dueño de la escritura de WorldState. Invoca POST /motor/sincronizar y POST /paso por loopback con los contratos HTTP definidos; valida el resultado antes de aplicar un movimiento.
+6. **persistence** y **realtime** reciben snapshots ya comprometidos. No escriben de vuelta al simulador ni retrasan el loop por I/O.
+7. No importar archivos internos de otro módulo. Las integraciones pasan por su interfaz pública, contrato HTTP o snapshot tipado.
 
 ## Secuencia de integración
 

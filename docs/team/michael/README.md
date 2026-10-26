@@ -20,9 +20,9 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 
 1. Extraer y revisar el grafo con IDs estables, aristas dirigidas y segmentos que agrupen ambos sentidos.
 2. Validar zonas, coordenadas, factores, conexiones y los cuatro refugios con capacidades configuradas.
-3. Implementar POST /paso, autenticación x-api-key, Dijkstra multi-source, potenciales de peligro y respuesta segura de espera.
-4. Implementar POST /motor/sincronizar para instalar el mismo snapshot en todos los workers.
-5. Desplegar un escritor de partida en ECS Fargate en us-east-1, persistir snapshots de forma asíncrona y publicar métricas/alertas.
+3. Implementar el precompute Dijkstra inverso en cada sync, potenciales Base, tabla bestMoveByNode O(1), autenticación x-api-key y fallback seguro al nodo actual.
+4. Implementar POST /motor/sincronizar para instalar el mismo snapshot y plan precomputado en todos los workers.
+5. Desplegar un escritor de partida en ECS Fargate en la región seleccionada por AWS_REGION, persistir snapshots de forma asíncrona y publicar métricas/alertas.
 
 ## Integración con el equipo
 
@@ -33,10 +33,12 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 ## Aceptación antes de integrar
 
 - El grafo pasa validación semántica y ambas copias tienen el mismo graphVersion y SHA-256.
-- El motor nunca recomienda arista cerrada/no adyacente, zona de horda ni cruce frontal.
+- El motor precomputa una vez por worldVersion; POST /paso es lookup O(1) y nunca recomienda arista cerrada/no adyacente, zona de horda ni cruce frontal.
+- Una solicitud válida con fallo de cálculo responde espera en el mismo nodo; no genera nextNode inválido.
 - La carga de 200 llamadas concurrentes cumple p95 ≤150 ms; el cliente cancela cada llamada a los 500 ms.
 - Readiness permanece false hasta que grafo y workers estén listos.
 - API keys y snapshots completos no aparecen en frontend ni logs.
+- La región se confirma antes del despliegue y se usa también en el cálculo de costos; us-east-1 es solo el valor inicial sugerido.
 
 ## Datos pendientes
 
