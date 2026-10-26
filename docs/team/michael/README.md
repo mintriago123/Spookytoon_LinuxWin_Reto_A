@@ -10,8 +10,8 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 |---|---|
 | Extracción y normalización OSM | [scripts/](../../../scripts/README.md) |
 | Grafo desplegable | **backend/data/** y **frontend/public/data/** |
-| Carga, validación y adyacencia | **backend/src/graph/** |
-| Rutas, amenazas y workers | **backend/src/routing/** |
+| Carga, validación y adyacencia | **backend/src/modules/graph/** |
+| Rutas, amenazas y workers | **backend/src/modules/routing/** |
 | Contratos y validadores runtime | **backend/src/contracts/** |
 | AWS y alarmas | **backend/infra/** |
 | OpenAPI generado | **backend/openapi/** |

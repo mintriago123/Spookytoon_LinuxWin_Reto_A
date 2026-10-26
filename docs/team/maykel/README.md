@@ -8,11 +8,11 @@ Dueño del game loop, máquina de estados de zombies/sobrevivientes, eventos de 
 
 | Área | Ubicación |
 |---|---|
-| Game loop y estado autoritativo | **backend/src/simulator/** |
-| Eventos de ciudad | **backend/src/simulator/city-events.ts** |
+| Game loop y estado autoritativo | **backend/src/modules/simulator/** |
+| Eventos de ciudad | **backend/src/modules/simulator/city-events.ts** |
 | Coordinación con rutas | **backend/src/app.ts** y cliente interno del motor |
-| Latencia y métricas del turno | **backend/src/telemetry/** |
-| Emisión al Frontend | **backend/src/ws/** |
+| Latencia y métricas del turno | **backend/src/modules/telemetry/** |
+| Emisión al Frontend | **backend/src/modules/realtime/** |
 
 ## Secuencia obligatoria por turno
 

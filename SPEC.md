@@ -12,6 +12,8 @@
 
 Un Backend Node.js + TypeScript con Fastify y ws hospeda el game loop, el motor de rutas, HTTP y WebSocket. El grafo es inmutable y reside en RAM. El Simulador ejecuta cada fase en serie e invoca POST /paso por cada sobreviviente vivo, en paralelo. Una piscina acotada de worker_threads ejecuta las rutas sin bloquear el event loop. Todos los workers reciben la misma versión inmutable del mundo mediante POST /motor/sincronizar antes de aceptar decisiones del turno.
 
+El Backend es un monolito modular, no dos backends: Michael lidera graph y routing; Maykel lidera simulator y realtime. Ambos módulos corren en el mismo proceso/tarea, pero mantienen límites de ownership y contratos explícitos. El composition root app.ts los conecta; simulator consume routing por los endpoints internos definidos y no importa su implementación privada. contracts/ es el DTO compartido y simulator es el único escritor de WorldState.
+
 Se ejecuta una sola tarea Backend activa por partida. No escalar horizontalmente el escritor: memoria, reloj y estado tienen un solo dueño. Una futura escala requiere líder con fencing y partición explícita por partida. El proceso no usa Lambda ni cold starts en la ruta crítica. En el arranque carga el grafo, verifica invariantes y workers; solo entonces reporta readiness.
 
 ```text
@@ -51,29 +53,31 @@ Después de cada turno comprometido, se encola un snapshot dinámico para Dynamo
 │   │   ├── contracts/
 │   │   │   ├── schemas.ts
 │   │   │   └── types.ts
-│   │   ├── graph/
-│   │   │   ├── load-graph.ts
-│   │   │   ├── validate-graph.ts
-│   │   │   └── adjacency.ts
-│   │   ├── routing/
-│   │   │   ├── route-service.ts
-│   │   │   ├── route-worker.ts
-│   │   │   ├── worker-pool.ts
-│   │   │   └── danger-map.ts
-│   │   ├── simulator/
-│   │   │   ├── game-loop.ts
-│   │   │   ├── zombie-machine.ts
-│   │   │   ├── survivor-machine.ts
-│   │   │   ├── city-events.ts
-│   │   │   └── world-store.ts
-│   │   ├── telemetry/
-│   │   │   ├── rolling-latency.ts
-│   │   │   └── metrics.ts
-│   │   ├── persistence/
-│   │   │   ├── snapshot-queue.ts
-│   │   │   └── dynamodb-store.ts
-│   │   ├── ws/
-│   │   │   └── broadcaster.ts
+│   │   └── modules/
+│   │       ├── README.md
+│   │       ├── graph/
+│   │       │   ├── load-graph.ts
+│   │       │   ├── validate-graph.ts
+│   │       │   └── adjacency.ts
+│   │       ├── routing/
+│   │       │   ├── route-service.ts
+│   │       │   ├── route-worker.ts
+│   │       │   ├── worker-pool.ts
+│   │       │   └── danger-map.ts
+│   │       ├── simulator/
+│   │       │   ├── game-loop.ts
+│   │       │   ├── zombie-machine.ts
+│   │       │   ├── survivor-machine.ts
+│   │       │   ├── city-events.ts
+│   │       │   └── world-store.ts
+│   │       ├── telemetry/
+│   │       │   ├── rolling-latency.ts
+│   │       │   └── metrics.ts
+│   │       ├── persistence/
+│   │       │   ├── snapshot-queue.ts
+│   │       │   └── dynamodb-store.ts
+│   │       └── realtime/
+│   │           └── broadcaster.ts
 │   ├── infra/
 │   │   ├── ecs-task.json
 │   │   └── cloudwatch-alarms.json
