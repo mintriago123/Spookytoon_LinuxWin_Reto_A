@@ -61,7 +61,7 @@ export function awakenDormantZombies(input: {
 }
 
 /** Intenciones contra la misma vista de vivos y cierres. No publica ni sincroniza.
- * Los pasos de corredor son internos: no convertirlos al contrato de routing actual.
+ * Conserva los pasos completos conforme al contrato compartido RouteZombieTraversal.
  */
 export function moveZombies(input: {
   turnId: number;

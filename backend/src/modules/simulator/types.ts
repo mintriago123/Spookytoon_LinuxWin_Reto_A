@@ -45,7 +45,7 @@ export interface ScheduledCityEvent extends CityEvent {
   origen: RouteBlockedEdge["origen"];
 }
 
-export type PauseCause = "operator" | "deadline-miss" | "routing-unauthorized";
+export type PauseCause = "operator" | "deadline-miss" | "routing-unauthorized" | "routing-sync-uncertain";
 export type PauseState =
   | { status: "none" }
   | {
