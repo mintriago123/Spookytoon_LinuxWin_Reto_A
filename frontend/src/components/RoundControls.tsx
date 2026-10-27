@@ -118,7 +118,17 @@ export function RoundControls() {
   const busy = pendingControl !== null;
 
   const inputClass =
-    "rounded border border-white/10 bg-night-700 px-2 py-1 text-slate-100 placeholder:text-slate-500";
+    "rounded border border-white/10 bg-night-700 px-2 py-1 text-slate-100 placeholder:text-slate-500 transition-colors duration-150 hover:border-white/25";
+
+  // Tailwind necesita clases literales completas para detectarlas en build;
+  // no se puede interpolar el color dentro del nombre de la clase.
+  const ACTION_BUTTON_CLASS: Record<"green" | "amber" | "rose", string> = {
+    green:
+      "rounded bg-accent-green/90 px-3 py-1.5 font-semibold text-night-900 transition-all duration-150 hover:bg-accent-green enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
+    amber:
+      "rounded bg-accent-amber/90 px-3 py-1.5 font-semibold text-night-900 transition-all duration-150 hover:bg-accent-amber enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
+    rose: "rounded bg-accent-rose/90 px-3 py-1.5 font-semibold text-night-900 transition-all duration-150 hover:bg-accent-rose enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-40",
+  };
 
   return (
     <form
@@ -165,7 +175,7 @@ export function RoundControls() {
           type="button"
           onClick={iniciar}
           disabled={busy || status === "running"}
-          className="flex-1 rounded bg-accent-green/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
+          className={`flex-1 ${ACTION_BUTTON_CLASS.green}`}
         >
           {pendingControl === "iniciar" ? "Iniciando…" : "Iniciar"}
         </button>
@@ -173,7 +183,7 @@ export function RoundControls() {
           type="button"
           onClick={pausar}
           disabled={busy || status !== "running"}
-          className="flex-1 rounded bg-accent-amber/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
+          className={`flex-1 ${ACTION_BUTTON_CLASS.amber}`}
         >
           {pendingControl === "pausar" ? "Pausando…" : "Pausar"}
         </button>
@@ -198,7 +208,7 @@ export function RoundControls() {
                   type="button"
                   onClick={() => bloquearSegmento(blocked.edgeIds[0], false, "Desbloqueo manual del operador")}
                   disabled={busy}
-                  className="shrink-0 rounded bg-night-600 px-2 py-0.5 font-semibold text-slate-100 disabled:opacity-40"
+                  className="shrink-0 rounded bg-night-600 px-2 py-0.5 font-semibold text-slate-100 transition-colors duration-150 hover:bg-night-500 enabled:cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   {pendingControl === "bloquear-arista" ? "…" : "Desbloquear"}
                 </button>
@@ -235,7 +245,7 @@ export function RoundControls() {
           type="button"
           onClick={() => bloquearSegmento(selectedEdgeId, true, blockMotivo || "Bloqueo manual del operador")}
           disabled={busy || !selectedEdgeId || !blockMotivo}
-          className="rounded bg-accent-rose/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
+          className={ACTION_BUTTON_CLASS.rose}
         >
           {pendingControl === "bloquear-arista" ? "Cerrando…" : "Cerrar segmento"}
         </button>

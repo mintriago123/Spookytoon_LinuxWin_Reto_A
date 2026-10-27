@@ -7,6 +7,9 @@ export default {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["Manrope", "system-ui", "sans-serif"],
+      },
       colors: {
         night: {
           950: "#06100a",

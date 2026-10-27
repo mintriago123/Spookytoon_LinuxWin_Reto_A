@@ -45,14 +45,22 @@ export function App() {
     <div className="flex h-full w-full flex-col bg-night-900 text-slate-100 md:flex-row">
       <div className="flex flex-col md:w-[calc(100%-20rem)]">
         <header className="glass z-10 flex items-center gap-3 px-4 py-2.5">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-accent-cyan/20 text-accent-cyan">
-            ☣
-          </div>
+          <svg
+            viewBox="0 0 24 24"
+            className="h-8 w-8 shrink-0 text-accent-cyan"
+            aria-hidden
+          >
+            <circle cx="12" cy="12" r="9.5" fill="none" stroke="currentColor" strokeOpacity="0.35" />
+            <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+            <g className="radar-mark">
+              <path d="M12 12 L12 3" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </g>
+          </svg>
           <div className="leading-tight">
-            <div className="text-sm font-semibold tracking-wide">Escape de Manta Zombie</div>
-            <div className="text-[11px] text-slate-400">
+            <h1 className="text-sm font-bold tracking-wide">Escape de Manta Zombie</h1>
+            <p className="text-[11px] text-slate-400">
               Centro de mando · motor de rutas en tiempo real
-            </div>
+            </p>
           </div>
         </header>
         <main className="relative flex-1">

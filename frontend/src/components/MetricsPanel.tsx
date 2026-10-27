@@ -14,7 +14,7 @@ function Metric({ label, value }: { label: string; value: string }) {
       <span className="text-[10px] uppercase tracking-wide text-slate-400">
         {label}
       </span>
-      <span className="text-sm font-semibold text-slate-100">{value}</span>
+      <span className="text-sm font-bold tabular-nums text-slate-100">{value}</span>
     </div>
   );
 }
@@ -52,7 +52,7 @@ export function MetricsPanel() {
       : "—";
 
   return (
-    <div className="glass grid grid-cols-2 gap-3 rounded-lg p-3 sm:grid-cols-4">
+    <div className="glass panel-in grid grid-cols-2 gap-3 rounded-lg p-3 sm:grid-cols-4">
       <Metric label="Ronda" value={ROUND_LABEL[roundId]} />
       <Metric label="Vivos" value={String(metrics.activeSurvivors)} />
       <Metric label="Mordidos" value={String(metrics.bittenSurvivors)} />

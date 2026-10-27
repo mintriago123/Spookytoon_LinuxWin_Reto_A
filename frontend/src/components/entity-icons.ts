@@ -65,9 +65,13 @@ export function zombieIcon(tipo: ZombieType, estado: "activo" | "dormido"): L.Di
   const cached = zombieIconCache.get(key);
   if (cached) return cached;
   const size = tipo === "horda" ? 26 : 22;
+  // Pulso de amenaza solo en corredor/horda: son los tipos que exigen
+  // reacción inmediata del operador (persiguen o bloquean nodos). Caminante
+  // y dormido se quedan quietos a propósito para no diluir la señal.
+  const isActiveThreat = (tipo === "corredor" || tipo === "horda") && estado !== "dormido";
   const icon = L.divIcon({
     html: wrapSvg(size, zombieBody(tipo, ZOMBIE_COLOR[tipo], estado === "dormido")),
-    className: "",
+    className: isActiveThreat ? "threat-marker" : "",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
