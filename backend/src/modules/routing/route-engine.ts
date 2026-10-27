@@ -4,7 +4,7 @@ import { buildAdjacency } from "../graph/adjacency.ts";
 import type { MantaGraph, GraphEdge } from "../../contracts/types.ts";
 import { RoutingError, type PasoRequest, type PasoResponse, type RoutePlanEntry,
   type RoutePlanSnapshot, type RoutingEngineOptions, type RoutingSnapshot,
-  type SyncResponse, type WorldSyncRequest } from "../../contracts/routing.ts";
+  type RoutingStatusResponse, type SyncResponse, type WorldSyncRequest } from "../../contracts/routing.ts";
 import { validatePasoRequest, validateWorldSyncRequest } from "../../contracts/routing-validation.ts";
 
 interface HeapEntry { node: number; cost: number; shelterId: string }
@@ -90,16 +90,15 @@ export class RouteEngine {
       if (requestDigest === previous.requestDigest) return previous.response;
       throw new RoutingError(409, "STALE_WORLD", "Ya existe una sincronización distinta para ese turno");
     }
+    if (previous && request.turnId < previous.request.turnId) {
+      throw new RoutingError(409, "STALE_WORLD", "turnId debe ser posterior al último turno instalado");
+    }
     if (previous && request.baseWorldVersion !== previous.worldVersion) {
       throw new RoutingError(409, "STALE_WORLD", "baseWorldVersion no coincide con la última sincronización");
     }
     if (!previous && request.baseWorldVersion !== 0) {
       throw new RoutingError(409, "STALE_WORLD", "La primera sincronización debe partir de worldVersion 0");
     }
-    if (previous && request.turnId !== previous.request.turnId + 1) {
-      throw new RoutingError(409, "STALE_WORLD", "turnId debe avanzar exactamente una unidad");
-    }
-
     const worldVersion = request.baseWorldVersion + 1;
     const start = this.now();
     const bestMoveByNode = this.buildPlan(request);
@@ -129,7 +128,7 @@ export class RouteEngine {
       blockedEdgeIds,
       zombieNodeIds: new Set(request.zombies.filter(zombie => zombie.estado === "activo").map(zombie => zombie.nodeId)),
       hordeNodeIds: this.hordeNeighborhood(request),
-      zombieTransitions: new Set(request.zombieTransitions.map(transition => `${transition.fromNodeId}\0${transition.toNodeId}`)),
+      zombieTraversalPairs: new Set(request.zombieTraversals.map(traversal => `${traversal.fromNodeId}\0${traversal.toNodeId}`)),
     };
     // La referencia completa cambia al final: ninguna lectura ve un snapshot parcial.
     this.snapshots.set(request.gameId, snapshot);
@@ -178,6 +177,9 @@ export class RouteEngine {
   }
 
   getPlan(gameId: string) { return this.snapshots.get(gameId)?.plan; }
+  getStatus(gameId: string): RoutingStatusResponse {
+    return { gameId, installed: this.snapshots.get(gameId)?.response ?? null };
+  }
   isReady(gameId?: string) { return gameId ? this.snapshots.has(gameId) : this.snapshots.size > 0; }
 
   private buildPlan(request: WorldSyncRequest): Record<string, RoutePlanEntry> {
@@ -235,7 +237,7 @@ export class RouteEngine {
       }
     }
 
-    const frontCrossings = new Set(request.zombieTransitions.map(transition => `${transition.toNodeId}\0${transition.fromNodeId}`));
+    const frontCrossings = new Set(request.zombieTraversals.map(traversal => `${traversal.toNodeId}\0${traversal.fromNodeId}`));
     const availableByNode = new Map<string, RouteShelterLike[]>();
     for (const shelter of availableShelters) {
       const list = availableByNode.get(shelter.nodoId) ?? [];
@@ -328,7 +330,7 @@ export class RouteEngine {
       if (!edge || edge.origen !== entry.fromNodeId || edge.destino !== entry.toNodeId ||
           snapshot.blockedEdgeIds.has(edge.id) || snapshot.zombieNodeIds.has(entry.toNodeId) ||
           snapshot.hordeNodeIds.has(entry.toNodeId) ||
-          snapshot.zombieTransitions.has(`${entry.toNodeId}\0${entry.fromNodeId}`)) return false;
+          snapshot.zombieTraversalPairs.has(`${entry.toNodeId}\0${entry.fromNodeId}`)) return false;
       const targetShelter = snapshot.shelterById.get(entry.targetShelterId);
       if (!targetShelter || targetShelter.ocupantes.length + targetShelter.reservados.length >= targetShelter.capacidad) return false;
     }

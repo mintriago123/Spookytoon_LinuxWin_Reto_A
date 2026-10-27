@@ -1,7 +1,7 @@
 import type { MantaGraph } from "./types.ts";
 import {
   RoutingError, type RouteBlockedEdge, type RouteShelter, type RouteSurvivor,
-  type RouteZombie, type RouteZombieTransition, type WorldSyncRequest,
+  type RouteZombie, type RouteZombieTraversal, type WorldSyncRequest,
 } from "./routing.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -112,22 +112,29 @@ function validateBlockedEdge(value: unknown, index: number, turnId: number, edge
     bloqueadaDesdeTurno, desbloqueadaEnTurno };
 }
 
-function validateTransition(value: unknown, index: number, nodeIds: Set<string>): RouteZombieTransition {
-  const name = `zombieTransitions[${index}]`; const item = record(value, name);
-  keys(item, ["zombieId", "fromNodeId", "toNodeId"], [], name);
+function validateTraversal(value: unknown, index: number, nodeIds: Set<string>,
+  edges: Map<string, MantaGraph["aristas"][number]>): RouteZombieTraversal {
+  const name = `zombieTraversals[${index}]`; const item = record(value, name);
+  keys(item, ["zombieId", "stepIndex", "edgeId", "fromNodeId", "toNodeId"], [], name);
+  const stepIndex = integer(item.stepIndex, `${name}.stepIndex`, 1);
+  if (stepIndex > 2) invalid(`${name}.stepIndex debe ser 1 o 2`);
+  const edgeId = string(item.edgeId, `${name}.edgeId`);
   const fromNodeId = string(item.fromNodeId, `${name}.fromNodeId`); const toNodeId = string(item.toNodeId, `${name}.toNodeId`);
   if (!nodeIds.has(fromNodeId) || !nodeIds.has(toNodeId) || fromNodeId === toNodeId) invalid(`${name} requiere nodos distintos del grafo`);
-  return { zombieId: string(item.zombieId, `${name}.zombieId`), fromNodeId, toNodeId };
+  const edge = edges.get(edgeId);
+  if (!edge || edge.origen !== fromNodeId || edge.destino !== toNodeId) invalid(`${name}.edgeId no coincide con el recorrido`);
+  return { zombieId: string(item.zombieId, `${name}.zombieId`), stepIndex: stepIndex as 1 | 2,
+    edgeId, fromNodeId, toNodeId };
 }
 
 export function validateWorldSyncRequest(value: unknown, graph: MantaGraph): WorldSyncRequest {
   const item = record(value, "request");
-  keys(item, ["gameId", "turnId", "baseWorldVersion", "survivors", "zombies", "shelters", "blockedEdges", "zombieTransitions", "dormantUncertaintyNodeIds"], [], "request");
+  keys(item, ["gameId", "turnId", "baseWorldVersion", "survivors", "zombies", "shelters", "blockedEdges", "zombieTraversals", "dormantUncertaintyNodeIds"], [], "request");
   const gameId = string(item.gameId, "gameId", 128);
   const turnId = integer(item.turnId, "turnId", 1);
   const baseWorldVersion = integer(item.baseWorldVersion, "baseWorldVersion", 0);
   if (!Array.isArray(item.survivors) || !Array.isArray(item.zombies) || !Array.isArray(item.shelters) ||
-      !Array.isArray(item.blockedEdges) || !Array.isArray(item.zombieTransitions)) invalid("Las entidades y bloqueos deben ser listas");
+      !Array.isArray(item.blockedEdges) || !Array.isArray(item.zombieTraversals)) invalid("Las entidades y bloqueos deben ser listas");
   const nodeIds = new Set(graph.nodos.map(node => node.id));
   const shelterIds = new Set(graph.refugios.map(shelter => shelter.id));
   const survivors = item.survivors.map((survivor, index) => validateSurvivor(survivor, index, nodeIds, shelterIds));
@@ -159,21 +166,37 @@ export function validateWorldSyncRequest(value: unknown, graph: MantaGraph): Wor
   }
   const blockedEdges = item.blockedEdges.map((edge, index) => validateBlockedEdge(edge, index, turnId, edgeToSegment, segmentToEdges));
   if (new Set(blockedEdges.map(edge => edge.segmentoId)).size !== blockedEdges.length) invalid("blockedEdges repite segmentoId");
-  const zombieTransitions = item.zombieTransitions.map((transition, index) => validateTransition(transition, index, nodeIds));
   const zombiesById = new Map(zombies.map(zombie => [zombie.id, zombie]));
-  if (new Set(zombieTransitions.map(transition => transition.zombieId)).size !== zombieTransitions.length) invalid("zombieTransitions repite zombieId");
-  for (const transition of zombieTransitions) {
-    const zombie = zombiesById.get(transition.zombieId);
-    if (!zombie || zombie.estado !== "activo" || zombie.nodeId !== transition.toNodeId) {
-      invalid(`La transición ${transition.zombieId} no coincide con un zombie visible en su nodo destino`);
+  const graphEdges = new Map(graph.aristas.map(edge => [edge.id, edge]));
+  const zombieTraversals = item.zombieTraversals.map((traversal, index) =>
+    validateTraversal(traversal, index, nodeIds, graphEdges));
+  const traversalsByZombie = new Map<string, RouteZombieTraversal[]>();
+  let previousZombieId = "";
+  for (const traversal of zombieTraversals) {
+    if (traversal.zombieId < previousZombieId) invalid("zombieTraversals debe ordenarse por zombieId y stepIndex");
+    previousZombieId = traversal.zombieId;
+    const list = traversalsByZombie.get(traversal.zombieId) ?? [];
+    list.push(traversal); traversalsByZombie.set(traversal.zombieId, list);
+  }
+  for (const [zombieId, traversals] of traversalsByZombie) {
+    const zombie = zombiesById.get(zombieId);
+    if (!zombie || zombie.estado !== "activo") invalid(`El zombie ${zombieId} no está visible y activo`);
+    const maxSteps = zombie.tipo === "corredor" ? 2 : zombie.tipo === "horda" ? 0 : 1;
+    if (traversals.length > maxSteps) invalid(`El zombie ${zombieId} excede su máximo de recorridos`);
+    for (let index = 0; index < traversals.length; index++) {
+      const traversal = traversals[index];
+      if (traversal.stepIndex !== index + 1) invalid(`Los pasos de ${zombieId} deben ser consecutivos desde 1`);
+      if (index > 0 && traversals[index - 1].toNodeId !== traversal.fromNodeId) {
+        invalid(`Los recorridos de ${zombieId} no forman una trayectoria continua`);
+      }
     }
-    if (!graph.aristas.some(edge => edge.origen === transition.fromNodeId && edge.destino === transition.toNodeId)) {
-      invalid(`La transición ${transition.zombieId} no corresponde a una arista del grafo`);
+    if (traversals.at(-1)!.toNodeId !== zombie.nodeId) {
+      invalid(`El último recorrido de ${zombieId} no termina en su nodo visible`);
     }
   }
   const dormantUncertaintyNodeIds = stringArray(item.dormantUncertaintyNodeIds, "dormantUncertaintyNodeIds");
   if (dormantUncertaintyNodeIds.some(nodeId => !nodeIds.has(nodeId))) invalid("dormantUncertaintyNodeIds contiene nodos desconocidos");
-  return { gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTransitions, dormantUncertaintyNodeIds };
+  return { gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds };
 }
 
 export function validatePasoRequest(value: unknown): { gameId: string; turnId: number; worldVersion: number; survivorId: string; currentNodeId: string; targetShelterId?: string | null } {

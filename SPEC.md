@@ -253,8 +253,9 @@ export interface BlockedEdge {
   origen: "evento-ciudad" | "control";
   bloqueadaDesdeTurno: number; desbloqueadaEnTurno: number | null;
 }
-export interface ZombieTransition {
-  zombieId: string; fromNodeId: string; toNodeId: string;
+export interface ZombieTraversal {
+  zombieId: string; stepIndex: 1 | 2; edgeId: string;
+  fromNodeId: string; toNodeId: string;
 }
 export interface CityEvent {
   eventId: string; tipo: "bloquear-segmento" | "desbloquear-segmento";
@@ -273,7 +274,7 @@ export interface WorldState {
   turnId: number; activeTurnId: number | null; worldVersion: number;
   graph: MantaGraph; zombies: Zombie[]; survivors: Survivor[]; shelters: Shelter[];
   blockedEdges: BlockedEdge[]; pendingCityEvents: CityEvent[];
-  lastZombieTransitions: ZombieTransition[]; metrics: TelemetryMetrics;
+  lastZombieTraversals: ZombieTraversal[]; metrics: TelemetryMetrics;
   rngSeed: string; updatedAt: string;
 }
 export interface WorldSnapshot {
@@ -301,7 +302,7 @@ export interface WorldSyncRequest {
   gameId: string; turnId: number; baseWorldVersion: number;
   survivors: Survivor[]; zombies: Zombie[]; // solo entidades visibles a routing
   shelters: Shelter[];
-  blockedEdges: BlockedEdge[]; zombieTransitions: ZombieTransition[];
+  blockedEdges: BlockedEdge[]; zombieTraversals: ZombieTraversal[];
   dormantUncertaintyNodeIds: string[];
 }
 export interface RoutePlanEntry {
@@ -315,6 +316,13 @@ export interface RoutePlanSnapshot {
   gameId: string; turnId: number; worldVersion: number; graphVersion: string;
   builtAt: string; buildLatencyMs: number;
   bestMoveByNode: Readonly<Record<string, RoutePlanEntry>>;
+}
+export interface SyncResponse {
+  turnId: number; worldVersion: number; graphVersion: string;
+  workerCount: number; buildLatencyMs: number; ready: true;
+}
+export interface RoutingStatusResponse {
+  gameId: string; installed: SyncResponse | null;
 }
 ```
 
@@ -380,11 +388,12 @@ Decision mover|esperar. Para esperar: toNodeId=fromNodeId, edgeId=null, routeCos
 
 POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check interno del ALB.
 
-- GET /estado: 200 WorldSnapshot del último turno comprometido, Cache-Control no-store. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases.
+- GET /estado: 200 WorldSnapshot del último estado completo comprometido, Cache-Control no-store. Antes de crear la primera partida responde 503 con error.code=GAME_NOT_STARTED; no inventa gameId, roundId ni entidades. Una partida creada tiene snapshot inicial en turno 0. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases. Los controles comprometidos de inicio, pausa entre ticks y reanudación actualizan status sin avanzar turnId/worldVersion.
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
-- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTransitions, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. zombies excluye dormidos no despiertos; dormantUncertaintyNodeIds es el agregado sin identidad definido en la sección 4. Actualiza atómicamente todos los workers y construye el plan de rutas antes de responder 200 {turnId, worldVersion, workerCount, ready:true}. Repetición idéntica idempotente; distinta para mismo turno 409. No publica estado parcial.
+- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. `zombieTraversals` contiene los pasos efectivamente recorridos, ordenados por `zombieId` y `stepIndex`, con `edgeId`; el último paso coincide con `zombies[].nodeId`. Un corredor puede aportar hasta dos pasos contiguos. `baseWorldVersion` debe coincidir con la última versión instalada; `turnId` debe ser mayor que el último instalado, pero puede saltar turnos que cerraron sin un plan confirmado. Repetición idéntica (mismo turno y digest) idempotente; distinta para el mismo turno, versión base incorrecta o turno menor devuelve 409. Responde 200 {turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready:true}. No publica estado parcial.
+- GET /motor/estado/{gameId}: requiere `x-api-key` y devuelve `{gameId, installed}` con la última respuesta de sincronización confirmada, o `installed:null` si no hay snapshot. El simulador usa este estado o reintenta exactamente el mismo payload para resolver un timeout de sincronización; nunca usa una tabla de un turno anterior.
 - GET /health/live y /health/ready: liveness/readiness interna para ALB.
 
 Proyección OpenAPI 3.1: debe cubrir todos los endpoints previos y usar esquemas cerrados (additionalProperties=false) derivados de las interfaces anteriores.
@@ -426,6 +435,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WorldSnapshot" }
+        "503": { $ref: "#/components/responses/Error" }
   /simulador/iniciar:
     post:
       operationId: iniciarSimulador
@@ -491,13 +501,29 @@ paths:
             schema: { $ref: "#/components/schemas/WorldSyncRequest" }
       responses:
         "200":
-          description: Snapshot instalado en todos los workers
+          description: Snapshot instalado y plan precalculado
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SyncResponse" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /motor/estado/{gameId}:
+    get:
+      operationId: estadoMotor
+      security: [{ ApiKey: [] }]
+      parameters:
+        - in: path
+          name: gameId
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Última versión instalada para conciliar una sincronización incierta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoutingStatusResponse" }
+        "401": { $ref: "#/components/responses/Error" }
   /health/live:
     get:
       operationId: healthLive
@@ -614,16 +640,28 @@ components:
     SyncResponse:
       type: object
       additionalProperties: false
-      required: [turnId, worldVersion, workerCount, ready]
+      required: [turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready]
       properties:
         turnId: { type: integer, minimum: 1 }
         worldVersion: { type: integer, minimum: 1 }
+        graphVersion: { type: string, minLength: 1 }
         workerCount: { type: integer, minimum: 1 }
+        buildLatencyMs: { type: number, minimum: 0 }
         ready: { const: true }
+    RoutingStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [gameId, installed]
+      properties:
+        gameId: { type: string, minLength: 1 }
+        installed:
+          oneOf:
+            - $ref: "#/components/schemas/SyncResponse"
+            - type: "null"
     WorldSyncRequest:
       type: object
       additionalProperties: false
-      required: [gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTransitions, dormantUncertaintyNodeIds]
+      required: [gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds]
       properties:
         gameId: { type: string }
         turnId: { type: integer, minimum: 1 }
@@ -635,7 +673,10 @@ components:
           items: { $ref: "#/components/schemas/Zombie" }
         shelters: { type: array, items: { $ref: "#/components/schemas/Shelter" } }
         blockedEdges: { type: array, items: { $ref: "#/components/schemas/BlockedEdge" } }
-        zombieTransitions: { type: array, items: { $ref: "#/components/schemas/ZombieTransition" } }
+        zombieTraversals:
+          type: array
+          description: Recorridos reales ordenados por zombieId y stepIndex; los pasos de cada zombie son contiguos.
+          items: { $ref: "#/components/schemas/ZombieTraversal" }
         dormantUncertaintyNodeIds: { type: array, uniqueItems: true, items: { type: string } }
     Zombie:
       type: object
@@ -680,12 +721,14 @@ components:
         origen: { enum: [evento-ciudad, control] }
         bloqueadaDesdeTurno: { type: integer, minimum: 1 }
         desbloqueadaEnTurno: { type: [integer, "null"] }
-    ZombieTransition:
+    ZombieTraversal:
       type: object
       additionalProperties: false
-      required: [zombieId, fromNodeId, toNodeId]
+      required: [zombieId, stepIndex, edgeId, fromNodeId, toNodeId]
       properties:
         zombieId: { type: string }
+        stepIndex: { enum: [1, 2] }
+        edgeId: { type: string }
         fromNodeId: { type: string }
         toNodeId: { type: string }
     WorldSnapshot:
@@ -738,7 +781,9 @@ Los validadores runtime de contracts/schemas.ts deben implementar las mismas res
 
 ### 3.4 WebSocket TURN_UPDATE
 
-Conectar a WSS /ws. Cada mensaje completo es TurnUpdate; se emite tras comprometer estado y actualizar GET /estado. El grafo estático se descarga una sola vez. turnId nunca retrocede. Al reconectar, GET /estado y descartar eventos con turnId ya aplicado.
+Conectar a WSS /ws. Cada mensaje completo es TurnUpdate; se emite tras comprometer estado y actualizar GET /estado. El grafo estático se descarga una sola vez. turnId nunca retrocede dentro de un mismo gameId. Antes de crear una partida WS puede conectar, pero no envía un mundo inventado. Al conectar o reconectar se envía el snapshot completo vigente si existe, además de permitir recuperarlo por GET /estado.
+
+Los controles comprometidos de inicio, pausa entre ticks y reanudación también emiten TurnUpdate completo. Pueden cambiar status conservando turnId/worldVersion: el consumidor debe aceptar ese cambio de status sin volver a aplicar movimientos. Descartar versiones/turnos anteriores y duplicados sin cambios. Un gameId nuevo reinicia turno y versión; no compararlo como si fuera la partida anterior.
 El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la envoltura sin duplicar datos; en producción cada arreglo contiene todas las entidades dinámicas del snapshot.
 
 ```json
@@ -938,7 +983,7 @@ Componentes: LiveMap, RoundControls, MetricsPanel, ConnectionStatus y EntityLege
 
 Capas Leaflet: vías por tipo; cierres rojos discontinuos; nodos por zona; refugio con ocupación/capacidad; sobrevivientes por estado; zombies por tipo; hordas con nodo+vecinos bloqueados; corredores con radio de dos saltos; dormidos atenuados. No dibujar geometrías ausentes del grafo.
 
-Interpolar visualmente entre los dos snapshots consecutivos durante 1.800 ms con requestAnimationFrame; dejar 200 ms de pausa. No alterar estado lógico. Horda/dormido inmóviles; aplicar mordidas y evacuación al recibir snapshot. Ignorar turnId duplicado/menor; si se salta uno, interpolar desde último visible al más reciente. Store mínimo: graphVersion, currentSnapshot, previousSnapshot, receivedAt, socketStatus, pendingControl, lastError. Si graphVersion difiere, no renderizar entidades y mostrar error de versión.
+Interpolar visualmente entre los dos snapshots consecutivos durante 1.800 ms con requestAnimationFrame; dejar 200 ms de pausa. No alterar estado lógico. Horda/dormido inmóviles; aplicar mordidas y evacuación al recibir snapshot. Ignorar turnId menor o duplicados sin cambios dentro de la misma partida; aceptar cambios de status por controles con igual turno/versión según §3.4, sin repetir interpolación de movimientos. Si se salta un turno, interpolar desde último visible al más reciente. Store mínimo: graphVersion, currentSnapshot, previousSnapshot, receivedAt, socketStatus, pendingControl, lastError. Si graphVersion difiere, no renderizar entidades y mostrar error de versión.
 
 Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, reconciliar worldVersion y abrir WSS. Accesibilidad: texto además de color, diseño usable en escritorio y móvil.
 

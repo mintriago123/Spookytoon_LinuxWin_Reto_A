@@ -1,11 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import type { AddressInfo } from "node:net";
 import { readFile } from "node:fs/promises";
 import { loadGraph } from "../backend/src/modules/graph/load-graph.ts";
 import { RouteEngine } from "../backend/src/modules/routing/route-engine.ts";
-import { createRoutingServer } from "../backend/src/modules/routing/http-server.ts";
+import { createRoutingApp } from "../backend/src/modules/routing/http-server.ts";
 import { RoutingError, type WorldSyncRequest } from "../backend/src/contracts/routing.ts";
+import type { MantaGraph } from "../backend/src/contracts/types.ts";
+import { createBackendApp } from "../backend/src/server.ts";
 
 const secret = "test-routing-secret-value";
 
@@ -14,6 +15,22 @@ async function realGraph() {
     graphVersion: string; sha256: string;
   };
   return (await loadGraph(new URL("../backend/data/grafo_manta.json", import.meta.url), manifest)).graph;
+}
+
+function twoStepCorridorGraph(): MantaGraph {
+  const nodes = ["A", "B", "C"].map((id, index) => ({ id, lat: -0.95, lng: -80.71 + index * 0.001, zona: "Tarqui" as const }));
+  const edge = (id: string, segment: string, origen: string, destino: string) => ({
+    id, segmentoId: segment, origen, destino, distancia_m: 10, tipo: "calle" as const, factor_velocidad: 1,
+  });
+  return {
+    schemaVersion: "1.0.0",
+    metadata: { ciudad: "Manta", graphVersion: "corridor-test", generatedAt: "2026-10-27T00:00:00.000Z",
+      source: "OpenStreetMap", osmAttribution: "© OpenStreetMap contributors" },
+    nodos: nodes,
+    aristas: [edge("ab", "AB", "A", "B"), edge("ba", "AB", "B", "A"),
+      edge("bc", "BC", "B", "C"), edge("cb", "BC", "C", "B")],
+    refugios: [{ id: "R-A", nodoId: "A", capacidad: 60 }],
+  };
 }
 
 function syncRequest(graph: Awaited<ReturnType<typeof realGraph>>, count = 1): WorldSyncRequest {
@@ -27,18 +44,14 @@ function syncRequest(graph: Awaited<ReturnType<typeof realGraph>>, count = 1): W
     })),
     zombies: [],
     shelters: graph.refugios.map(shelter => ({ ...shelter, ocupantes: [], reservados: [] })),
-    blockedEdges: [], zombieTransitions: [], dormantUncertaintyNodeIds: [],
+    blockedEdges: [], zombieTraversals: [], dormantUncertaintyNodeIds: [],
   };
 }
 
-async function withServer(engine: RouteEngine, run: (baseUrl: string) => Promise<void>) {
-  const server = createRoutingServer({ engine, apiKey: secret });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject); server.listen(0, "127.0.0.1", resolve);
-  });
-  const address = server.address() as AddressInfo;
-  try { await run(`http://127.0.0.1:${address.port}`); }
-  finally { await new Promise<void>(resolve => server.close(() => resolve())); }
+async function withApp(engine: RouteEngine, run: (app: Awaited<ReturnType<typeof createRoutingApp>>) => Promise<void>) {
+  const app = await createRoutingApp({ engine, apiKey: secret });
+  try { await app.ready(); await run(app); }
+  finally { await app.close(); }
 }
 
 test("grafo peatonal publicado tiene bidireccionalidad, un SCC y refugios alcanzables desde todo nodo", async () => {
@@ -88,6 +101,10 @@ test("sincroniza plan completo, respeta idempotencia y /paso hace lookup seguro"
   const changed = structuredClone(body); changed.zombies.push({ id: "Z-1", tipo: "caminante", estado: "activo",
     nodeId: graph.nodos[10].id, despertadoEnTurno: null, siguienteMovimientoTurno: null });
   assert.throws(() => engine.sync(changed), (error: unknown) => error instanceof RoutingError && error.status === 409);
+  const skippedTurn = structuredClone(body); skippedTurn.turnId = 3; skippedTurn.baseWorldVersion = 1;
+  const skippedSync = engine.sync(skippedTurn);
+  assert.equal(skippedSync.turnId, 3); assert.equal(skippedSync.worldVersion, 2);
+  assert.deepEqual(engine.getStatus(body.gameId), { gameId: body.gameId, installed: skippedSync });
 });
 
 test("capacidad excluye refugios llenos y sin plazas devuelve espera segura", async () => {
@@ -175,29 +192,76 @@ test("hordas bloquean nodo y vecinos; el cruce frontal se excluye del primer pas
   cross.survivors[0].nodeId = originEdge.origen;
   cross.zombies = [{ id: "Z-cross", tipo: "caminante", estado: "activo", nodeId: originEdge.origen,
     despertadoEnTurno: null, siguienteMovimientoTurno: null }];
-  cross.zombieTransitions = [{ zombieId: "Z-cross", fromNodeId: originEdge.destino, toNodeId: originEdge.origen }];
+  const reverseEdge = graph.aristas.find(edge => edge.origen === originEdge.destino && edge.destino === originEdge.origen)!;
+  cross.zombieTraversals = [{ zombieId: "Z-cross", stepIndex: 1, edgeId: reverseEdge.id,
+    fromNodeId: originEdge.destino, toNodeId: originEdge.origen }];
   const crossingEngine = new RouteEngine(graph); crossingEngine.sync(cross);
   const entry = crossingEngine.getPlan(cross.gameId)!.bestMoveByNode[originEdge.origen];
   assert.notEqual(entry.edgeId, originEdge.id);
 });
 
-test("HTTP exige x-api-key, sincroniza por turno y devuelve una respuesta vecina", async () => {
+test("acepta los dos recorridos ordenados de un corredor y bloquea ambos cruces frontales", () => {
+  const graph = twoStepCorridorGraph();
+  const request: WorldSyncRequest = {
+    gameId: "two-step-corridor", turnId: 1, baseWorldVersion: 0,
+    survivors: [{ id: "S-1", nodeId: "C", estado: "vivo", targetShelterId: null,
+      eliminadoEnTurno: null, evacuadoEnTurno: null }],
+    zombies: [{ id: "C-1", tipo: "corredor", estado: "activo", nodeId: "C",
+      despertadoEnTurno: null, siguienteMovimientoTurno: null }],
+    shelters: graph.refugios.map(shelter => ({ ...shelter, ocupantes: [], reservados: [] })),
+    blockedEdges: [],
+    zombieTraversals: [
+      { zombieId: "C-1", stepIndex: 1, edgeId: "ab", fromNodeId: "A", toNodeId: "B" },
+      { zombieId: "C-1", stepIndex: 2, edgeId: "bc", fromNodeId: "B", toNodeId: "C" },
+    ],
+    dormantUncertaintyNodeIds: [],
+  };
+  const engine = new RouteEngine(graph);
+  engine.sync(request);
+  const move = engine.getPlan(request.gameId)!.bestMoveByNode.C;
+  assert.equal(move.toNodeId, "C");
+  assert.equal(move.edgeId, null);
+
+  const discontinuous = structuredClone(request);
+  discontinuous.zombieTraversals[1].fromNodeId = "A";
+  assert.throws(() => new RouteEngine(graph).sync(discontinuous),
+    (error: unknown) => error instanceof RoutingError && error.status === 400);
+});
+
+test("Fastify exige x-api-key, reconcilia estado y devuelve una respuesta vecina", async () => {
   const graph = await realGraph(); const engine = new RouteEngine(graph); const body = syncRequest(graph, 1);
-  await withServer(engine, async baseUrl => {
-    assert.equal((await fetch(`${baseUrl}/health/ready`)).status, 503);
-    assert.equal((await fetch(`${baseUrl}/motor/sincronizar`, { method: "POST", body: JSON.stringify(body),
-      headers: { "content-type": "application/json" } })).status, 401);
-    const syncResponse = await fetch(`${baseUrl}/motor/sincronizar`, { method: "POST", body: JSON.stringify(body),
-      headers: { "content-type": "application/json", "x-api-key": secret } });
-    assert.equal(syncResponse.status, 200);
-    const step = await fetch(`${baseUrl}/paso`, { method: "POST", body: JSON.stringify({
-      gameId: body.gameId, turnId: 1, worldVersion: 1, survivorId: body.survivors[0].id,
+  await withApp(engine, async app => {
+    assert.equal((await app.inject({ method: "GET", url: "/health/ready" })).statusCode, 503);
+    assert.equal((await app.inject({ method: "POST", url: "/motor/sincronizar", payload: body })).statusCode, 401);
+    assert.equal((await app.inject({ method: "GET", url: `/motor/estado/${body.gameId}` })).statusCode, 401);
+    const syncResponse = await app.inject({ method: "POST", url: "/motor/sincronizar", payload: body,
+      headers: { "x-api-key": secret } });
+    assert.equal(syncResponse.statusCode, 200);
+    const syncResult = syncResponse.json() as { turnId: number; worldVersion: number; graphVersion: string; buildLatencyMs: number };
+    assert.equal(syncResult.graphVersion, graph.metadata.graphVersion);
+    assert(syncResult.buildLatencyMs >= 0);
+    const status = await app.inject({ method: "GET", url: `/motor/estado/${body.gameId}`,
+      headers: { "x-api-key": secret } });
+    assert.deepEqual(status.json(), { gameId: body.gameId, installed: syncResult });
+    const step = await app.inject({ method: "POST", url: "/paso", payload: {
+      gameId: body.gameId, turnId: 1, worldVersion: syncResult.worldVersion, survivorId: body.survivors[0].id,
       currentNodeId: body.survivors[0].nodeId,
-    }), headers: { "content-type": "application/json", "x-api-key": secret } });
-    assert.equal(step.status, 200);
-    const response = await step.json() as { fromNodeId: string; toNodeId: string; edgeId: string | null };
+    }, headers: { "x-api-key": secret } });
+    assert.equal(step.statusCode, 200);
+    const response = step.json() as { fromNodeId: string; toNodeId: string; edgeId: string | null };
     assert(response.toNodeId === response.fromNodeId || graph.aristas.some(edge => edge.id === response.edgeId &&
       edge.origen === response.fromNodeId && edge.destino === response.toNodeId));
-    assert.equal((await fetch(`${baseUrl}/health/ready`)).status, 200);
+    assert.equal((await app.inject({ method: "GET", url: "/health/ready" })).statusCode, 200);
   });
+});
+
+test("composition root carga el grafo y registra routing en la aplicación compartida", async () => {
+  const { app, engine, graph } = await createBackendApp({ apiKey: secret });
+  try {
+    const response = await app.inject({ method: "GET", url: "/health/live" });
+    assert.equal(response.statusCode, 200);
+    assert.equal(engine.graph.metadata.graphVersion, graph.metadata.graphVersion);
+  } finally {
+    await app.close();
+  }
 });

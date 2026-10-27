@@ -37,8 +37,11 @@ export interface RouteBlockedEdge {
   desbloqueadaEnTurno: number | null;
 }
 
-export interface RouteZombieTransition {
+/** Cada arista recorrida durante el turno; los corredores pueden aportar dos pasos. */
+export interface RouteZombieTraversal {
   zombieId: string;
+  stepIndex: 1 | 2;
+  edgeId: string;
   fromNodeId: string;
   toNodeId: string;
 }
@@ -51,7 +54,7 @@ export interface WorldSyncRequest {
   zombies: RouteZombie[];
   shelters: RouteShelter[];
   blockedEdges: RouteBlockedEdge[];
-  zombieTransitions: RouteZombieTransition[];
+  zombieTraversals: RouteZombieTraversal[];
   dormantUncertaintyNodeIds: string[];
 }
 
@@ -101,6 +104,12 @@ export interface SyncResponse {
   ready: true;
 }
 
+/** Consultable tras un timeout para reconciliar la versión instalada en RAM. */
+export interface RoutingStatusResponse {
+  gameId: string;
+  installed: SyncResponse | null;
+}
+
 export class RoutingError extends Error {
   readonly status: number;
   readonly code: string;
@@ -123,7 +132,7 @@ export interface RoutingSnapshot {
   blockedEdgeIds: ReadonlySet<string>;
   zombieNodeIds: ReadonlySet<string>;
   hordeNodeIds: ReadonlySet<string>;
-  zombieTransitions: ReadonlySet<string>;
+  zombieTraversalPairs: ReadonlySet<string>;
 }
 
 export interface RoutingEngineOptions {
