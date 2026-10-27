@@ -1,23 +1,33 @@
-# Refugios provisionales del escenario
+# Refugios configurados para el escenario
 
-Estado: selección preliminar del equipo; no son refugios oficiales ni tienen
-capacidad de juego confirmada. Los cuatro sitios aceptados inicialmente son:
+Estado: selección y datos de acceso confirmados por el equipo. La configuración
+real está en [scripts/manta.config.json](../scripts/manta.config.json). El
+pipeline ajusta cada coordenada al nodo vial OSM más cercano dentro de la zona.
 
-| ID provisional | Sitio | Sector | Observación |
-|---|---|---|---|
-| `REF-TARQUI` | Plaza del Mar | Tarqui | Punto reconocible, pero plaza abierta. El PDOT municipal la ubica en Tarqui, junto a la vía Puerto-Aeropuerto y la calle 110. [Fuente](https://manta.gob.ec/wp-content/uploads/2024/11/01-PDOT-Diagnostico-2024-2035.pdf) |
-| `REF-ESTEROS` | Mercado Los Esteros | Los Esteros | Edificio identificable; confirmar accesos y perímetro antes de tratarlo como fortificable. [Fuente municipal](https://manta.gob.ec/db/2024/PDOT%20PARA%20PUBLICAR%20BORRADOR/SISTEMA%20ECONOMICO%20PRODUCTIVO%20ACTUALIZACION/SISTEMA%20ECONOMICO%20PRO%20DIAGNOSTICO%20Y%20PROPUESTA.pdf) |
-| `REF-JOCAY` | Estadio Jocay | Jocay | Recinto grande y reconocible; plantear la zona cubierta de graderío como refugio, no el campo abierto. Una nueva tribuna fue entregada con obras de hormigón y servicios. [Gobernación de Manabí](https://gobernacionmanabi.gob.ec/el-gobierno-nacional-financia-a-traves-del-bde-proyectos-por-usd15-8-millones-en-la-provincia-de-manabi/) |
-| `REF-BARBASQUILLO` | Plaza del Sol | Barbasquillo | Ubicada en la vía Barbasquillo; centro comercial privado. [Catálogo de Inmobiliar](https://www.inmobiliar.gob.ec/wp-content/uploads/2023/05/CATALOGO-MAYO-2023.pdf) |
+| ID | Sitio | Zona | Acceso principal | Coordenadas (lat, lng) | Capacidad |
+|---|---|---|---|---|---:|
+| `R-TARQUI` | Unidad Educativa San José | Tarqui | Av. Malecón / Calle 106 | `-0.9502, -80.7165` | 60 |
+| `R-ESTEROS` | Terminal Terrestre Luis Valdivieso Morán | Los Esteros | Entrada vehicular sobre Vía Puerto-Aeropuerto | `-0.9554, -80.6928` | 60 |
+| `R-JOCAY` | Estadio Jocay | Jocay | Av. 113 / Calle 307 | `-0.9631, -80.7145` | 60 |
+| `R-BARBASQUILLO` | ULEAM, Campus Matriz | Barbasquillo | Puerta 1, Av. Circunvalación / Vía San Mateo | `-0.9529, -80.7456` | 60 |
 
-## Opciones con mejor potencial de defensa
+Capacidad total configurada: **240**, frente a 200 sobrevivientes en la Ronda 3.
+El motor Base excluye refugios llenos del precompute usando `ocupantes` y
+`reservados`; la admisión simultánea sigue siendo responsabilidad del simulador
+y debe respetar el límite con desempate por `survivorId`, según `SPEC.md`.
+
+Los polígonos de `manta.config.json` son particiones operativas de Voronoi
+recortadas al bbox y ancladas en estas cuatro entradas. Cubren las coordenadas
+del escenario; no pretenden representar límites administrativos oficiales.
+`nodoId` se completa con el ID OSM real elegido por el snap de distancia
+geodésica y queda incluido en el grafo publicado. Las capacidades son valores
+del juego, no aforos reales de los recintos.
+
+## Otras alternativas, si hiciera falta reemplazar una selección
 
 Estas alternativas son para la ficción del juego; las fuentes confirman su
 ubicación o tipo de recinto, no su seguridad estructural ni disponibilidad:
 
-- **ULEAM, Ciudadela Universitaria / vía San Mateo:** campus extenso con varios
-  edificios. Puede servir para Barbasquillo si el mapa del juego incluye ese
-  borde dentro de la zona. [Dirección de ULEAM](https://www.uleam.edu.ec/sedes/)
 - **Coliseo Lorgio Pinargote, Complejo Tohallí:** recinto cubierto dentro de un
   complejo deportivo con piscina y canchas. Es una alternativa fuerte para el
   escenario, aunque queda en el centro y no debe etiquetarse como Tarqui sin
@@ -26,17 +36,37 @@ ubicación o tipo de recinto, no su seguridad estructural ni disponibilidad:
   registra entre la infraestructura recreativa de la parroquia. Confirmar en
   sitio si el cerramiento permite contener amenazas; no asumir que las gradas
   estén cubiertas. [Estudio de Manabí](https://www.manabi.gob.ec/wp-content/uploads/2024/03/Estudio-de-Impacto-Ambiental-EXPOST_041022.pdf)
-- **Unidad Educativa San José, Tarqui:** alternativa con aulas y perímetro
-  escolar; antes de usarla como sitio defendible, revisar su condición actual.
-  El plantel reportó daños por el terremoto de 2016. [Dirección del plantel](https://www.salesianos.org.ec/casas-obras/), [antecedente del sismo](https://www.elcomercio.com/actualidad/medidaspsicoeducativas-terremoto-colegios-escuelas/)
 
-La Terminal Terrestre queda fuera de las opciones de mayor seguridad por ahora:
-el 26 de octubre de 2026 colapsaron cerca de 40 m² de cielo raso de gypsum por
-las lluvias y se restringió el área afectada. Esto no demuestra que todo el
-edificio sea inseguro, pero sí requiere inspección y reparación antes de usarlo
-como refugio. [El Comercio](https://www.elcomercio.com/actualidad/ecuador/el-techo-de-la-terminal-terrestre-de-manta-se-cayo-por-las-lluvias-de-este-lunes/)
+El extractor registra coordenada de entrada, nodo vial seleccionado y distancia
+de snap en `scripts/data/manta.osm.json.source.json`:
 
-Capacidad de juego, nodo de acceso y coordenadas exactas siguen pendientes. Al
-incorporarlos al grafo, asignar `nodoId` al nodo vial junto a la entrada elegida;
-no usar el centro geométrico del recinto. No copiar automáticamente aforo de
-espectadores, comerciantes o estudiantes como capacidad del refugio.
+- `R-TARQUI` → `osm-node-10230309802`, 63,5 m.
+- `R-ESTEROS` → `osm-node-5907174565`, 86,2 m.
+- `R-JOCAY` → `osm-node-363649185`, 37,6 m.
+- `R-BARBASQUILLO` → `osm-node-363715754`, 40,8 m.
+
+La validación del artefacto comprueba referencias, zonas, refugios distintos y
+conectividad dirigida entre todos los nodos y refugios.
+
+### Conectividad del artefacto publicado
+
+En `manta-osm-2026-10-13-d70af9643354ddac`, los 300 nodos (298 intersecciones y
+dos nodos de acceso) forman una sola componente fuertemente conexa. El grafo
+tiene 736 aristas y capacidad configurada de 240. Cada refugio es alcanzable
+desde los 300 nodos y desde los otros tres refugios; el modo peatonal publica
+ambos sentidos de cada vía y no aplica `oneway` vehiculares.
+
+SHA-256 compartido por Backend y Frontend:
+`7c010a06aef690403e9578cdbfc7cddafcac2102e9dc88a2dc28a03f33ce3b73`.
+
+| Desde | Refugios alcanzables |
+|---|---|
+| `R-BARBASQUILLO` | Los cuatro refugios |
+| `R-ESTEROS` | Los cuatro refugios |
+| `R-JOCAY` | Los cuatro refugios |
+| `R-TARQUI` | Los cuatro refugios |
+
+La conectividad hace efectivas las cuatro capacidades para rutas sin amenazas y
+sin bloqueos. El motor vuelve a calcular destinos disponibles por turno cuando
+un refugio se llena o hay aristas bloqueadas; la simulación aún arbitra las
+llegadas simultáneas para no exceder los cupos.

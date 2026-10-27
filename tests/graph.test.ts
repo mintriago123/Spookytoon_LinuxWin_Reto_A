@@ -68,6 +68,15 @@ test("rotondas son dirigidas por defecto y oneway=no revoca la regla", () => {
   }
 });
 
+test("el modo peatonal genera ambos sentidos e ignora oneway vehicular", () => {
+  const { config, osm } = fixture({ oneway: "yes", junction: "roundabout" });
+  config.directionMode = "pedestrian";
+  const result = normalize(osm, config);
+  assert.equal(result.aristas.length, 510);
+  assert(result.aristas.every(edge => result.aristas.some(reverse => reverse.segmentoId === edge.segmentoId &&
+    reverse.origen === edge.destino && reverse.destino === edge.origen)));
+});
+
 test("clasifica avenidas, callejones y puentes con factores contractuales", () => {
   for (const [tags, type, factor] of [
     [{ highway: "primary" }, "avenida", 1],
@@ -115,7 +124,7 @@ test("rechaza datos incompletos y zonas ambiguas sin inventar información", () 
   config.zones[1].polygon = config.zones[0].polygon;
   assert.throws(() => normalize(osm, config), /ambiguas/);
   const other = fixture(); other.osm.elements.shift();
-  assert.throws(() => normalize(other.osm, other.config), /nodo ausente/);
+  assert.throws(() => normalize(other.osm, other.config), /nodoId.*no corresponde/);
   const reversible = fixture({ oneway: "reversible" });
   assert.throws(() => normalize(reversible.osm, reversible.config), /oneway requiere revisión/);
 });

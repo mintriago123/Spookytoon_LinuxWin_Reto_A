@@ -1,0 +1,164 @@
+{
+  "bbox": [
+    -0.9664,
+    -80.7485,
+    -0.947,
+    -80.69
+  ],
+  "directionMode": "pedestrian",
+  "targetGraphNodes": 300,
+  "compactIntersections": true,
+  "shelterSnapLimitM": 750,
+  "zones": [
+    {
+      "name": "Tarqui",
+      "polygon": [
+        [
+          -80.7051426,
+          -0.9550447
+        ],
+        [
+          -80.7033771,
+          -0.947
+        ],
+        [
+          -80.7314723,
+          -0.947
+        ],
+        [
+          -80.7303629,
+          -0.9589537
+        ],
+        [
+          -80.7051426,
+          -0.9550447
+        ]
+      ]
+    },
+    {
+      "name": "Los Esteros",
+      "polygon": [
+        [
+          -80.7011122,
+          -0.9664
+        ],
+        [
+          -80.69,
+          -0.9664
+        ],
+        [
+          -80.69,
+          -0.947
+        ],
+        [
+          -80.7033771,
+          -0.947
+        ],
+        [
+          -80.7051426,
+          -0.9550447
+        ],
+        [
+          -80.7011122,
+          -0.9664
+        ]
+      ]
+    },
+    {
+      "name": "Jocay",
+      "polygon": [
+        [
+          -80.7328058,
+          -0.9664
+        ],
+        [
+          -80.7011122,
+          -0.9664
+        ],
+        [
+          -80.7051426,
+          -0.9550447
+        ],
+        [
+          -80.7303629,
+          -0.9589537
+        ],
+        [
+          -80.7328058,
+          -0.9664
+        ]
+      ]
+    },
+    {
+      "name": "Barbasquillo",
+      "polygon": [
+        [
+          -80.7485,
+          -0.9664
+        ],
+        [
+          -80.7328058,
+          -0.9664
+        ],
+        [
+          -80.7303629,
+          -0.9589537
+        ],
+        [
+          -80.7314723,
+          -0.947
+        ],
+        [
+          -80.7485,
+          -0.947
+        ],
+        [
+          -80.7485,
+          -0.9664
+        ]
+      ]
+    }
+  ],
+  "refugios": [
+    {
+      "id": "R-TARQUI",
+      "zona": "Tarqui",
+      "acceso": {
+        "lat": -0.9502,
+        "lng": -80.7165,
+        "descripcion": "Entrada principal sobre Av. Malecón / Calle 106"
+      },
+      "capacidad": 60
+    },
+    {
+      "id": "R-ESTEROS",
+      "zona": "Los Esteros",
+      "acceso": {
+        "lat": -0.9554,
+        "lng": -80.6928,
+        "descripcion": "Entrada vehicular sobre Vía Puerto-Aeropuerto"
+      },
+      "capacidad": 60
+    },
+    {
+      "id": "R-JOCAY",
+      "zona": "Jocay",
+      "acceso": {
+        "lat": -0.9631,
+        "lng": -80.7145,
+        "descripcion": "Acceso principal sobre Av. 113 / Calle 307"
+      },
+      "capacidad": 60
+    },
+    {
+      "id": "R-BARBASQUILLO",
+      "zona": "Barbasquillo",
+      "acceso": {
+        "lat": -0.9529,
+        "lng": -80.7456,
+        "descripcion": "Puerta 1 (Av. Circunvalación / Vía San Mateo)"
+      },
+      "capacidad": 60
+    }
+  ]
+}

@@ -8,6 +8,8 @@
     "graph:normalize": "node scripts/normalize-graph.ts",
     "graph:validate": "node scripts/validate-graph.ts",
     "graph:publish": "node scripts/publish-graph.ts",
+    "backend:start": "node backend/src/modules/routing/server.ts",
+    "benchmark:routing": "node scripts/benchmark-routing.ts",
     "test": "node --test tests/*.test.ts",
     "typecheck": "tsc --noEmit"
   },

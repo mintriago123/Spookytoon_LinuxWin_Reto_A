@@ -1,4 +1,4 @@
-// Proyección de SPEC.md §2.2. Agregar los DTO del motor al implementar routing.
+// Tipos del grafo inmutable, derivados de SPEC.md §2.2.
 export type Zone = "Tarqui" | "Los Esteros" | "Barbasquillo" | "Jocay";
 export type RoadType = "avenida" | "calle" | "callejon" | "puente";
 export interface GraphNode { id: string; lat: number; lng: number; zona: Zone }
