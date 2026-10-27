@@ -5,8 +5,11 @@ import Fastify from "fastify";
 import { loadGraph } from "./modules/graph/load-graph.ts";
 import { RouteEngine } from "./modules/routing/route-engine.ts";
 import { routingPlugin } from "./modules/routing/http-server.ts";
+import { SimulationRuntime, type ScenarioOptions } from "./modules/simulator/simulation-runtime.ts";
+import { simulatorPlugin } from "./modules/simulator/http-plugin.ts";
+import { createRoutingClient } from "./modules/simulator/routing-client.ts";
 
-export async function createBackendApp(options: { apiKey?: string } = {}) {
+export async function createBackendApp(options: { apiKey?: string; simulator?: ScenarioOptions } = {}) {
   const manifest = JSON.parse(await readFile(new URL("../data/graph-manifest.json", import.meta.url), "utf8")) as {
     graphVersion: string; sha256: string;
   };
@@ -17,8 +20,14 @@ export async function createBackendApp(options: { apiKey?: string } = {}) {
   const app = Fastify({ bodyLimit: 1_048_576, logger: true });
   app.decorate("routeEngine", engine);
   app.register(routingPlugin, { engine, apiKey });
-  // El plugin del simulador se registrará aquí para compartir proceso y motor.
-  return { app, engine, graph };
+  const simulator = new SimulationRuntime({ ...options.simulator, graph, syncTimeoutMs: 500,
+    clientFactory: () => {
+      const address = app.server.address();
+      if (!address || typeof address === "string") throw new Error("El servidor HTTP todavía no escucha");
+      return createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey });
+    }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
+  app.register(simulatorPlugin, { runtime: simulator, apiKey });
+  return { app, engine, graph, simulator };
 }
 
 export async function startBackendServer() {

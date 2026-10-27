@@ -1,6 +1,7 @@
 import { performance } from "node:perf_hooks";
 import { validatePasoRequest } from "../../contracts/routing-validation.ts";
-import type { DecisionBatch, Immutable, RouteAttempt, WorldState } from "./types.ts";
+import type { DecisionBatch, Immutable, RouteAttempt, ScheduledCityEvent, WorldState } from "./types.ts";
+import { SimulatorControlError, type EdgeCommand } from "./controls.ts";
 import type { RoutingClient, RoutingHttpResponse } from "./routing-client.ts";
 import { parseRoutingStatus, parseSyncResponse } from "./routing-responses.ts";
 import { buildWorldSyncRequest, hordeDangerNodes } from "./routing-world.ts";
@@ -40,12 +41,14 @@ export interface TurnResult {
   alertDeliveryFailed: boolean;
 }
 
-/** Un solo escritor y un solo turno en vuelo. El reloj/control HTTP se conectan en Etapa 6. */
+/** Único escritor: los controles en vuelo quedan pendientes hasta el commit del turno. */
 export class TurnCoordinator {
   private committed: Immutable<WorldState>;
   private busy = false;
   private readonly now: () => number;
   private readonly options: CoordinatorOptions;
+  private pauseRequested: string | null = null;
+  private queuedEvents: ScheduledCityEvent[] = [];
 
   constructor(initial: WorldState, options: CoordinatorOptions) {
     if (!Number.isSafeInteger(options.syncTimeoutMs) || options.syncTimeoutMs < 1 || options.syncTimeoutMs > 2_000) {
@@ -57,6 +60,64 @@ export class TurnCoordinator {
   }
 
   getCommittedWorld(): Immutable<WorldState> { return this.committed; }
+
+  resume(): void {
+    if (this.busy || !["idle", "paused"].includes(this.committed.status) || this.committed.turnId >= 150) {
+      throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La partida no se puede iniciar o reanudar");
+    }
+    const work = structuredClone(this.committed) as WorldState;
+    work.status = "running"; work.pause = { status: "none" }; work.updatedAt = this.options.isoNow();
+    this.pauseRequested = null; this.committed = freeze(work);
+  }
+
+  requestPause(reason: string): { status: "pausing" | "paused"; afterTurnId: number } {
+    if (this.committed.status === "completed") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La partida ya terminó");
+    if (this.busy) {
+      this.pauseRequested ??= reason;
+      return { status: "pausing", afterTurnId: this.committed.turnId + 1 };
+    }
+    if (this.committed.status !== "paused") {
+      const work = structuredClone(this.committed) as WorldState;
+      work.status = "paused"; work.pause = { status: "effective", cause: "operator", reason, afterTurnId: work.turnId };
+      work.updatedAt = this.options.isoNow(); this.committed = freeze(work);
+    }
+    this.pauseRequested = null;
+    return { status: "paused", afterTurnId: this.committed.turnId };
+  }
+
+  scheduleEdge(command: EdgeCommand): { eventId: string; segmentoId: string; effectiveTurnId: number; status: "programado" } {
+    const edge = this.committed.graph.aristas.find(edge => edge.id === command.edgeId);
+    if (!edge) throw new SimulatorControlError(404, "EDGE_NOT_FOUND", "La arista no existe");
+    const events = [...this.committed.pendingCityEvents, ...this.queuedEvents];
+    const previous = events.find(event => event.eventId === command.eventId);
+    const tipo = command.bloqueada ? "bloquear-segmento" : "desbloquear-segmento";
+    if (previous) {
+      if (previous.origen !== "control" || previous.edgeId !== command.edgeId || previous.tipo !== tipo ||
+          previous.motivo !== command.motivo || (command.effectiveTurnId !== undefined && command.effectiveTurnId !== previous.effectiveTurnId)) {
+        throw new SimulatorControlError(409, "EVENT_CONFLICT", "eventId ya existe con otro contenido");
+      }
+      return { eventId: previous.eventId, segmentoId: edge.segmentoId, effectiveTurnId: previous.effectiveTurnId, status: "programado" };
+    }
+    if (this.committed.status === "completed") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La partida ya terminó");
+    if (command.effectiveTurnId === undefined && this.committed.status !== "running") {
+      throw new SimulatorControlError(400, "VALIDATION_ERROR", "Indica effectiveTurnId cuando la partida está pausada");
+    }
+    const earliest = this.committed.turnId + (this.busy ? 2 : 1);
+    const effectiveTurnId = command.effectiveTurnId ?? earliest;
+    if (effectiveTurnId < earliest || effectiveTurnId > 150) throw new SimulatorControlError(400, "INVALID_EVENT_TURN", "El turno del evento ya empezó o excede la ronda");
+    if (events.some(event => event.effectiveTurnId === effectiveTurnId &&
+        this.committed.graph.aristas.find(edge => edge.id === event.edgeId)?.segmentoId === edge.segmentoId)) {
+      throw new SimulatorControlError(409, "EVENT_CONFLICT", "Otro evento ya afecta ese segmento en el mismo turno");
+    }
+    const event: ScheduledCityEvent = { eventId: command.eventId, edgeId: command.edgeId, tipo,
+      motivo: command.motivo, effectiveTurnId, aplicado: false, origen: "control" };
+    if (this.busy) this.queuedEvents.push(event);
+    else {
+      const work = structuredClone(this.committed) as WorldState;
+      work.pendingCityEvents.push(event); this.committed = freeze(work);
+    }
+    return { eventId: event.eventId, segmentoId: edge.segmentoId, effectiveTurnId, status: "programado" };
+  }
 
   private async http(operation: (signal: AbortSignal) => Promise<RoutingHttpResponse>, timeoutMs: number): Promise<HttpAttempt> {
     const controller = new AbortController();
@@ -73,18 +134,19 @@ export class TurnCoordinator {
     finally { clearTimeout(timer!); }
   }
 
-  async runTurn(): Promise<TurnResult> {
+  async runTurn(deadlineMonotonicMs = this.now() + 2_000): Promise<TurnResult> {
     if (this.busy) throw new Error("Ya existe un turno en curso");
     if (this.committed.status !== "running" || this.committed.turnId >= 150) throw new Error("La partida no admite otro turno");
     if (this.committed.survivors.filter(s => s.estado === "vivo").length > 200) throw new Error("Máximo 200 consultas de ruta por turno");
     if (this.committed.shelters.some(s => s.reservados.length)) throw new Error("Política de reservas pendiente de acuerdo");
+    if (!Number.isFinite(deadlineMonotonicMs)) throw new Error("Deadline de turno inválido");
     this.busy = true;
     try {
       const work = structuredClone(this.committed) as WorldState;
       work.graph = this.committed.graph;
       const turnId = work.turnId + 1;
       work.activeTurnId = turnId;
-      work.activeTurn = { turnId, phase: "city-events", deadlineMonotonicMs: this.now() + 2_000, randomCursors: [] };
+      work.activeTurn = { turnId, phase: "city-events", deadlineMonotonicMs, randomCursors: [] };
       const phase = (value: WorldState["phase"]) => { work.phase = value; work.activeTurn!.phase = value; };
       phase("city-events");
       const events = applyCityEvents({ turnId, graph: work.graph, events: work.pendingCityEvents, blockedEdges: work.blockedEdges });
@@ -163,14 +225,26 @@ export class TurnCoordinator {
       work.survivors = admitted.survivors; work.shelters = admitted.shelters;
       work.zombies = awakenDormantZombies({ ...work, turnId, phase: "after-survivor-move" });
       phase("publish");
-      // La interfaz de telemetría de Michael y el reloj de ronda se conectan por separado.
+      for (const event of this.queuedEvents) if (!work.pendingCityEvents.some(existing => existing.eventId === event.eventId)) {
+        work.pendingCityEvents.push({ ...event });
+      }
+      if (this.pauseRequested !== null && work.pause.status === "none") work.pause = {
+        status: "requested", cause: "operator", reason: this.pauseRequested, afterTurnId: turnId,
+      };
+      if (this.now() >= deadlineMonotonicMs) {
+        work.metrics.deadlineMisses++;
+        if (work.pause.status === "none") work.pause = { status: "requested", cause: "deadline-miss",
+          reason: "El turno no cerró antes del siguiente tick", afterTurnId: turnId };
+      }
       if (work.pause.status === "requested") {
         work.pause = { ...work.pause, status: "effective" }; work.status = "paused";
       }
+      if (turnId === 150) work.status = "completed";
       work.turnId = turnId; work.worldVersion++;
       work.activeTurn = null; work.activeTurnId = null; work.phase = "idle";
       work.updatedAt = this.options.isoNow();
       this.committed = freeze(work); // Único intercambio de la versión completa.
+      this.pauseRequested = null; this.queuedEvents = [];
       let alertDeliveryFailed = false;
       if (alert) { try { this.options.emitAlert(alert); } catch { alertDeliveryFailed = true; } }
       return { world: this.committed, attempts, decisions, alerts: alert ? [alert] : [], alertDeliveryFailed };
