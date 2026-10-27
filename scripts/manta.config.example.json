@@ -1,0 +1,10 @@
+{
+  "bbox": null,
+  "zones": [
+    { "name": "Tarqui", "polygon": [] },
+    { "name": "Los Esteros", "polygon": [] },
+    { "name": "Barbasquillo", "polygon": [] },
+    { "name": "Jocay", "polygon": [] }
+  ],
+  "refugios": []
+}

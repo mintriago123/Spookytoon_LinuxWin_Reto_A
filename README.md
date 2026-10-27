@@ -28,8 +28,12 @@ flowchart LR
 - [SPEC.md](SPEC.md): fuente técnica canónica.
 - [Checklist de lanzamiento](docs/launch-checklist.md): prioridades, aceptación y evidencias pendientes.
 - [Costos AWS](docs/costos.md): plantilla para estimar región y configuración reales.
+- [Refugios provisionales](docs/refugios-provisionales.md): sitios del escenario aceptados y alternativas con mejor potencial de defensa.
 - [Módulos Backend](backend/src/modules/README.md): límites y ownership.
 - [Michael](docs/team/michael/README.md), [Maykel](docs/team/maykel/README.md), [Kristhian](docs/team/kristhian/README.md): guías por persona.
 - [Extracción del grafo](scripts/README.md).
 
-No hay aún comandos de ejecución local: se agregarán con los manifests del Backend y Frontend para no documentar scripts inexistentes.
+El procesamiento del grafo ya tiene comandos locales: ver [scripts/README.md](scripts/README.md).
+Requiere Node.js 24.12+ de la serie 24. Ejecutar `npm ci`, `npm test` y
+`npm run typecheck` para verificar esta base. Aún faltan el grafo revisado y los
+comandos de ejecución del Backend y Frontend.
