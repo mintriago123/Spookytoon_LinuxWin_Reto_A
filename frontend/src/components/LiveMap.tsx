@@ -1,38 +1,27 @@
 import { Fragment, useMemo } from "react";
 import {
-  CircleMarker,
   Circle,
   MapContainer,
+  Marker,
   Polyline,
   Popup,
   TileLayer,
+  Tooltip,
 } from "react-leaflet";
 import type { LatLngTuple } from "leaflet";
 import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld";
-import type { GraphEdge, RoadType, Survivor, Zombie } from "../types/contracts";
+import { ZOMBIE_COLOR, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
+import type { GraphEdge, GraphNode, RoadType, Zone } from "../types/contracts";
 
 // Centro aproximado de Manta; solo se usa si todavía no hay grafo cargado.
 const FALLBACK_CENTER: LatLngTuple = [-0.9677, -80.7089];
 
 const ROAD_COLOR: Record<RoadType, string> = {
-  avenida: "#cbd5e1",
-  calle: "#94a3b8",
-  callejon: "#64748b",
-  puente: "#f59e0b",
-};
-
-const SURVIVOR_COLOR: Record<Survivor["estado"], string> = {
-  vivo: "#10b981",
-  mordido: "#e11d48",
-  evacuado: "#0ea5e9",
-};
-
-const ZOMBIE_COLOR: Record<Zombie["tipo"], string> = {
-  caminante: "#4d7c0f",
-  corredor: "#ea580c",
-  horda: "#7e22ce",
-  dormido: "#c4b5fd",
+  avenida: "#9aa8c0",
+  calle: "#6b7683",
+  callejon: "#4c5668",
+  puente: "#fbbf24",
 };
 
 function buildNodeIndex(
@@ -41,6 +30,22 @@ function buildNodeIndex(
   const index = new Map<string, LatLngTuple>();
   for (const n of nodos) index.set(n.id, [n.lat, n.lng]);
   return index;
+}
+
+/** Centroide aproximado por zona, solo para rotular el mapa (no es dato del juego). */
+function buildZoneLabels(nodos: GraphNode[]): Array<{ zona: Zone; center: LatLngTuple }> {
+  const sums = new Map<Zone, { lat: number; lng: number; count: number }>();
+  for (const node of nodos) {
+    const entry = sums.get(node.zona) ?? { lat: 0, lng: 0, count: 0 };
+    entry.lat += node.lat;
+    entry.lng += node.lng;
+    entry.count += 1;
+    sums.set(node.zona, entry);
+  }
+  return Array.from(sums.entries()).map(([zona, { lat, lng, count }]) => ({
+    zona,
+    center: [lat / count, lng / count] as LatLngTuple,
+  }));
 }
 
 /** Vecinos directos (ambos sentidos) de un nodo, usados para resaltar H. */
@@ -107,6 +112,7 @@ export function LiveMap() {
     graph?.aristas.forEach((e) => map.set(e.id, e));
     return map;
   }, [graph]);
+  const zoneLabels = useMemo(() => (graph ? buildZoneLabels(graph.nodos) : []), [graph]);
 
   const center = graph?.nodos[0]
     ? ([graph.nodos[0].lat, graph.nodos[0].lng] as LatLngTuple)
@@ -114,7 +120,7 @@ export function LiveMap() {
 
   if (!graph) {
     return (
-      <div className="flex h-full w-full items-center justify-center bg-slate-100 text-sm text-slate-500 dark:bg-slate-800 dark:text-slate-400">
+      <div className="flex h-full w-full items-center justify-center bg-night-900 text-sm text-slate-400">
         Cargando grafo de Manta…
       </div>
     );
@@ -126,7 +132,7 @@ export function LiveMap() {
     return (
       <div
         role="alert"
-        className="flex h-full w-full items-center justify-center bg-rose-50 p-6 text-center text-sm text-rose-700 dark:bg-rose-950 dark:text-rose-200"
+        className="flex h-full w-full items-center justify-center bg-rose-950 p-6 text-center text-sm text-rose-200"
       >
         El grafo cargado ({graph.metadata.graphVersion}) no coincide con el
         snapshot del backend ({snapshot?.graphVersion ?? "desconocido"}).
@@ -136,11 +142,20 @@ export function LiveMap() {
   }
 
   return (
-    <MapContainer center={center} zoom={14} className="h-full w-full">
+    <MapContainer center={center} zoom={14} className="h-full w-full bg-night-900">
       <TileLayer
-        attribution={graph.metadata.osmAttribution}
-        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        attribution={`${graph.metadata.osmAttribution} · © CARTO`}
+        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
       />
+
+      {/* Rótulos de zona, solo orientación visual */}
+      {zoneLabels.map(({ zona, center: zoneCenter }) => (
+        <Marker key={zona} position={zoneCenter} icon={invisibleIcon()} interactive={false}>
+          <Tooltip permanent direction="center" className="zone-label-tooltip">
+            {zona}
+          </Tooltip>
+        </Marker>
+      ))}
 
       {/* Vías por tipo */}
       {graph.aristas.map((edge) => {
@@ -151,34 +166,36 @@ export function LiveMap() {
           <Polyline
             key={edge.id}
             positions={[from, to]}
-            pathOptions={{ color: ROAD_COLOR[edge.tipo], weight: 2, opacity: 0.6 }}
+            pathOptions={{ color: ROAD_COLOR[edge.tipo], weight: 2, opacity: 0.55 }}
           />
         );
       })}
 
       {/* Cierres: segmento completo en rojo discontinuo */}
-      {snapshot?.blockedEdges.map((blocked) =>
-        blocked.edgeIds.map((edgeId) => {
-          const edge = edgeById.get(edgeId);
-          if (!edge) return null;
-          const from = nodeIndex.get(edge.origen);
-          const to = nodeIndex.get(edge.destino);
-          if (!from || !to) return null;
-          return (
-            <Polyline
-              key={`blocked-${edgeId}`}
-              positions={[from, to]}
-              pathOptions={{
-                color: "#dc2626",
-                weight: 4,
-                dashArray: "6 6",
-              }}
-            >
-              <Popup>{blocked.motivo}</Popup>
-            </Polyline>
-          );
-        }),
-      )}
+      {snapshot?.blockedEdges
+        .filter((blocked) => blocked.desbloqueadaEnTurno === null)
+        .map((blocked) =>
+          blocked.edgeIds.map((edgeId) => {
+            const edge = edgeById.get(edgeId);
+            if (!edge) return null;
+            const from = nodeIndex.get(edge.origen);
+            const to = nodeIndex.get(edge.destino);
+            if (!from || !to) return null;
+            return (
+              <Polyline
+                key={`blocked-${edgeId}`}
+                positions={[from, to]}
+                pathOptions={{
+                  color: "#ff5a5a",
+                  weight: 4,
+                  dashArray: "6 6",
+                }}
+              >
+                <Popup>{blocked.motivo}</Popup>
+              </Polyline>
+            );
+          }),
+        )}
 
       {/* Refugios con ocupación/capacidad */}
       {graph.refugios.map((refugio) => {
@@ -187,16 +204,11 @@ export function LiveMap() {
         const live = snapshot?.shelters.find((s) => s.id === refugio.id);
         const ocupacion = live?.ocupantes.length ?? 0;
         return (
-          <CircleMarker
-            key={refugio.id}
-            center={pos}
-            radius={10}
-            pathOptions={{ color: "#1d4ed8", fillColor: "#2563eb", fillOpacity: 0.9 }}
-          >
+          <Marker key={refugio.id} position={pos} icon={shelterIcon()}>
             <Popup>
               Refugio {refugio.id}: {ocupacion}/{refugio.capacidad}
             </Popup>
-          </CircleMarker>
+          </Marker>
         );
       })}
 
@@ -212,20 +224,11 @@ export function LiveMap() {
         );
         if (!pos) return null;
         return (
-          <CircleMarker
-            key={survivor.id}
-            center={pos}
-            radius={5}
-            pathOptions={{
-              color: SURVIVOR_COLOR[survivor.estado],
-              fillColor: SURVIVOR_COLOR[survivor.estado],
-              fillOpacity: 0.9,
-            }}
-          >
+          <Marker key={survivor.id} position={pos} icon={survivorIcon(survivor.estado)}>
             <Popup>
               {survivor.id} — {survivor.estado}
             </Popup>
-          </CircleMarker>
+          </Marker>
         );
       })}
 
@@ -242,23 +245,13 @@ export function LiveMap() {
         );
         if (!pos) return null;
 
-        const dimmed = zombie.estado === "dormido";
-
         return (
           <Fragment key={zombie.id}>
-            <CircleMarker
-              center={pos}
-              radius={zombie.tipo === "horda" ? 9 : 6}
-              pathOptions={{
-                color: ZOMBIE_COLOR[zombie.tipo],
-                fillColor: ZOMBIE_COLOR[zombie.tipo],
-                fillOpacity: dimmed ? 0.35 : 0.9,
-              }}
-            >
+            <Marker position={pos} icon={zombieIcon(zombie.tipo, zombie.estado)}>
               <Popup>
                 {zombie.id} — {zombie.tipo} ({zombie.estado})
               </Popup>
-            </CircleMarker>
+            </Marker>
 
             {/* Horda: resalta sus vecinos directos (H), zona vedada para rutas */}
             {zombie.tipo === "horda" &&
@@ -266,14 +259,15 @@ export function LiveMap() {
                 const neighborPos = nodeIndex.get(neighborId);
                 if (!neighborPos) return null;
                 return (
-                  <CircleMarker
+                  <Circle
                     key={`${zombie.id}-neighbor-${neighborId}`}
                     center={neighborPos}
-                    radius={5}
+                    radius={15}
                     pathOptions={{
                       color: ZOMBIE_COLOR.horda,
                       fillColor: ZOMBIE_COLOR.horda,
                       fillOpacity: 0.25,
+                      weight: 1,
                     }}
                   />
                 );

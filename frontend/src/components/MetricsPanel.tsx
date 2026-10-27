@@ -11,12 +11,10 @@ const ROUND_LABEL: Record<1 | 2 | 3, string> = {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <span className="text-[10px] uppercase tracking-wide text-slate-400">
         {label}
       </span>
-      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-        {value}
-      </span>
+      <span className="text-sm font-semibold text-slate-100">{value}</span>
     </div>
   );
 }
@@ -31,7 +29,7 @@ export function MetricsPanel() {
 
   if (!snapshot) {
     return (
-      <div className="rounded-lg bg-white/90 p-3 text-xs text-slate-500 shadow-md dark:bg-slate-900/90 dark:text-slate-400">
+      <div className="glass rounded-lg p-3 text-xs text-slate-400">
         Sin datos del backend todavía.
       </div>
     );
@@ -54,7 +52,7 @@ export function MetricsPanel() {
       : "—";
 
   return (
-    <div className="grid grid-cols-2 gap-3 rounded-lg bg-white/90 p-3 shadow-md dark:bg-slate-900/90 sm:grid-cols-4">
+    <div className="glass grid grid-cols-2 gap-3 rounded-lg p-3 sm:grid-cols-4">
       <Metric label="Ronda" value={ROUND_LABEL[roundId]} />
       <Metric label="Vivos" value={String(metrics.activeSurvivors)} />
       <Metric label="Mordidos" value={String(metrics.bittenSurvivors)} />

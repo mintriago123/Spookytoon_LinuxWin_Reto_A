@@ -8,3 +8,34 @@ body,
   height: 100%;
   margin: 0;
 }
+
+body {
+  background-color: #06100a;
+  color: #e8edf7;
+}
+
+/* Panel flotante estilo "glass" del boceto de diseño: fondo nocturno
+   translúcido + blur, sin depender de un plugin de Tailwind. */
+.glass {
+  background-color: rgb(17 24 38 / 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgb(255 255 255 / 0.08);
+}
+
+/* Rótulo de zona en LiveMap: solo texto, sin el globo/flecha por defecto
+   del Tooltip de Leaflet. */
+.zone-label-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgb(203 213 225 / 0.8);
+  pointer-events: none;
+}
+.zone-label-tooltip::before {
+  display: none !important;
+}

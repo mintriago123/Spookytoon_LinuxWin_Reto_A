@@ -117,9 +117,12 @@ export function RoundControls() {
 
   const busy = pendingControl !== null;
 
+  const inputClass =
+    "rounded border border-white/10 bg-night-700 px-2 py-1 text-slate-100 placeholder:text-slate-500";
+
   return (
     <form
-      className="flex flex-col gap-3 rounded-lg bg-white/90 p-3 text-xs shadow-md dark:bg-slate-900/90 dark:text-slate-100"
+      className="glass flex flex-col gap-3 rounded-lg p-3 text-xs text-slate-100"
       onSubmit={(e) => e.preventDefault()}
     >
       <label className="flex flex-col gap-1">
@@ -129,25 +132,21 @@ export function RoundControls() {
           autoComplete="off"
           value={operatorKey}
           onChange={(e) => setOperatorKey(e.target.value)}
-          className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+          className={inputClass}
         />
       </label>
 
       <div className="flex gap-2">
         <label className="flex flex-1 flex-col gap-1">
           <span>gameId</span>
-          <input
-            value={gameId}
-            onChange={(e) => setGameId(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
-          />
+          <input value={gameId} onChange={(e) => setGameId(e.target.value)} className={inputClass} />
         </label>
         <label className="flex flex-col gap-1">
           <span>Ronda</span>
           <select
             value={roundId}
             onChange={(e) => setRoundId(Number(e.target.value) as 1 | 2 | 3)}
-            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+            className={inputClass}
           >
             <option value={1}>1 — Anochecer</option>
             <option value={2}>2 — Medianoche</option>
@@ -158,11 +157,7 @@ export function RoundControls() {
 
       <label className="flex flex-col gap-1">
         <span>seed</span>
-        <input
-          value={seed}
-          onChange={(e) => setSeed(e.target.value)}
-          className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
-        />
+        <input value={seed} onChange={(e) => setSeed(e.target.value)} className={inputClass} />
       </label>
 
       <div className="flex gap-2">
@@ -170,7 +165,7 @@ export function RoundControls() {
           type="button"
           onClick={iniciar}
           disabled={busy || status === "running"}
-          className="flex-1 rounded bg-emerald-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+          className="flex-1 rounded bg-accent-green/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
         >
           {pendingControl === "iniciar" ? "Iniciando…" : "Iniciar"}
         </button>
@@ -178,14 +173,14 @@ export function RoundControls() {
           type="button"
           onClick={pausar}
           disabled={busy || status !== "running"}
-          className="flex-1 rounded bg-amber-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+          className="flex-1 rounded bg-accent-amber/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
         >
           {pendingControl === "pausar" ? "Pausando…" : "Pausar"}
         </button>
       </div>
 
-      <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
-        <span className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+      <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
+        <span className="font-semibold uppercase tracking-wide text-slate-400">
           Cierres en vivo
         </span>
 
@@ -194,7 +189,7 @@ export function RoundControls() {
             {activeBlockedEdges.map((blocked) => (
               <li
                 key={blocked.segmentoId}
-                className="flex items-center justify-between gap-2 rounded bg-rose-50 px-2 py-1 dark:bg-rose-950"
+                className="flex items-center justify-between gap-2 rounded bg-accent-rose/10 px-2 py-1"
               >
                 <span className="truncate" title={blocked.motivo}>
                   {blocked.segmentoId} — {blocked.motivo}
@@ -203,7 +198,7 @@ export function RoundControls() {
                   type="button"
                   onClick={() => bloquearSegmento(blocked.edgeIds[0], false, "Desbloqueo manual del operador")}
                   disabled={busy}
-                  className="shrink-0 rounded bg-slate-600 px-2 py-0.5 font-semibold text-white disabled:opacity-50"
+                  className="shrink-0 rounded bg-night-600 px-2 py-0.5 font-semibold text-slate-100 disabled:opacity-40"
                 >
                   {pendingControl === "bloquear-arista" ? "…" : "Desbloquear"}
                 </button>
@@ -217,7 +212,7 @@ export function RoundControls() {
           <select
             value={selectedEdgeId}
             onChange={(e) => setSelectedEdgeId(e.target.value)}
-            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+            className={inputClass}
           >
             <option value="">Selecciona un segmento…</option>
             {blockableSegments.map((segment) => (
@@ -233,18 +228,18 @@ export function RoundControls() {
             value={blockMotivo}
             onChange={(e) => setBlockMotivo(e.target.value)}
             placeholder="Evento de ciudad o control de operador"
-            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+            className={inputClass}
           />
         </label>
         <button
           type="button"
           onClick={() => bloquearSegmento(selectedEdgeId, true, blockMotivo || "Bloqueo manual del operador")}
           disabled={busy || !selectedEdgeId || !blockMotivo}
-          className="rounded bg-rose-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+          className="rounded bg-accent-rose/90 px-3 py-1.5 font-semibold text-night-900 disabled:opacity-40"
         >
           {pendingControl === "bloquear-arista" ? "Cerrando…" : "Cerrar segmento"}
         </button>
-        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+        <p className="text-[11px] text-slate-400">
           Se agrupa por segmentoId: cierra ambos sentidos. Los controles pasan
           por el operador seguro; la x-api-key no viaja al navegador.
         </p>
