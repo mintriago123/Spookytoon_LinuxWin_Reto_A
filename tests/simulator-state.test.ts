@@ -52,7 +52,7 @@ function metrics(roundId: RoundId = 1): TelemetryMetrics {
 }
 function input(roundId: RoundId = 1) {
   return { gameId: "game", graph: graph(), roundConfig: config(roundId),
-    randomState: { seed: "unit-seed", algorithm: "test-descriptor-only", algorithmVersion: "test-only",
+    randomState: { seed: "unit-seed", algorithm: "sha256-counter", algorithmVersion: "1",
       strategy: "per-zombie-turn-draw" as const },
     initialMetrics: metrics(roundId), updatedAt: "2026-10-27T00:00:00Z" };
 }
@@ -214,7 +214,7 @@ test("exige identidad, descriptor aleatorio, métricas y fecha UTC sin elegir va
   for (const gameId of ["", " ", "g".repeat(129)]) assert.throws(() => createWorldState({ ...input(), gameId }), /gameId/);
   for (const key of ["seed", "algorithm", "algorithmVersion"] as const) {
     const source = input(); source.randomState[key] = "";
-    assert.throws(() => createWorldState(source), /descriptor/);
+    assert.throws(() => createWorldState(source), /Descriptor/);
   }
   for (const updatedAt of ["", "yesterday", "2026-02-30T00:00:00Z", "2026-10-27T00:00:00-05:00"]) {
     assert.throws(() => createWorldState({ ...input(), updatedAt }), /ISO-8601 UTC/);

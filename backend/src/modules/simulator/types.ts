@@ -55,7 +55,7 @@ export type PauseState =
       afterTurnId: number;
     };
 
-/** Descriptor, no elección de PRNG: acordar algoritmo y versión antes de ejecutarlo. */
+/** Algoritmo acordado en Etapa 4: sha256-counter v1, validado antes de usarlo. */
 export interface RandomState {
   seed: string;
   algorithm: string;

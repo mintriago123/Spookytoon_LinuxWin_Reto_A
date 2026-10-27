@@ -1,6 +1,7 @@
 import type { MantaGraph } from "../../contracts/types.ts";
 import type { Immutable, RandomState, TelemetryMetrics, WorldState } from "./types.ts";
 import { validateRoundConfig } from "./round-validation.ts";
+import { validateRandomState } from "./random.ts";
 
 function frozenCopy<T>(value: T): Immutable<T> {
   function freeze(item: unknown): void {
@@ -31,10 +32,7 @@ export function createWorldState(input: {
   }
   const roundConfig = validateRoundConfig(input.roundConfig, input.graph);
   const random = input.randomState;
-  if (!random || [random.seed, random.algorithm, random.algorithmVersion].some(value =>
-    typeof value !== "string" || !value.trim()) || random.strategy !== "per-zombie-turn-draw") {
-    throw new Error("Se requiere semilla y descriptor explícito del algoritmo aleatorio; no hay PRNG predeterminado");
-  }
+  validateRandomState(random);
   if (typeof input.updatedAt !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/.test(input.updatedAt) ||
       !Number.isFinite(Date.parse(input.updatedAt)) ||
       new Date(input.updatedAt).toISOString() !== (input.updatedAt.includes(".")
