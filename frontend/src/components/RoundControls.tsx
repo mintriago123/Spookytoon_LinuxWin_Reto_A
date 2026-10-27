@@ -34,20 +34,29 @@ export function RoundControls() {
   const [seed, setSeed] = useState("seed-001");
   const [blockMotivo, setBlockMotivo] = useState("");
 
+  // El Backend conserva el historial de cierres: una entrada con
+  // desbloqueadaEnTurno != null ya no está vigente, pero sigue en el
+  // arreglo (SPEC.md §2.2 BlockedEdge). Solo las entradas vigentes cuentan
+  // como "bloqueado ahora".
+  const activeBlockedEdges = useMemo(
+    () => blockedEdges.filter((b) => b.desbloqueadaEnTurno === null),
+    [blockedEdges],
+  );
+
   // Un representante (segmentoId → primer edgeId) por cada segmento del
   // grafo, para que el operador elija qué cerrar sin tener que conocer IDs
   // de arista de memoria. SPEC.md §3.3: bloquear-arista cierra ambos
   // sentidos del segmentoId completo.
   const blockableSegments = useMemo(() => {
     if (!graph) return [];
-    const blockedSegmentIds = new Set(blockedEdges.map((b) => b.segmentoId));
+    const blockedSegmentIds = new Set(activeBlockedEdges.map((b) => b.segmentoId));
     const bySegment = new Map<string, { segmentoId: string; edgeId: string; tipo: string }>();
     for (const edge of graph.aristas) {
       if (blockedSegmentIds.has(edge.segmentoId) || bySegment.has(edge.segmentoId)) continue;
       bySegment.set(edge.segmentoId, { segmentoId: edge.segmentoId, edgeId: edge.id, tipo: edge.tipo });
     }
     return Array.from(bySegment.values()).sort((a, b) => a.segmentoId.localeCompare(b.segmentoId, "en"));
-  }, [graph, blockedEdges]);
+  }, [graph, activeBlockedEdges]);
 
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
 
@@ -180,9 +189,9 @@ export function RoundControls() {
           Cierres en vivo
         </span>
 
-        {blockedEdges.length > 0 && (
+        {activeBlockedEdges.length > 0 && (
           <ul className="flex flex-col gap-1">
-            {blockedEdges.map((blocked) => (
+            {activeBlockedEdges.map((blocked) => (
               <li
                 key={blocked.segmentoId}
                 className="flex items-center justify-between gap-2 rounded bg-rose-50 px-2 py-1 dark:bg-rose-950"
