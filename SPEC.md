@@ -138,7 +138,7 @@ CloudWatch registra JSON con requestId, gameId, turnId y worldVersion. Métricas
 
 ### 2.1 grafo_manta.json
 
-Grafo dirigido: cada sentido legal es una arista, y segmentoId agrupa arcos de ambos sentidos para colapsar una vía completa. Nodos: aproximadamente 300; aceptación entre 250 y 350. Exactamente cuatro refugios. Coordenadas y capacidades se suministran en el artefacto revisado; esta especificación no inventa ubicaciones ni cupos.
+Grafo serializado como dirigido: cada sentido transitable es una arista y `segmentoId` agrupa los dos arcos opuestos del mismo tramo. En este dominio, sobrevivientes y zombies se desplazan a pie; por ello, cada tramo incluido en el artefacto genera `A→B` y `B→A`, ignorando restricciones vehiculares `oneway` de OSM. Nodos: aproximadamente 300; aceptación entre 250 y 350. Exactamente cuatro refugios. Coordenadas y capacidades se suministran en el artefacto revisado; esta especificación no inventa ubicaciones ni cupos.
 
 ```json
 {

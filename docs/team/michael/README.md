@@ -18,10 +18,10 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 
 ## Entregables
 
-1. Extraer y revisar el grafo con IDs estables, aristas dirigidas y segmentos que agrupen ambos sentidos.
+1. Extraer y revisar el grafo peatonal con IDs estables, aristas en ambos sentidos y segmentos que agrupen el par.
 2. Validar zonas, coordenadas, factores, conexiones y los cuatro refugios con capacidades configuradas.
-3. Implementar el precompute Dijkstra inverso en cada sync, potenciales Base, tabla bestMoveByNode O(1), autenticación x-api-key y fallback seguro al nodo actual.
-4. Implementar POST /motor/sincronizar para instalar el mismo snapshot y plan precomputado en todos los workers.
+3. Implementar el precompute Dijkstra inverso en cada sync, penalizaciones Base, tabla bestMoveByNode O(1), autenticación x-api-key y fallback seguro al nodo actual.
+4. Implementar POST /motor/sincronizar para instalar atómicamente el snapshot y plan precomputado en los workers.
 5. Desplegar un escritor de partida en ECS Fargate en la región seleccionada por AWS_REGION, persistir snapshots de forma asíncrona y publicar métricas/alertas.
 
 ## Integración con el equipo
@@ -43,3 +43,11 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 ## Datos pendientes
 
 Las capacidades y coordenadas de refugios deben venir del grafo revisado. Las cantidades y posiciones iniciales de zombies/sobrevivientes deben venir de la configuración de ronda; no inventarlas en el motor.
+
+## Motor Base local
+
+El módulo `backend/src/modules/routing/` ya implementa el plan de rutas por
+snapshot, la API `POST /motor/sincronizar` y `POST /paso`, autenticación
+`x-api-key`, bloqueos, amenazas y control de cupos disponibles. `npm test` cubre
+contratos y decisiones; `npm run benchmark:routing` mide 200 llamadas
+concurrentes. Falta conectar estos endpoints al game loop del simulador.
