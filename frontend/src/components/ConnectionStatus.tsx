@@ -1,4 +1,4 @@
-import { useWorldStore } from "../state/world-store";
+import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 
 const LABELS: Record<string, string> = {
   connecting: "Conectando…",
@@ -21,6 +21,9 @@ const DOT_CLASSES: Record<string, string> = {
 export function ConnectionStatus() {
   const socketStatus = useWorldStore((s) => s.socketStatus);
   const lastError = useWorldStore((s) => s.lastError);
+  const graphVersion = useWorldStore((s) => s.graphVersion);
+  const hasSnapshot = useWorldStore((s) => s.currentSnapshot !== null);
+  const mismatch = useWorldStore(hasGraphVersionMismatch);
 
   return (
     <div className="flex flex-col gap-1 rounded-lg bg-white/90 px-3 py-2 text-xs shadow-md dark:bg-slate-900/90 dark:text-slate-100">
@@ -31,6 +34,18 @@ export function ConnectionStatus() {
         />
         <span>{LABELS[socketStatus] ?? socketStatus}</span>
       </div>
+      {graphVersion ? (
+        <p className="truncate text-slate-500 dark:text-slate-400" title={graphVersion}>
+          graphVersion {graphVersion}{" "}
+          {hasSnapshot ? (
+            mismatch ? (
+              <span className="text-rose-600 dark:text-rose-400">no coincide ✕</span>
+            ) : (
+              <span className="text-emerald-600 dark:text-emerald-400">coincide ✓</span>
+            )
+          ) : null}
+        </p>
+      ) : null}
       {lastError ? (
         <p role="alert" className="text-rose-600 dark:text-rose-400">
           {lastError}

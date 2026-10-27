@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useWorldStore } from "../state/world-store";
 import type {
   ApiErrorBody,
+  BloquearAristaRequest,
+  BloquearAristaResponse,
   IniciarRequest,
   IniciarResponse,
   PausarRequest,
@@ -23,11 +25,31 @@ export function RoundControls() {
   const setPendingControl = useWorldStore((s) => s.setPendingControl);
   const setLastError = useWorldStore((s) => s.setLastError);
   const status = useWorldStore((s) => s.currentSnapshot?.status ?? "idle");
+  const graph = useWorldStore((s) => s.graph);
+  const blockedEdges = useWorldStore((s) => s.currentSnapshot?.blockedEdges ?? []);
 
   const [operatorKey, setOperatorKey] = useState("");
   const [gameId, setGameId] = useState("game-2026-001");
   const [roundId, setRoundId] = useState<1 | 2 | 3>(1);
   const [seed, setSeed] = useState("seed-001");
+  const [blockMotivo, setBlockMotivo] = useState("");
+
+  // Un representante (segmentoId → primer edgeId) por cada segmento del
+  // grafo, para que el operador elija qué cerrar sin tener que conocer IDs
+  // de arista de memoria. SPEC.md §3.3: bloquear-arista cierra ambos
+  // sentidos del segmentoId completo.
+  const blockableSegments = useMemo(() => {
+    if (!graph) return [];
+    const blockedSegmentIds = new Set(blockedEdges.map((b) => b.segmentoId));
+    const bySegment = new Map<string, { segmentoId: string; edgeId: string; tipo: string }>();
+    for (const edge of graph.aristas) {
+      if (blockedSegmentIds.has(edge.segmentoId) || bySegment.has(edge.segmentoId)) continue;
+      bySegment.set(edge.segmentoId, { segmentoId: edge.segmentoId, edgeId: edge.id, tipo: edge.tipo });
+    }
+    return Array.from(bySegment.values()).sort((a, b) => a.segmentoId.localeCompare(b.segmentoId, "en"));
+  }, [graph, blockedEdges]);
+
+  const [selectedEdgeId, setSelectedEdgeId] = useState("");
 
   const callControl = async <TReq, TRes>(
     path: string,
@@ -71,6 +93,18 @@ export function RoundControls() {
       { reason: "Pausa solicitada por operador" },
       "pausar",
     );
+
+  const bloquearSegmento = (edgeId: string, bloqueada: boolean, motivo: string) =>
+    callControl<BloquearAristaRequest, BloquearAristaResponse>(
+      "/simulador/bloquear-arista",
+      { eventId: crypto.randomUUID(), edgeId, bloqueada, motivo },
+      "bloquear-arista",
+    ).then((res) => {
+      if (res && bloqueada) {
+        setSelectedEdgeId("");
+        setBlockMotivo("");
+      }
+    });
 
   const busy = pendingControl !== null;
 
@@ -139,6 +173,72 @@ export function RoundControls() {
         >
           {pendingControl === "pausar" ? "Pausando…" : "Pausar"}
         </button>
+      </div>
+
+      <div className="flex flex-col gap-2 border-t border-slate-200 pt-3 dark:border-slate-700">
+        <span className="font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+          Cierres en vivo
+        </span>
+
+        {blockedEdges.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {blockedEdges.map((blocked) => (
+              <li
+                key={blocked.segmentoId}
+                className="flex items-center justify-between gap-2 rounded bg-rose-50 px-2 py-1 dark:bg-rose-950"
+              >
+                <span className="truncate" title={blocked.motivo}>
+                  {blocked.segmentoId} — {blocked.motivo}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => bloquearSegmento(blocked.edgeIds[0], false, "Desbloqueo manual del operador")}
+                  disabled={busy}
+                  className="shrink-0 rounded bg-slate-600 px-2 py-0.5 font-semibold text-white disabled:opacity-50"
+                >
+                  {pendingControl === "bloquear-arista" ? "…" : "Desbloquear"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        <label className="flex flex-col gap-1">
+          <span>Segmento a cerrar</span>
+          <select
+            value={selectedEdgeId}
+            onChange={(e) => setSelectedEdgeId(e.target.value)}
+            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+          >
+            <option value="">Selecciona un segmento…</option>
+            {blockableSegments.map((segment) => (
+              <option key={segment.segmentoId} value={segment.edgeId}>
+                {segment.segmentoId} ({segment.tipo})
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="flex flex-col gap-1">
+          <span>Motivo</span>
+          <input
+            value={blockMotivo}
+            onChange={(e) => setBlockMotivo(e.target.value)}
+            placeholder="Evento de ciudad o control de operador"
+            className="rounded border border-slate-300 px-2 py-1 dark:border-slate-700 dark:bg-slate-800"
+          />
+        </label>
+        <button
+          type="button"
+          onClick={() => bloquearSegmento(selectedEdgeId, true, blockMotivo || "Bloqueo manual del operador")}
+          disabled={busy || !selectedEdgeId || !blockMotivo}
+          className="rounded bg-rose-600 px-3 py-1.5 font-semibold text-white disabled:opacity-50"
+        >
+          {pendingControl === "bloquear-arista" ? "Cerrando…" : "Cerrar segmento"}
+        </button>
+        <p className="text-[11px] text-slate-500 dark:text-slate-400">
+          Se agrupa por segmentoId: cierra ambos sentidos. Los controles pasan
+          por el operador seguro; la x-api-key no viaja al navegador.
+        </p>
       </div>
     </form>
   );

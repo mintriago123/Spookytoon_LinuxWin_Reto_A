@@ -2,6 +2,12 @@ import { useWorldStore } from "../state/world-store";
 
 const ROUND_TURN_COUNT = 150;
 
+const ROUND_LABEL: Record<1 | 2 | 3, string> = {
+  1: "1 · Anochecer",
+  2: "2 · Medianoche",
+  3: "3 · Apocalipsis",
+};
+
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
@@ -31,14 +37,25 @@ export function MetricsPanel() {
     );
   }
 
-  const { metrics, turnId } = snapshot;
+  const { metrics, turnId, roundId } = snapshot;
   const elapsedSeconds = turnId * 2;
   const clock = `${String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:${String(
     elapsedSeconds % 60,
   ).padStart(2, "0")}`;
 
+  // Disponibilidad = solicitudes de ruta contestadas con respuesta válida
+  // dentro de 500 ms. Se deriva en el cliente solo para mostrar; el Backend
+  // no publica este porcentaje directamente (SPEC.md §5.4 sí publica los
+  // conteos crudos que lo componen).
+  const invalidSamples = metrics.routeTimeouts + metrics.invalidRouteResponses;
+  const availability =
+    metrics.routeSamples > 0
+      ? `${(((metrics.routeSamples - invalidSamples) / metrics.routeSamples) * 100).toFixed(1)}%`
+      : "—";
+
   return (
     <div className="grid grid-cols-2 gap-3 rounded-lg bg-white/90 p-3 shadow-md dark:bg-slate-900/90 sm:grid-cols-4">
+      <Metric label="Ronda" value={ROUND_LABEL[roundId]} />
       <Metric label="Vivos" value={String(metrics.activeSurvivors)} />
       <Metric label="Mordidos" value={String(metrics.bittenSurvivors)} />
       <Metric label="Evacuados" value={String(metrics.evacuatedSurvivors)} />
@@ -48,6 +65,7 @@ export function MetricsPanel() {
       <Metric label="p95 ruta" value={`${metrics.routeLatencyP95Ms.toFixed(1)} ms`} />
       <Metric label="Timeouts" value={String(metrics.routeTimeouts)} />
       <Metric label="Rutas inválidas" value={String(metrics.invalidRouteResponses)} />
+      <Metric label="Disponibilidad" value={availability} />
     </div>
   );
 }
