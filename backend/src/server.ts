@@ -8,8 +8,9 @@ import { routingPlugin } from "./modules/routing/http-server.ts";
 import { SimulationRuntime, type ScenarioOptions } from "./modules/simulator/simulation-runtime.ts";
 import { simulatorPlugin } from "./modules/simulator/http-plugin.ts";
 import { createRoutingClient } from "./modules/simulator/routing-client.ts";
+import { realtimePlugin } from "./modules/realtime/http-plugin.ts";
 
-export async function createBackendApp(options: { apiKey?: string; simulator?: ScenarioOptions } = {}) {
+export async function createBackendApp(options: { apiKey?: string; simulator?: ScenarioOptions; frontendOrigin?: string } = {}) {
   const manifest = JSON.parse(await readFile(new URL("../data/graph-manifest.json", import.meta.url), "utf8")) as {
     graphVersion: string; sha256: string;
   };
@@ -27,6 +28,8 @@ export async function createBackendApp(options: { apiKey?: string; simulator?: S
       return createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey });
     }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
   app.register(simulatorPlugin, { runtime: simulator, apiKey });
+  const frontendOrigin = options.frontendOrigin ?? process.env.FRONTEND_ORIGIN;
+  app.register(realtimePlugin, { runtime: simulator, allowedOrigins: frontendOrigin ? [frontendOrigin] : [] });
   return { app, engine, graph, simulator };
 }
 

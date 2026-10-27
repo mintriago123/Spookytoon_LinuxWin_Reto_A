@@ -1,5 +1,5 @@
 import type { MantaGraph } from "../../contracts/types.ts";
-import type { Immutable, RoundConfig, RoundId, TelemetryMetrics, WorldState } from "./types.ts";
+import type { CommittedWorldSnapshot, Immutable, RoundConfig, RoundId, TelemetryMetrics, WorldState } from "./types.ts";
 import type { RoutingClient } from "./routing-client.ts";
 import type { RoutingAlert } from "./routing-failure.ts";
 import { SimulatorControlError, type EdgeCommand, type StartCommand } from "./controls.ts";
@@ -8,6 +8,7 @@ import { createWorldState } from "./world-state.ts";
 import { validateRoundConfig } from "./round-validation.ts";
 import { RANDOM_ALGORITHM, RANDOM_ALGORITHM_VERSION } from "./random.ts";
 import { TurnCoordinator } from "./turn-coordinator.ts";
+import { createWorldSnapshot } from "./world-snapshot.ts";
 
 export interface ScenarioOptions {
   /** Solo configuración aprobada suministrada por el composition root; no hay escenario de respaldo. */
@@ -32,10 +33,16 @@ export class SimulationRuntime {
   private runner: { controller: AbortController; promise: Promise<void> } | null = null;
   private readonly usedGameIds = new Set<string>();
   private closed = false;
+  private snapshot: CommittedWorldSnapshot | null = null;
+  private readonly listeners = new Set<(snapshot: CommittedWorldSnapshot) => void>();
 
   constructor(options: RuntimeOptions) { this.options = options; this.clock = options.clock ?? createSimulationClock(); }
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
+  getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
+  subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
+    this.listeners.add(listener); return () => { this.listeners.delete(listener); };
+  }
   whenStopped(): Promise<void> { return this.runner?.promise ?? Promise.resolve(); }
 
   start(command: StartCommand): { gameId: string; roundId: RoundId; status: "running"; nextTurnId: number } {
@@ -65,7 +72,8 @@ export class SimulationRuntime {
       try { client = this.options.clientFactory(); }
       catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
-        now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert });
+        now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+        onCommitted: world => this.publishCommitted(world) });
       coordinator.resume();
       this.coordinator = coordinator; this.usedGameIds.add(command.gameId);
     }
@@ -94,6 +102,15 @@ export class SimulationRuntime {
   }
 
   private isoNow(): string { return this.options.isoNow?.() ?? new Date().toISOString(); }
+
+  private publishCommitted(world: Immutable<WorldState>): void {
+    // Acuerdo Etapa 7: controles comprometidos también notifican status, aun con igual turno/versión.
+    // Un consumidor debe aceptar esos cambios de status sin volver a aplicar movimientos.
+    this.snapshot = createWorldSnapshot(world); // GET ve esta misma copia antes de notificar a WS.
+    for (const listener of this.listeners) {
+      try { listener(this.snapshot); } catch { /* Un observador de lectura no revierte el commit ni detiene el turno. */ }
+    }
+  }
 
   private launch(): void {
     const coordinator = this.coordinator!;

@@ -388,7 +388,7 @@ Decision mover|esperar. Para esperar: toNodeId=fromNodeId, edgeId=null, routeCos
 
 POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check interno del ALB.
 
-- GET /estado: 200 WorldSnapshot del último turno comprometido, Cache-Control no-store. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases.
+- GET /estado: 200 WorldSnapshot del último estado completo comprometido, Cache-Control no-store. Antes de crear la primera partida responde 503 con error.code=GAME_NOT_STARTED; no inventa gameId, roundId ni entidades. Una partida creada tiene snapshot inicial en turno 0. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases. Los controles comprometidos de inicio, pausa entre ticks y reanudación actualizan status sin avanzar turnId/worldVersion.
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
@@ -435,6 +435,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/WorldSnapshot" }
+        "503": { $ref: "#/components/responses/Error" }
   /simulador/iniciar:
     post:
       operationId: iniciarSimulador
@@ -780,7 +781,9 @@ Los validadores runtime de contracts/schemas.ts deben implementar las mismas res
 
 ### 3.4 WebSocket TURN_UPDATE
 
-Conectar a WSS /ws. Cada mensaje completo es TurnUpdate; se emite tras comprometer estado y actualizar GET /estado. El grafo estático se descarga una sola vez. turnId nunca retrocede. Al reconectar, GET /estado y descartar eventos con turnId ya aplicado.
+Conectar a WSS /ws. Cada mensaje completo es TurnUpdate; se emite tras comprometer estado y actualizar GET /estado. El grafo estático se descarga una sola vez. turnId nunca retrocede dentro de un mismo gameId. Antes de crear una partida WS puede conectar, pero no envía un mundo inventado. Al conectar o reconectar se envía el snapshot completo vigente si existe, además de permitir recuperarlo por GET /estado.
+
+Los controles comprometidos de inicio, pausa entre ticks y reanudación también emiten TurnUpdate completo. Pueden cambiar status conservando turnId/worldVersion: el consumidor debe aceptar ese cambio de status sin volver a aplicar movimientos. Descartar versiones/turnos anteriores y duplicados sin cambios. Un gameId nuevo reinicia turno y versión; no compararlo como si fuera la partida anterior.
 El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la envoltura sin duplicar datos; en producción cada arreglo contiene todas las entidades dinámicas del snapshot.
 
 ```json
@@ -980,7 +983,7 @@ Componentes: LiveMap, RoundControls, MetricsPanel, ConnectionStatus y EntityLege
 
 Capas Leaflet: vías por tipo; cierres rojos discontinuos; nodos por zona; refugio con ocupación/capacidad; sobrevivientes por estado; zombies por tipo; hordas con nodo+vecinos bloqueados; corredores con radio de dos saltos; dormidos atenuados. No dibujar geometrías ausentes del grafo.
 
-Interpolar visualmente entre los dos snapshots consecutivos durante 1.800 ms con requestAnimationFrame; dejar 200 ms de pausa. No alterar estado lógico. Horda/dormido inmóviles; aplicar mordidas y evacuación al recibir snapshot. Ignorar turnId duplicado/menor; si se salta uno, interpolar desde último visible al más reciente. Store mínimo: graphVersion, currentSnapshot, previousSnapshot, receivedAt, socketStatus, pendingControl, lastError. Si graphVersion difiere, no renderizar entidades y mostrar error de versión.
+Interpolar visualmente entre los dos snapshots consecutivos durante 1.800 ms con requestAnimationFrame; dejar 200 ms de pausa. No alterar estado lógico. Horda/dormido inmóviles; aplicar mordidas y evacuación al recibir snapshot. Ignorar turnId menor o duplicados sin cambios dentro de la misma partida; aceptar cambios de status por controles con igual turno/versión según §3.4, sin repetir interpolación de movimientos. Si se salta un turno, interpolar desde último visible al más reciente. Store mínimo: graphVersion, currentSnapshot, previousSnapshot, receivedAt, socketStatus, pendingControl, lastError. Si graphVersion difiere, no renderizar entidades y mostrar error de versión.
 
 Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, reconciliar worldVersion y abrir WSS. Accesibilidad: texto además de color, diseño usable en escritorio y móvil.
 

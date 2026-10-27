@@ -29,6 +29,8 @@ interface CoordinatorOptions {
   isoNow: () => string;
   /** Emisor síncrono y sin I/O bloqueante; nunca recibe payloads ni secretos HTTP. */
   emitAlert: (alert: RoutingAlert) => void;
+  /** Notificación síncrona tras el commit; el consumidor no debe realizar I/O bloqueante. */
+  onCommitted?: (world: Immutable<WorldState>) => void;
   now?: () => number;
 }
 
@@ -68,6 +70,7 @@ export class TurnCoordinator {
     const work = structuredClone(this.committed) as WorldState;
     work.status = "running"; work.pause = { status: "none" }; work.updatedAt = this.options.isoNow();
     this.pauseRequested = null; this.committed = freeze(work);
+    this.options.onCommitted?.(this.committed);
   }
 
   requestPause(reason: string): { status: "pausing" | "paused"; afterTurnId: number } {
@@ -80,6 +83,7 @@ export class TurnCoordinator {
       const work = structuredClone(this.committed) as WorldState;
       work.status = "paused"; work.pause = { status: "effective", cause: "operator", reason, afterTurnId: work.turnId };
       work.updatedAt = this.options.isoNow(); this.committed = freeze(work);
+      this.options.onCommitted?.(this.committed);
     }
     this.pauseRequested = null;
     return { status: "paused", afterTurnId: this.committed.turnId };
@@ -245,6 +249,7 @@ export class TurnCoordinator {
       work.updatedAt = this.options.isoNow();
       this.committed = freeze(work); // Único intercambio de la versión completa.
       this.pauseRequested = null; this.queuedEvents = [];
+      this.options.onCommitted?.(this.committed);
       let alertDeliveryFailed = false;
       if (alert) { try { this.options.emitAlert(alert); } catch { alertDeliveryFailed = true; } }
       return { world: this.committed, attempts, decisions, alerts: alert ? [alert] : [], alertDeliveryFailed };
