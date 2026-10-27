@@ -23,12 +23,17 @@ export function useInterpolatedWorld(): InterpolationState {
   const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // setProgress se llama solo dentro del callback de rAF (nunca
+    // síncronamente en el cuerpo del efecto) para evitar el render en
+    // cascada que marca react-hooks/set-state-in-effect; el primer frame
+    // llega en el siguiente paint, imperceptible para una animación de
+    // 1 800 ms.
     if (receivedAt === null) {
-      setProgress(1);
-      return;
+      rafRef.current = requestAnimationFrame(() => setProgress(1));
+      return () => {
+        if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      };
     }
-
-    setProgress(0);
 
     const tick = () => {
       const elapsed = Date.now() - receivedAt;
