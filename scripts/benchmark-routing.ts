@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { request as httpRequest, Agent } from "node:http";
 import { performance } from "node:perf_hooks";
-import { createRoutingServer } from "../backend/src/modules/routing/http-server.ts";
+import { createRoutingApp } from "../backend/src/modules/routing/http-server.ts";
 import { RouteEngine } from "../backend/src/modules/routing/route-engine.ts";
 import { loadGraph } from "../backend/src/modules/graph/load-graph.ts";
 import type { WorldSyncRequest } from "../backend/src/contracts/routing.ts";
@@ -62,17 +62,15 @@ async function main() {
     gameId: "routing-benchmark-r3", turnId: 1, baseWorldVersion: 0,
     survivors, zombies: [],
     shelters: graph.refugios.map(shelter => ({ ...shelter, ocupantes: [], reservados: [] })),
-    blockedEdges: [], zombieTransitions: [], dormantUncertaintyNodeIds: [],
+    blockedEdges: [], zombieTraversals: [], dormantUncertaintyNodeIds: [],
   };
   const apiKey = "local-routing-benchmark-secret";
   const engine = new RouteEngine(graph);
-  const server = createRoutingServer({ engine, apiKey });
+  const app = await createRoutingApp({ engine, apiKey });
   const agent = new Agent({ keepAlive: true, maxSockets: 200, maxTotalSockets: 200 });
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject); server.listen(0, "127.0.0.1", resolve);
-  });
+  await app.listen({ port: 0, host: "127.0.0.1" });
   try {
-    const address = server.address();
+    const address = app.server.address();
     if (!address || typeof address === "string") throw new Error("No se pudo abrir el puerto local");
     const baseUrl = `http://127.0.0.1:${address.port}`;
     const syncResponse = await postJson<{ worldVersion: number; buildLatencyMs: number }>(`${baseUrl}/motor/sincronizar`, apiKey, sync, agent);
@@ -109,7 +107,7 @@ async function main() {
     }
   } finally {
     agent.destroy();
-    await new Promise<void>(resolve => server.close(() => resolve()));
+    await app.close();
   }
 }
 

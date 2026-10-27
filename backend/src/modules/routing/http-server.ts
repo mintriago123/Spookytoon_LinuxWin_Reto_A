@@ -1,98 +1,72 @@
-import { createHash, randomUUID, timingSafeEqual } from "node:crypto";
-import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
-import { RoutingError } from "../../contracts/routing.ts";
+import { createHash, timingSafeEqual } from "node:crypto";
+import Fastify, { type FastifyInstance, type FastifyPluginAsync, type FastifyReply, type FastifyRequest } from "fastify";
+import { RoutingError, type RoutingStatusResponse } from "../../contracts/routing.ts";
 import { RouteEngine } from "./route-engine.ts";
 
-interface RoutingServerOptions {
+export interface RoutingServerOptions {
   engine: RouteEngine;
   apiKey: string;
   bodyLimitBytes?: number;
-}
-
-function send(response: ServerResponse, status: number, body: unknown) {
-  const bytes = Buffer.from(JSON.stringify(body));
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", "content-length": bytes.length,
-    "cache-control": "no-store" });
-  response.end(bytes);
+  logger?: boolean;
 }
 
 function authorized(header: string | string[] | undefined, expectedHash: Buffer) {
   const candidate = Array.isArray(header) ? header.join(",") : header;
-  if (!candidate) {
-    const dummy = createHash("sha256").update("").digest();
-    timingSafeEqual(dummy, expectedHash);
-    return false;
+  const candidateHash = createHash("sha256").update(candidate ?? "").digest();
+  const matches = timingSafeEqual(candidateHash, expectedHash);
+  return !!candidate && matches;
+}
+
+function sendError(request: FastifyRequest, reply: FastifyReply, error: unknown) {
+  if (error instanceof RoutingError) {
+    return reply.code(error.status).send({ error: { code: error.code, message: error.message, requestId: request.id } });
   }
-  const candidateHash = createHash("sha256").update(candidate).digest();
-  return timingSafeEqual(candidateHash, expectedHash);
+  const statusCode = error && typeof error === "object" && "statusCode" in error &&
+    typeof error.statusCode === "number" ? error.statusCode : 500;
+  if (statusCode >= 400 && statusCode < 500) {
+    const code = statusCode === 413 ? "PAYLOAD_TOO_LARGE" : "VALIDATION_ERROR";
+    return reply.code(statusCode).send({ error: { code, message: "Petición HTTP inválida", requestId: request.id } });
+  }
+  request.log.error({ event: "routing-request-failed", requestId: request.id,
+    message: error instanceof Error ? error.message : "unknown error" });
+  return reply.code(503).send({ error: { code: "ROUTE_UNAVAILABLE",
+    message: "Motor de rutas no disponible", requestId: request.id } });
 }
 
-function readJson(request: IncomingMessage, limit: number): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const lengthHeader = request.headers["content-length"];
-    const declaredLength = typeof lengthHeader === "string" ? Number(lengthHeader) : NaN;
-    if (Number.isFinite(declaredLength) && declaredLength > limit) {
-      request.resume(); reject(new RoutingError(413, "PAYLOAD_TOO_LARGE", "El cuerpo supera el límite permitido")); return;
-    }
-    const chunks: Buffer[] = []; let size = 0; let settled = false;
-    request.on("data", chunk => {
-      if (settled) return;
-      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      size += bytes.length;
-      if (size > limit) {
-        settled = true; chunks.length = 0;
-        reject(new RoutingError(413, "PAYLOAD_TOO_LARGE", "El cuerpo supera el límite permitido"));
-        return;
-      }
-      chunks.push(bytes);
-    });
-    request.on("end", () => {
-      if (settled) return;
-      settled = true;
-      try { resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown); }
-      catch { reject(new RoutingError(400, "VALIDATION_ERROR", "El cuerpo debe ser JSON válido")); }
-    });
-    request.on("error", error => { if (!settled) { settled = true; reject(error); } });
-    request.on("aborted", () => { if (!settled) { settled = true; reject(new RoutingError(400, "VALIDATION_ERROR", "Petición interrumpida")); } });
-  });
-}
-
-export function createRoutingServer(options: RoutingServerOptions): Server {
+export const routingPlugin: FastifyPluginAsync<RoutingServerOptions> = async (app, options) => {
   if (!options.apiKey || options.apiKey.length < 16) throw new Error("Configure ROUTE_API_KEY con al menos 16 caracteres");
   const expectedHash = createHash("sha256").update(options.apiKey).digest();
-  const bodyLimitBytes = options.bodyLimitBytes ?? 1_048_576;
-  return createServer(async (request, response) => {
-    const requestId = randomUUID();
-    try {
-      const url = new URL(request.url ?? "/", "http://routing.local");
-      if (request.method === "GET" && url.pathname === "/health/live") {
-        send(response, 200, { status: "live" }); return;
-      }
-      if (request.method === "GET" && url.pathname === "/health/ready") {
-        const ready = options.engine.isReady();
-        send(response, ready ? 200 : 503, { status: ready ? "ready" : "not-ready" }); return;
-      }
-      const knownRoute = request.method === "POST" &&
-        (url.pathname === "/motor/sincronizar" || url.pathname === "/paso");
-      if (!knownRoute) {
-        send(response, 404, { error: { code: "NOT_FOUND", message: "Ruta no encontrada", requestId } }); return;
-      }
-      if (!authorized(request.headers["x-api-key"], expectedHash)) {
-        send(response, 401, { error: { code: "UNAUTHORIZED", message: "Autenticación requerida", requestId } }); return;
-      }
-      const body = await readJson(request, bodyLimitBytes);
-      if (url.pathname === "/motor/sincronizar") {
-        send(response, 200, options.engine.sync(body)); return;
-      }
-      send(response, 200, options.engine.step(body));
-    } catch (error) {
-      if (response.headersSent) { response.destroy(); return; }
-      if (error instanceof RoutingError) {
-        send(response, error.status, { error: { code: error.code, message: error.message, requestId } }); return;
-      }
-      console.error(JSON.stringify({ event: "routing-request-failed", requestId,
-        message: error instanceof Error ? error.message : "unknown error" }));
-      send(response, 503, { error: { code: "ROUTE_UNAVAILABLE", message: "Motor de rutas no disponible", requestId } });
-    }
+  app.setErrorHandler((error, request, reply) => sendError(request, reply, error));
+  const auth = async (request: FastifyRequest, reply: FastifyReply) => {
+    if (authorized(request.headers["x-api-key"], expectedHash)) return;
+    request.log.error({ event: "routing-auth-failed", requestId: request.id, path: request.url },
+      "Clave de routing ausente o inválida");
+    return reply.code(401).send({ error: { code: "UNAUTHORIZED", message: "Autenticación requerida", requestId: request.id } });
+  };
+
+  app.get("/health/live", async () => ({ status: "live" }));
+  app.get("/health/ready", async (_request, reply) => {
+    const ready = options.engine.isReady();
+    return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "not-ready" });
   });
+  app.get<{ Params: { gameId: string }; Reply: RoutingStatusResponse }>("/motor/estado/:gameId", {
+    preHandler: auth,
+  }, async (request, reply) => {
+    try { return options.engine.getStatus(request.params.gameId); }
+    catch (error) { return sendError(request, reply, error); }
+  });
+  app.post("/motor/sincronizar", { preHandler: auth }, async (request, reply) => {
+    try { return options.engine.sync(request.body); }
+    catch (error) { return sendError(request, reply, error); }
+  });
+  app.post("/paso", { preHandler: auth }, async (request, reply) => {
+    try { return options.engine.step(request.body); }
+    catch (error) { return sendError(request, reply, error); }
+  });
+};
+
+export async function createRoutingApp(options: RoutingServerOptions): Promise<FastifyInstance> {
+  const app = Fastify({ bodyLimit: options.bodyLimitBytes ?? 1_048_576, logger: options.logger ?? false });
+  app.register(routingPlugin, options);
+  return app;
 }

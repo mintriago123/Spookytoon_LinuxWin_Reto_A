@@ -34,7 +34,7 @@ export function resolveSurvivorDecisions(
   context: Immutable<SurvivorResolutionContext>,
   routing:
     | { kind: "confirmed"; installed: Immutable<InstalledRoutingVersion>; attempts: readonly RouteAttempt[] }
-    | { kind: "sync-failed" },
+    | { kind: "sync-failed"; status?: number; error?: unknown },
 ): DecisionBatch {
   const installed = routing.kind === "confirmed" ? routing.installed : null;
   const confirmed = installed !== null && installed.gameId === context.gameId &&
@@ -46,6 +46,8 @@ export function resolveSurvivorDecisions(
     list.push(attempt);
     attempts.set(attempt.request.survivorId, list);
   }
+  const unauthorized = (routing.kind === "sync-failed" && routing.status === 401) ||
+    [...attempts.values()].some(list => list.some(attempt => attempt.kind === "error" && attempt.status === 401));
   const edges = new Map(context.graph.aristas.map(edge => [edge.id, edge]));
   const nodes = new Set(context.graph.nodos.map(node => node.id));
   const shelters = new Map(context.shelters.map(shelter => [shelter.id, shelter]));
@@ -61,6 +63,7 @@ export function resolveSurvivorDecisions(
     const wait = (cause: WaitCause, targetShelterId = survivor.targetShelterId): SurvivorDecision => ({
       survivorId: survivor.id, decision: "esperar", nodeId: survivor.nodeId, targetShelterId, cause,
     });
+    if (unauthorized) return wait("authorization-failed");
     if (!confirmed) return wait("sync-failed");
     const list = attempts.get(survivor.id);
     if (!list?.length) return wait("missing-response");
@@ -99,7 +102,11 @@ export function resolveSurvivorDecisions(
       targetShelterId: shelter.id, routeCost: response.routeCost,
     } };
   });
-  return { gameId: context.gameId, turnId: context.turnId, worldVersion: context.worldVersion, decisions };
+  return {
+    gameId: context.gameId, turnId: context.turnId, worldVersion: context.worldVersion, decisions,
+    pauseCause: unauthorized ? "routing-unauthorized" : null,
+    alertCode: unauthorized ? "ROUTING_UNAUTHORIZED" : null,
+  };
 }
 
 /** Recibe decisiones validadas contra una única vista; nunca encadena movimientos. */

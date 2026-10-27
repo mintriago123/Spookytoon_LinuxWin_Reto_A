@@ -1,7 +1,7 @@
 import type { MantaGraph } from "../../contracts/types.ts";
 import type {
   PasoRequest, PasoResponse, RouteBlockedEdge, RouteShelter, RouteSurvivor,
-  RouteZombie, RouteZombieTransition, SyncResponse, WorldSyncRequest, ZombieType,
+  RouteZombie, RouteZombieTraversal, SyncResponse, WorldSyncRequest, ZombieType,
 } from "../../contracts/routing.ts";
 
 /** Solo lectura profunda en TypeScript; no sustituye copia ni freeze en runtime. */
@@ -45,7 +45,7 @@ export interface ScheduledCityEvent extends CityEvent {
   origen: RouteBlockedEdge["origen"];
 }
 
-export type PauseCause = "operator" | "deadline-miss";
+export type PauseCause = "operator" | "deadline-miss" | "routing-unauthorized";
 export type PauseState =
   | { status: "none" }
   | {
@@ -69,11 +69,8 @@ export interface RandomCursor {
   drawIndex: number;
 }
 
-/** Ordenar por zombie y stepIndex. Nunca enviar esta extensión al motor actual. */
-export interface ZombieTraversal extends RouteZombieTransition {
-  edgeId: string;
-  stepIndex: 1 | 2;
-}
+/** El contrato compartido conserva cada paso ordenado, incluidos los dos del corredor. */
+export interface ZombieTraversal extends RouteZombieTraversal {}
 
 export interface InstalledRoutingVersion {
   gameId: string;
@@ -206,12 +203,12 @@ export type RouteAttempt = {
 } & (
   | { kind: "response"; body: unknown }
   | { kind: "timeout" }
-  | { kind: "error"; error: unknown }
+  | { kind: "error"; error: unknown; status?: number }
 );
 
 export type WaitCause =
   | "routing-wait" | "sync-failed" | "timeout" | "error"
-  | "late-response" | "invalid-response" | "missing-response";
+  | "late-response" | "invalid-response" | "missing-response" | "authorization-failed";
 
 /** Solo las respuestas ya validadas pueden habilitar movimiento. */
 export type SurvivorDecision =
@@ -235,6 +232,8 @@ export interface DecisionBatch {
   turnId: number;
   worldVersion: number;
   decisions: SurvivorDecision[];
+  pauseCause: PauseCause | null;
+  alertCode: "ROUTING_UNAUTHORIZED" | null;
 }
 
 export interface SurvivorTraversal {

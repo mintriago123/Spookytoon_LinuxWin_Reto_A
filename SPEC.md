@@ -253,8 +253,9 @@ export interface BlockedEdge {
   origen: "evento-ciudad" | "control";
   bloqueadaDesdeTurno: number; desbloqueadaEnTurno: number | null;
 }
-export interface ZombieTransition {
-  zombieId: string; fromNodeId: string; toNodeId: string;
+export interface ZombieTraversal {
+  zombieId: string; stepIndex: 1 | 2; edgeId: string;
+  fromNodeId: string; toNodeId: string;
 }
 export interface CityEvent {
   eventId: string; tipo: "bloquear-segmento" | "desbloquear-segmento";
@@ -273,7 +274,7 @@ export interface WorldState {
   turnId: number; activeTurnId: number | null; worldVersion: number;
   graph: MantaGraph; zombies: Zombie[]; survivors: Survivor[]; shelters: Shelter[];
   blockedEdges: BlockedEdge[]; pendingCityEvents: CityEvent[];
-  lastZombieTransitions: ZombieTransition[]; metrics: TelemetryMetrics;
+  lastZombieTraversals: ZombieTraversal[]; metrics: TelemetryMetrics;
   rngSeed: string; updatedAt: string;
 }
 export interface WorldSnapshot {
@@ -301,7 +302,7 @@ export interface WorldSyncRequest {
   gameId: string; turnId: number; baseWorldVersion: number;
   survivors: Survivor[]; zombies: Zombie[]; // solo entidades visibles a routing
   shelters: Shelter[];
-  blockedEdges: BlockedEdge[]; zombieTransitions: ZombieTransition[];
+  blockedEdges: BlockedEdge[]; zombieTraversals: ZombieTraversal[];
   dormantUncertaintyNodeIds: string[];
 }
 export interface RoutePlanEntry {
@@ -315,6 +316,13 @@ export interface RoutePlanSnapshot {
   gameId: string; turnId: number; worldVersion: number; graphVersion: string;
   builtAt: string; buildLatencyMs: number;
   bestMoveByNode: Readonly<Record<string, RoutePlanEntry>>;
+}
+export interface SyncResponse {
+  turnId: number; worldVersion: number; graphVersion: string;
+  workerCount: number; buildLatencyMs: number; ready: true;
+}
+export interface RoutingStatusResponse {
+  gameId: string; installed: SyncResponse | null;
 }
 ```
 
@@ -384,7 +392,8 @@ POST /paso, sincronización y controles requieren x-api-key; GET /estado y healt
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
-- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTransitions, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. zombies excluye dormidos no despiertos; dormantUncertaintyNodeIds es el agregado sin identidad definido en la sección 4. Actualiza atómicamente todos los workers y construye el plan de rutas antes de responder 200 {turnId, worldVersion, workerCount, ready:true}. Repetición idéntica idempotente; distinta para mismo turno 409. No publica estado parcial.
+- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. `zombieTraversals` contiene los pasos efectivamente recorridos, ordenados por `zombieId` y `stepIndex`, con `edgeId`; el último paso coincide con `zombies[].nodeId`. Un corredor puede aportar hasta dos pasos contiguos. `baseWorldVersion` debe coincidir con la última versión instalada; `turnId` debe ser mayor que el último instalado, pero puede saltar turnos que cerraron sin un plan confirmado. Repetición idéntica (mismo turno y digest) idempotente; distinta para el mismo turno, versión base incorrecta o turno menor devuelve 409. Responde 200 {turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready:true}. No publica estado parcial.
+- GET /motor/estado/{gameId}: requiere `x-api-key` y devuelve `{gameId, installed}` con la última respuesta de sincronización confirmada, o `installed:null` si no hay snapshot. El simulador usa este estado o reintenta exactamente el mismo payload para resolver un timeout de sincronización; nunca usa una tabla de un turno anterior.
 - GET /health/live y /health/ready: liveness/readiness interna para ALB.
 
 Proyección OpenAPI 3.1: debe cubrir todos los endpoints previos y usar esquemas cerrados (additionalProperties=false) derivados de las interfaces anteriores.
@@ -491,13 +500,29 @@ paths:
             schema: { $ref: "#/components/schemas/WorldSyncRequest" }
       responses:
         "200":
-          description: Snapshot instalado en todos los workers
+          description: Snapshot instalado y plan precalculado
           content:
             application/json:
               schema: { $ref: "#/components/schemas/SyncResponse" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+  /motor/estado/{gameId}:
+    get:
+      operationId: estadoMotor
+      security: [{ ApiKey: [] }]
+      parameters:
+        - in: path
+          name: gameId
+          required: true
+          schema: { type: string, minLength: 1 }
+      responses:
+        "200":
+          description: Última versión instalada para conciliar una sincronización incierta
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RoutingStatusResponse" }
+        "401": { $ref: "#/components/responses/Error" }
   /health/live:
     get:
       operationId: healthLive
@@ -614,16 +639,28 @@ components:
     SyncResponse:
       type: object
       additionalProperties: false
-      required: [turnId, worldVersion, workerCount, ready]
+      required: [turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready]
       properties:
         turnId: { type: integer, minimum: 1 }
         worldVersion: { type: integer, minimum: 1 }
+        graphVersion: { type: string, minLength: 1 }
         workerCount: { type: integer, minimum: 1 }
+        buildLatencyMs: { type: number, minimum: 0 }
         ready: { const: true }
+    RoutingStatusResponse:
+      type: object
+      additionalProperties: false
+      required: [gameId, installed]
+      properties:
+        gameId: { type: string, minLength: 1 }
+        installed:
+          oneOf:
+            - $ref: "#/components/schemas/SyncResponse"
+            - type: "null"
     WorldSyncRequest:
       type: object
       additionalProperties: false
-      required: [gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTransitions, dormantUncertaintyNodeIds]
+      required: [gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds]
       properties:
         gameId: { type: string }
         turnId: { type: integer, minimum: 1 }
@@ -635,7 +672,10 @@ components:
           items: { $ref: "#/components/schemas/Zombie" }
         shelters: { type: array, items: { $ref: "#/components/schemas/Shelter" } }
         blockedEdges: { type: array, items: { $ref: "#/components/schemas/BlockedEdge" } }
-        zombieTransitions: { type: array, items: { $ref: "#/components/schemas/ZombieTransition" } }
+        zombieTraversals:
+          type: array
+          description: Recorridos reales ordenados por zombieId y stepIndex; los pasos de cada zombie son contiguos.
+          items: { $ref: "#/components/schemas/ZombieTraversal" }
         dormantUncertaintyNodeIds: { type: array, uniqueItems: true, items: { type: string } }
     Zombie:
       type: object
@@ -680,12 +720,14 @@ components:
         origen: { enum: [evento-ciudad, control] }
         bloqueadaDesdeTurno: { type: integer, minimum: 1 }
         desbloqueadaEnTurno: { type: [integer, "null"] }
-    ZombieTransition:
+    ZombieTraversal:
       type: object
       additionalProperties: false
-      required: [zombieId, fromNodeId, toNodeId]
+      required: [zombieId, stepIndex, edgeId, fromNodeId, toNodeId]
       properties:
         zombieId: { type: string }
+        stepIndex: { enum: [1, 2] }
+        edgeId: { type: string }
         fromNodeId: { type: string }
         toNodeId: { type: string }
     WorldSnapshot:

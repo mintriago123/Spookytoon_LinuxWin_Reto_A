@@ -124,6 +124,24 @@ test("timeout, error y respuesta tardía producen espera usando tiempo explícit
   assert.equal(resolve(context(), [attempt(response(), 500)]).decisions[0].decision, "mover");
 });
 
+test("401 de sync o /paso pide pausa y emite alerta de autorización", () => {
+  const item = attempt();
+  const routeUnauthorized = resolve(context(), [{ ...item, kind: "error", status: 401, error: "UNAUTHORIZED" }]);
+  assert.equal(routeUnauthorized.pauseCause, "routing-unauthorized");
+  assert.equal(routeUnauthorized.alertCode, "ROUTING_UNAUTHORIZED");
+  assert(routeUnauthorized.decisions.every(decision => decision.decision === "esperar" &&
+    decision.cause === "authorization-failed"));
+
+  const syncUnauthorized = resolveSurvivorDecisions(context(), { kind: "sync-failed", status: 401 });
+  assert.equal(syncUnauthorized.pauseCause, "routing-unauthorized");
+  assert.equal(syncUnauthorized.alertCode, "ROUTING_UNAUTHORIZED");
+  assert(syncUnauthorized.decisions.every(decision => decision.decision === "esperar"));
+
+  const temporaryFailure = resolve(context(), [{ ...item, kind: "error", status: 503, error: "unavailable" }]);
+  assert.equal(temporaryFailure.pauseCause, null);
+  assert.equal(temporaryFailure.alertCode, null);
+});
+
 test("bloqueos respetan intervalo y cada dirección; zombie, horda y ambos pasos impiden movimiento", () => {
   const ctx = context();
   ctx.blockedEdges = [{ segmentoId: "AB", edgeIds: ["AB", "BA"], motivo: "test",
