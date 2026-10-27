@@ -77,6 +77,13 @@ body {
   }
 }
 
+/* Tiles de OSM estándar (gratis, sin key) invertidos a oscuro solo en el
+   pane de tiles: las vías/entidades/popups de Leaflet viven en otros panes
+   y no se ven afectados por este filtro. */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(200deg) brightness(0.85) contrast(1.05) saturate(0.35);
+}
+
 /* Rótulo de zona en LiveMap: solo texto, sin el globo/flecha por defecto
    del Tooltip de Leaflet. */
 .zone-label-tooltip {

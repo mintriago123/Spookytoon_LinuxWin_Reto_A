@@ -143,9 +143,14 @@ export function LiveMap() {
 
   return (
     <MapContainer center={center} zoom={14} className="h-full w-full bg-night-900">
+      {/* CartoDB Dark Matter dejó de servirse gratis sin cuenta (devuelve
+          tiles con marca "API KEY REQUIRED"). En vez de depender de una key
+          de un servicio pago, se usa el tile OSM estándar (gratis, sin key,
+          ya verificado) y se invierte a oscuro por CSS en .leaflet-tile-pane
+          — una técnica estándar, no afecta a las capas de entidades. */}
       <TileLayer
-        attribution={`${graph.metadata.osmAttribution} · © CARTO`}
-        url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+        attribution={graph.metadata.osmAttribution}
+        url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
 
       {/* Rótulos de zona, solo orientación visual */}

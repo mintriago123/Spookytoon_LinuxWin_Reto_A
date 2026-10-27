@@ -65,7 +65,9 @@ export function App() {
         </header>
         <main className="relative flex-1">
           <LiveMap />
-          <div className="absolute left-3 top-3 flex flex-col gap-2">
+          {/* z-[1100]: por encima de los controles de Leaflet (z-index 1000
+              en leaflet.css), si no quedan tapados aunque estén en el DOM. */}
+          <div className="absolute left-3 top-3 z-[1100] flex flex-col gap-2">
             <ConnectionStatus />
             <EntityLegend />
           </div>
