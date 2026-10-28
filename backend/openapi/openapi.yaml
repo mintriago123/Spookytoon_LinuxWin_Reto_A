@@ -282,6 +282,60 @@ paths:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
       security: []
+  /operador/sesion:
+    post:
+      operationId: iniciarSesionOperador
+      security: []
+      description: Login público por contraseña de operador (OPERATOR_PASSWORD).
+        En éxito fija una cookie httpOnly de sesión; no responde cuerpo. La
+        x-api-key real nunca llega al navegador (SPEC.md §3.1).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OperadorSesionRequest'
+      responses:
+        '204':
+          description: Sesión creada; cookie httpOnly spookython_operator fijada
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+    get:
+      operationId: verificarSesionOperador
+      security:
+      - ApiKey: []
+      description: Confirma si la x-api-key o la cookie de sesión de operador
+        siguen vigentes, sin ejecutar ningún control del simulador.
+      responses:
+        '204':
+          description: Sesión u x-api-key válida
+        '401':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /operador/salir:
+    post:
+      operationId: cerrarSesionOperador
+      security: []
+      description: Revoca la cookie de sesión de operador si existe; idempotente,
+        nunca falla por falta o expiración de sesión.
+      responses:
+        '204':
+          description: Sesión revocada
+        '403':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /simulador/reanudar:
     post:
       operationId: reanudarSimulador
@@ -514,6 +568,16 @@ components:
         nextTurnId:
           type: integer
           minimum: 1
+    OperadorSesionRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - password
+      properties:
+        password:
+          type: string
+          minLength: 1
+          maxLength: 256
     PausarRequest:
       type: object
       additionalProperties: false
