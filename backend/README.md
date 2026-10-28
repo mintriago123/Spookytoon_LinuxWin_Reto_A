@@ -15,6 +15,13 @@ La plantilla está en `.env.example`; la clave de operador/routing es obligatori
 
 ## Partidas listas para iniciar
 
+**Estado de los datos:** estos presets son valores generados por la implementación
+y se activan por defecto en `src/server.ts`. Aunque sus ubicaciones se ajustan al
+grafo y pasan validación estructural, las cantidades/composiciones zombie y la
+selección geográfica aún no tienen aprobación documentada del equipo ni se basan
+en datos censales. No presentarlos como escenarios oficiales ni usarlos para
+aceptación final hasta confirmar esos datos conforme a SPEC §5.1.
+
 `src/config/round-presets.ts` construye y valida los tres presets usando el
 grafo publicado de Manta y su manifiesto SHA-256. Las posiciones se eligen de
 forma determinista, sin nodos inventados, sin iniciar en refugios/zombies ni

@@ -4,9 +4,9 @@
 
 Guía de integración para Maykel, Michael y Kristhian en «Escape de Manta Zombie». Describe contratos y comportamiento del repositorio, sin sustituir la fuente normativa [SPEC.md](../../SPEC.md).
 
-**Revisión:** 27 de octubre de 2026. **Commit revisado:** `1c3574810f493a65d7f63ad93ac0908481d4e063`. El árbol de trabajo estaba limpio al comenzar. Este documento se basa en lectura de código y pruebas; no acredita una ejecución nueva de tests ni una medición de aceptación.
+**Revisión:** 27 de octubre de 2026. **Commit revisado:** `05d6145` (`origin/EZMayk`). El árbol de trabajo estaba limpio al comenzar. Esta revisión actualiza el documento tras la integración de presets, telemetría y pruebas de humo HTTP/WS. No acredita aceptación oficial de las rondas ni pruebas de cinco minutos en producción.
 
-La implementación actual ya contiene simulador, cliente HTTP de routing, reloj, controles y publicación HTTP/WS. Las observaciones antiguas sobre ausencia de estos módulos o sobre `zombieTransitions` no describen este commit. Persistencia, telemetría y escenarios oficiales siguen siendo dependencias pendientes.
+La implementación actual contiene simulador, cliente HTTP de routing, reloj, controles, telemetría de turno y publicación HTTP/WS. El composition root carga presets generados por código para las tres rondas; sus cantidades y ubicaciones no tienen aprobación de escenario documentada ni se basan todavía en datos censales. Persistencia DynamoDB y aceptación oficial siguen pendientes.
 
 ## 2. Ownership y límites entre módulos
 
@@ -17,7 +17,8 @@ La implementación actual ya contiene simulador, cliente HTTP de routing, reloj,
 | Simulador | Maykel | `WorldState`, `TurnCoordinator`, `SimulationRuntime` en `backend/src/modules/simulator/` | Único dueño de las mutaciones del mundo. Las funciones de resolución producen copias; el coordinador compromete el resultado. |
 | Realtime | Maykel | `RealtimeHub`, `realtimePlugin` en `backend/src/modules/realtime/` | Recibe snapshots comprometidos. Mantiene conexiones y colas de entrega; no decide movimientos, mordidas ni evacuaciones. |
 | Frontend | Kristhian | Consumo de `GET /estado`, `TURN_UPDATE` y grafo estático | Mantiene una proyección visual. No modifica estado autoritativo ni ejecuta reglas de simulación. |
-| Telemetría y persistencia | Michael | Ownership en `backend/src/modules/README.md` | Actualmente ambos directorios contienen solo `.gitkeep`. No asumir ventana de métricas ni escritura DynamoDB operativas. |
+| Telemetría | Michael | `backend/src/modules/telemetry/turn-metrics.ts`; el coordinador consume `updateTurnMetrics()` al cerrar cada turno | Integra percentiles de ventana de 1.000 solicitudes, disponibilidad y contadores en el snapshot. La aceptación de rendimiento con escenarios aprobados sigue pendiente. |
+| Persistencia | Michael | Ownership en `backend/src/modules/README.md` | DynamoDB, cola asíncrona y restauración pausada siguen sin implementación/conexión en el root. |
 
 El composition root real es [backend/src/server.ts](../../backend/src/server.ts), función `createBackendApp`: carga el grafo con manifiesto, crea una instancia de `RouteEngine`, una de `SimulationRuntime` y registra `routingPlugin`, `simulatorPlugin` y `realtimePlugin` en el mismo Fastify. El cliente del simulador llama por loopback al puerto de ese servidor; no hay que crear un segundo backend.
 
@@ -136,26 +137,26 @@ Una respuesta inicial fallida que luego se reconcilia como instalación correcta
 |---|---|
 | `/paso` tarda más de 500 ms, falla, no responde o devuelve movimiento inválido | El sobreviviente espera. La respuesta tardía no cambia el mundo después del cierre. |
 | 401 en routing | Todos esperan; se solicita pausa `routing-unauthorized` y alerta crítica `ROUTING_UNAUTHORIZED`, emitida después del commit. |
-| 400, 404, 409, 429 o 5xx en `/paso` | Se convierte en intento de error y espera; no hay reintento en el turno. La contabilización de telemetría sigue pendiente. |
+| 400, 404, 409, 429 o 5xx en `/paso` | Se convierte en intento de error y espera; no hay reintento en el turno. El coordinador registra errores y muestras de latencia en las métricas del turno. |
 | Deadline alcanzado o excedido | Comprometer el turno, incrementar `deadlineMisses` y pausar antes del siguiente; en turno 150 prevalece `completed`. |
 | Excepción no controlada al coordinar | El runtime detiene el ciclo, solicita pausa sobre el último estado comprometido y reporta `SIMULATOR_TURN_FAILED`; no publica la copia parcial. Recuperación de una instalación externa ocurrida antes de esa excepción no está garantizada por una restauración transaccional. |
 | Cliente WS lento o envío fallido | Se desconecta para recuperación por GET. Límite de mensaje/buffer de 1 MiB; cola de publicaciones limitada a ocho. Heartbeat cada 30 s. |
-| Ronda o métricas iniciales ausentes | Inicio rechazado con `ROUND_NOT_CONFIGURED` o `TELEMETRY_NOT_CONFIGURED`; no se inventa escenario. |
+| Ronda o métricas iniciales ausentes | El runtime rechaza una configuración ausente; el composition root actual aporta presets generados y métricas iniciales por defecto. |
 
 ### Brechas y contradicciones que requieren acuerdo o integración
 
 | Tema | Evidencia e impacto |
 |---|---|
-| Duración exacta | SPEC §5.1 pide exactamente cinco minutos. `SimulationRuntime.launch()` inicia turno 1 inmediatamente y turno 150 a 298.000 ms; finaliza al comprometerlo sin esperar a 300.000 ms. `simulator-runtime.test.ts` fija ese comportamiento. Se debe alinear aceptación temporal y código/SPEC. |
-| Telemetría | SPEC §§5.3–5.4 exige recálculo, ventana de 1.000 muestras y contadores. El coordinador solo incrementa `deadlineMisses`; las otras métricas proceden del estado inicial y no se recalculan allí. Igualdad HTTP/WS no demuestra exactitud de esas métricas. `RealtimeHub.clientCount` tampoco se conecta a `metrics.wsClients`. |
+| Aceptación temporal | El reloj programa turnos 1..150 en ticks 2.000..300.000 ms. La prueba de reloj verifica ese calendario de forma simulada; los smoke tests con reloj real solo avanzan tres turnos por ronda. Falta aceptación de rondas completas con reloj real y carga final. |
+| Telemetría y SLA | `updateTurnMetrics()` está integrado y `wsClients` se actualiza al comprometer. Las pruebas unitarias/smoke verifican indicadores, pero no constituyen carga de producción ni aceptación con escenario aprobado. |
 | Persistencia | SPEC §1.1 y §5.3 exige cola DynamoDB y recuperación pausada. No hay implementación ni conexión en el root. `SimulatorCheckpoint` es una forma tipada, no evidencia de recuperación funcional. |
 | Workers/readiness | SPEC §1 exige workers reales y readiness integral. El motor actual calcula en el proceso con un worker lógico; `/health/ready` consulta `engine.isReady()`, sin acreditar escenarios, telemetría ni persistencia listos. |
-| Reservas | El DTO compartido permite `reservados`, pero el coordinador y la admisión rechazan listas no vacías. La integración actual es Base sin reservas; no activar reservas desde otro módulo. |
-| Escenarios | `backend/src/config/` solo contiene `.gitkeep`. `ScenarioOptions` permite inyectar rondas y métricas; `startBackendServer()` no aporta escenarios oficiales. Las fixtures no son configuración de producción. |
-| Documentación de ownership | El README de Maykel todavía menciona `app.ts` y le atribuye telemetría; el root real es `server.ts` y el README modular atribuye telemetría a Michael. El README de Michael aún dice que falta conectar el game loop, aunque el root ya lo conecta. Usar las fronteras documentadas aquí y coordinar la actualización de esas guías. |
+| Reservas | La integración actual admite y libera reservas de refugios; las pruebas de backend cubren cupos reservados y no superar capacidad. Mantener el contrato alineado si cambia la política. |
+| Presets de rondas | `backend/src/config/round-presets.ts` genera presets deterministas usando el grafo y el root los activa por defecto. Las cantidades zombie y la selección geográfica son decisiones de implementación, no datos oficiales aprobados ni distribución basada en censo. SPEC §5.1 dice que esas entradas no deben inventarse; confirmar su estado con el equipo antes de aceptación oficial o despliegue de demo. |
+| Validación del grafo en Windows | La rama revisada aún no incluye `.gitattributes`; los artefactos aparecen con `i/lf w/crlf`, lo que puede romper el hash del manifiesto y pruebas que extraen esquemas del SPEC. La propuesta de corrección está en `origin/design` (`1ef1034`) y requiere integrarse y verificarse en esta rama. |
 | Proyección OpenAPI | `PasoRequest.worldVersion` tiene mínimo 1 en SPEC, pero `validatePasoRequest()` acepta 0. El flujo normal usa una instalación de versión al menos 1; la discrepancia de validación permanece. |
 
-Los tres problemas anteriores de integración ya tienen solución representada en este commit: `RouteZombieTraversal` conserva ambos pasos del corredor; sync permite saltos y tiene endpoint de reconciliación; `SyncResponse` y el esquema cerrado del SPEC incluyen `graphVersion` y `buildLatencyMs`. No deben registrarse como contratos todavía inexistentes.
+Los problemas previos de integración ya están resueltos en el código actual: `RouteZombieTraversal` conserva ambos pasos del corredor; sync permite saltos y tiene endpoint de reconciliación; `SyncResponse` incluye `graphVersion` y `buildLatencyMs`. No duplicar estos contratos.
 
 ## 7. Guía breve para integrar cambios sin romper las fronteras
 

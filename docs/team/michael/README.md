@@ -42,12 +42,14 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 
 ## Datos pendientes
 
-Las capacidades y coordenadas de refugios deben venir del grafo revisado. Las cantidades y posiciones iniciales de zombies/sobrevivientes deben venir de la configuración de ronda; no inventarlas en el motor.
+Las capacidades y coordenadas de refugios deben venir del grafo revisado. Las cantidades y posiciones iniciales de zombies/sobrevivientes deben venir de la configuración de ronda; no inventarlas en el motor. El backend ahora incluye presets generados en `backend/src/config/round-presets.ts`, pero sus valores requieren confirmación del equipo antes de llamarlos escenarios oficiales.
 
 ## Motor Base local
 
-El módulo `backend/src/modules/routing/` ya implementa el plan de rutas por
-snapshot, la API `POST /motor/sincronizar` y `POST /paso`, autenticación
-`x-api-key`, bloqueos, amenazas y control de cupos disponibles. `npm test` cubre
-contratos y decisiones; `npm run benchmark:routing` mide 200 llamadas
-concurrentes. Falta conectar estos endpoints al game loop del simulador.
+El módulo `backend/src/modules/routing/` implementa el plan de rutas por
+snapshot, las APIs `POST /motor/sincronizar` y `POST /paso`, autenticación
+`x-api-key`, bloqueos, amenazas y planes para cupos reservados. El composition
+root en `backend/src/server.ts` conecta routing con el game loop del simulador
+por HTTP loopback. Las pruebas de backend cubren el flujo; faltan validar los
+presets con el equipo, correr rondas oficiales completas y medir el despliegue
+final.
