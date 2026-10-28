@@ -2,64 +2,74 @@
 
 Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en vivo.
 
-## Estado
+## Estado actual
 
-El backend incluye grafo peatonal, motor Base de rutas, simulador, telemetría y publicación HTTP/WebSocket. Usa snapshots en RAM y autenticación `x-api-key` en routing y controles. El equipo confirmó en EC2 el despliegue público y la tabla DynamoDB indicados debajo. Esta rama incluye persistencia DynamoDB asíncrona, recuperación pausada, workers reales de precompute y readiness independiente de una partida. La verificación en AWS de este código requiere desplegarlo; su implementación local no acredita escrituras en la cuenta.
+El backend integra el grafo peatonal, routing, simulador, telemetría, publicación HTTP/WebSocket, workers reales de precompute y persistencia asíncrona con recuperación pausada desde DynamoDB. El simulador es el único escritor del estado de la partida. El frontend React/Vite/TypeScript consume `GET /estado` y `WSS /ws` y presenta el mapa, las rondas, las métricas y los controles de operador.
 
-## Despliegue confirmado en EC2
+El equipo reportó la configuración desplegada en EC2 el 28 de octubre de 2026. Los cambios locales de esta rama requieren despliegue para ser verificados en AWS; las pruebas locales no acreditan por sí mismas escrituras o aceptación en la cuenta.
 
-Configuración comunicada por el equipo el 28 de octubre de 2026. La SCP de la organización permite operar en Ohio.
-
-| Parámetro | Valor |
+| Parámetro | Valor reportado |
 |---|---|
 | Región AWS (`AWS_REGION`) | `us-east-2` — Ohio |
-| Zona de disponibilidad de EC2 (`AWS_AVAILABILITY_ZONE`) | `us-east-2a` |
-| Tabla DynamoDB (`DYNAMODB_TABLE_NAME`) | `spookython-manta-state` |
-| Base pública HTTPS | `https://3-128-78-190.sslip.io` |
+| Zona de disponibilidad EC2 | `us-east-2a` |
+| Tabla DynamoDB | `spookython-manta-state` |
+| Base pública HTTPS/WSS | `https://3-128-78-190.sslip.io` |
 | Estado público | `https://3-128-78-190.sslip.io/estado` |
-| Base pública WSS | `wss://3-128-78-190.sslip.io` |
-| Canal WebSocket del backend | `wss://3-128-78-190.sslip.io/ws` |
+| WebSocket | `wss://3-128-78-190.sslip.io/ws` |
 
-DynamoDB es regional: usar `us-east-2` en el cliente AWS. `us-east-2a` corresponde a la instancia EC2 y no se debe utilizar como `AWS_REGION`.
-Los ejemplos están en [backend/.env.example](backend/.env.example) e [infra/.env.example](infra/.env.example). La configuración de la entrada HTTPS/WSS debe conservar el backend HTTP interno en `127.0.0.1:3001` y reenviar `/ws` con upgrade de WebSocket.
+DynamoDB es regional: usar `us-east-2` en el cliente AWS; `us-east-2a` identifica la zona de la instancia EC2. Los ejemplos de configuración están en [backend/.env.example](backend/.env.example) e [infra/.env.example](infra/.env.example). La entrada HTTPS/WSS reenvía al backend HTTP interno y debe conservar el upgrade de WebSocket.
 
 ## Arquitectura
 
-Un único proceso Backend por partida mantiene grafo y estado en memoria en EC2. Los módulos graph/routing de Michael y simulator/realtime de Maykel se ensamblan en el mismo proceso; el Simulador usa el endpoint interno POST /paso. Routing precalcula el siguiente movimiento por worldVersion. Los workers calculan el plan durante sync; `/paso` lo consulta en RAM sin IPC. La cola asíncrona persiste checkpoints completos en DynamoDB y recupera partidas pausadas. El Frontend usa Leaflet, GET /estado y WebSocket.
+Un proceso Fastify integra los módulos del backend. El estado de juego vive en RAM y solo el simulador lo muta. Routing construye planes durante la sincronización; los workers calculan esos planes y `/paso` consulta las tablas locales en O(1). La cola persiste snapshots comprometidos fuera del ciclo de turno. El frontend es una aplicación independiente que recibe snapshots por HTTP y WebSocket.
 
 ```mermaid
 flowchart LR
-  UI[React + Leaflet] -->|HTTPS GET /estado<br/>WSS /ws| PUBLIC[3-128-78-190.sslip.io<br/>entrada HTTPS/WSS en EC2]
-  PUBLIC --> API[Fastify HTTP interno :3001<br/>EC2 us-east-2a]
-  API --> SIM[Simulator<br/>estado autoritativo]
-  SIM -->|POST /motor/sincronizar<br/>POST /paso por loopback| ROUTE[Routing<br/>plan O(1) por worldVersion]
-  GRAPH[Graph inmutable<br/>RAM] --> ROUTE
-  SIM -->|snapshot comprometido| WS[WebSocket TURN_UPDATE]
-  WS --> PUBLIC
-  SIM -->|cola asíncrona + checkpoints| DDB[(spookython-manta-state<br/>DynamoDB us-east-2)]
+  UI[React + Leaflet] -->|HTTPS GET /estado<br/>WSS /ws| PUBLIC[Entrada pública EC2]
+  PUBLIC --> API[Fastify HTTP interno]
+  API --> SIM[Simulator<br/>único escritor de estado]
+  SIM -->|POST /motor/sincronizar<br/>POST /paso por loopback| ROUTE[Routing]
+  GRAPH[Graph inmutable] --> ROUTE
+  ROUTE --> WORKERS[Route workers]
+  SIM -->|snapshot comprometido| WS[TURN_UPDATE]
+  SIM -. persistencia asíncrona .-> DDB[(DynamoDB)]
 ```
 
 ## Documentación
 
 - [SPEC.md](SPEC.md): fuente técnica canónica.
 - [Checklist de lanzamiento](docs/launch-checklist.md): prioridades, aceptación y evidencias pendientes.
-- [Costos AWS](docs/costos.md): tarifas de Ohio, fórmulas y evidencia del Budget.
-- [Arquitectura Draw.io](docs/arquitectura.drawio): despliegue EC2 en Ohio y dependencias del backend.
-- [Operación y rollback](docs/operacion-rollback.md): despliegue, IAM, monitoreo y recuperación.
-- [OpenAPI 3.1](backend/openapi/openapi.yaml): contratos HTTP y canal WS.
-- [Configuración de infraestructura](infra/README.md): región, tabla y endpoints públicos.
-- [Refugios provisionales](docs/refugios-provisionales.md): sitios del escenario aceptados y alternativas con mejor potencial de defensa.
-- [Complemento «Ojos de Águila»](docs/complemento-ojos-de-aguila.md): contexto de videovigilancia en Manta y fixture JSON de sensores simulados.
-- [Módulos Backend](backend/src/modules/README.md): límites y ownership.
-- [Michael](docs/team/michael/README.md), [Maykel](docs/team/maykel/README.md), [Kristhian](docs/team/kristhian/README.md): guías por persona.
+- [Costos AWS](docs/costos.md): tarifas, fórmulas y evidencia disponible.
+- [Arquitectura Draw.io](docs/arquitectura.drawio) y [operación/rollback](docs/operacion-rollback.md).
+- [OpenAPI 3.1](backend/openapi/openapi.yaml) y [configuración de infraestructura](infra/README.md).
+- [Refugios provisionales](docs/refugios-provisionales.md) y [complemento «Ojos de Águila»](docs/complemento-ojos-de-aguila.md), que documenta el catálogo simulado y sus limitaciones.
+- [Módulos Backend](backend/src/modules/README.md) y guías de [Michael](docs/team/michael/README.md), [Maykel](docs/team/maykel/README.md) y [Kristhian](docs/team/kristhian/README.md).
 - [Extracción del grafo](scripts/README.md).
 
-Requiere Node.js 24.12+ de la serie 24. Ejecutar `npm --prefix backend ci`, `npm --prefix backend test` y
-`npm --prefix backend run typecheck` para verificar el backend. La suite de raíz es independiente. Los comandos del motor son:
+## Backend local
+
+Requiere Node.js 24.12+ de la serie 24.
 
 ```bash
+npm --prefix backend ci
+npm --prefix backend test
+npm --prefix backend run typecheck
 ROUTE_API_KEY='use-a-secret-of-at-least-16-characters' npm run backend:start
 npm run benchmark:routing
 ```
 
-`/health/ready` responde 200 antes de crear una partida cuando grafo/checksum, motor, workers y persistencia están preparados. Sin partida, `/estado` conserva su 503 GAME_NOT_STARTED.
+`/health/ready` comprueba que el grafo, routing, workers y persistencia estén listos; no exige una partida activa. Antes de iniciar una partida, `GET /estado` responde `503 GAME_NOT_STARTED`.
+
+## Frontend local
+
+```bash
+cd frontend
+npm ci
+npm run dev
+npm test
+npm run typecheck
+npm run lint
+npm run build
+```
+
+El frontend carga el grafo desde `frontend/public/data/grafo_manta.json`. Para conectar el backend, configura la URL en `.env` siguiendo `.env.example`. Los controles deben usar el mecanismo de operador/proxy configurado; no se debe incluir una API key privilegiada en el bundle del navegador.

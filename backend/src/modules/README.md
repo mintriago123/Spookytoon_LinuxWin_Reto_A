@@ -1,44 +1,37 @@
 # Backend modular
 
-El Backend es un solo monolito modular: un proceso Fastify, un estado autoritativo en RAM y una tarea ECS por partida. Los módulos separan responsabilidades y ownership; no son servicios ni despliegues independientes. `routingPlugin` registra `/motor/sincronizar`, `/motor/estado/:gameId`, `/paso` y health en el composition root compartido.
+El backend es un monolito modular: un proceso Fastify integra módulos con límites y responsables claros. No son servicios desplegados por separado. El composition root `backend/src/server.ts` carga el grafo y los presets, inicializa routing, workers y persistencia, y registra simulator y realtime.
 
 ## Módulos y ownership
 
 | Módulo | Responsable principal | Responsabilidad |
 |---|---|---|
-| graph | Michael | Carga del artefacto inmutable, validación y adyacencia |
-| routing | Michael | POST /paso, sincronización de snapshot y workers de ruta |
-| simulator | Maykel | Único escritor de WorldState, reloj, zombies, sobrevivientes y mordidas |
-| telemetry | Michael | Ventana p95, métricas del motor y del turno |
-| persistence | Michael | Cola asíncrona y snapshots DynamoDB |
-| realtime | Maykel | Publicar TURN_UPDATE después del commit del simulador |
+| graph | Michael | Carga y validación del grafo inmutable y su adyacencia. |
+| routing | Michael | Contratos del motor, sincronización de mundo, cálculo de planes y respuesta a `/paso`. |
+| simulator | Maykel | Único escritor de `WorldState`; reloj, eventos, zombies, sobrevivientes, colisiones y admisiones. |
+| telemetry | Michael | Métricas de rutas y turnos. El simulador integra las métricas del turno. |
+| persistence | Michael | Cola asíncrona, snapshots comprometidos en DynamoDB y recuperación de una partida pausada. |
+| realtime | Maykel | Proyección y publicación de snapshots comprometidos por `GET /estado` y WebSocket. |
+| frontend | Kristhian | Cliente React, mapa, controles y representación de snapshots; vive fuera de `backend/src/modules/`. |
 
 ## Límites de dependencia
 
-1. **backend/src/server.ts** verifica el manifiesto, carga el grafo y los tres presets de ronda, crea RouteEngine y SimulationRuntime y registra routing, simulador y realtime en el servidor Fastify común.
-2. **contracts/** contiene DTOs y validadores compartidos. Todos los módulos dependen de estos tipos públicos y de SPEC.md.
-3. **graph** expone datos inmutables. **routing** mantiene su snapshot de lectura y nunca muta WorldState.
-4. **routing** calcula el plan Base por worldVersion y planes por refugio cuando hay reservas, siempre durante sync. Publica tablas inmutables en RAM. La implementación corre con un worker lógico; cada POST /paso consulta su tabla en O(1).
-5. **simulator** es el único dueño de la escritura de WorldState. Invoca POST /motor/sincronizar y POST /paso por loopback con los contratos HTTP definidos; valida el resultado antes de aplicar un movimiento. Una respuesta 401 activa `pauseCause=routing-unauthorized` y `alertCode=ROUTING_UNAUTHORIZED`; `applyRoutingFailureSignal` programa la pausa y devuelve el evento crítico que el coordinador debe publicar.
-6. **persistence** y **realtime** reciben snapshots ya comprometidos. No escriben de vuelta al simulador ni retrasan el loop por I/O.
-7. No importar archivos internos de otro módulo. Las integraciones pasan por su interfaz pública, contrato HTTP o snapshot tipado.
+1. `backend/src/server.ts` verifica el grafo, crea los presets, workers, motor, persistencia y runtime, y registra los plugins en el servidor Fastify común.
+2. `backend/src/contracts/` contiene los DTOs y validadores compartidos. Las reglas normativas están en `SPEC.md`.
+3. `graph` expone datos inmutables; `routing` mantiene su snapshot de lectura y nunca muta `WorldState`.
+4. `routing` calcula planes generales y por refugio durante la sincronización. Los workers realizan el precompute; el plan instalado queda disponible para consultas locales de `/paso`.
+5. `simulator` es el único dueño de las mutaciones del mundo. Valida las respuestas de routing antes de aplicar movimientos y compromete el estado al cerrar cada turno.
+6. `persistence` y `realtime` reciben snapshots comprometidos. La cola de persistencia y la publicación no escriben de vuelta al simulador.
+7. No importar archivos internos de otro módulo. Integrar mediante interfaces públicas, contratos o snapshots tipados.
 
-## Integración actual
+## Flujo de integración
 
-- Graph/contracts/routing, simulador y realtime están ensamblados en `server.ts`; los presets se validan contra el grafo de Manta.
-- Telemetría actualiza contadores y porcentajes de entidades, ventana de 1.000 solicitudes, disponibilidad y eficiencia al cerrar cada turno. El DTO público conserva compatibilidad con los campos existentes.
-- Persistencia DynamoDB sigue pendiente y no participa en esta integración.
-- Los consumidores reciben GET /estado y WS /ws; CORS y orígenes WS comparten configuración. La guía operativa y los indicadores están en [backend/README.md](../../README.md).
+`city-events → zombie-move → routing sync → survivor-move → resolve → commit → persistence/realtime`
 
-Si una regla cambia, actualizar primero SPEC.md, luego contratos y finalmente módulos consumidores. Mantener el despliegue único y el escritor único por partida.
+El sincronizador comparte a routing una vista validada del mundo. Si el turno no obtiene una instalación confirmada, el simulador no usa planes anteriores. Tras el commit, la misma proyección pública alimenta HTTP y WebSocket; la persistencia asíncrona guarda checkpoints para recuperación pausada.
 
-## Motor Base ejecutable
+Las reglas compartidas deben actualizarse en este orden: `SPEC.md`, contratos/OpenAPI, módulos consumidores y pruebas. Cada etapa debe conservar los límites de ownership y tener su propio commit.
 
-Configurar `ROUTE_API_KEY` (mínimo 16 caracteres) y ejecutar `npm run backend:start`.
-Para ECS, definir `HOST=0.0.0.0`; en local escucha `127.0.0.1`. `/health/ready`
-responde 503 hasta instalar el primer snapshot. `GET /motor/estado/:gameId`
-permite reconciliar una sincronización incierta; repetir el mismo payload es
-idempotente, `baseWorldVersion` sigue siendo estricta y los `turnId` pueden
-avanzar con saltos después de turnos sin plan confirmado. `simulator/routing-sync.ts`
-conserva el payload incierto y reconcilia el estado antes de volver a rutear. Las
-llegadas y la mutación de WorldState siguen perteneciendo al simulador.
+## Operación y verificación
+
+Configurar `ROUTE_API_KEY` según `backend/.env.example`. El servidor ejecutable, los endpoints y los checks están documentados en [README raíz](../../../README.md), [SPEC](../../../SPEC.md) y [guía operativa](../../../docs/operacion-rollback.md). El backend tiene pruebas para routing, workers, persistencia, integración del simulador y publicación realtime; la aceptación de AWS requiere ejecutar el procedimiento desplegado y conservar su evidencia.
