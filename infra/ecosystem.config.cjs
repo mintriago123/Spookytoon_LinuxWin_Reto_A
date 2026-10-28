@@ -4,7 +4,7 @@ module.exports = {
   apps: [{
     name: 'spookython-backend',
     cwd: path.resolve(__dirname, '../backend'),
-    script: 'src/server.ts',
+    script: 'src/start.ts',
     interpreter: process.env.NODE_BINARY || 'node',
     node_args: ['--max-old-space-size=256', `--env-file=${process.env.BACKEND_ENV_FILE || '/etc/spookython/backend.env'}`],
     exec_mode: 'fork',
