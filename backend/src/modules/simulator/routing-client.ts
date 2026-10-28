@@ -11,6 +11,8 @@ export interface RoutingRequestTiming {
   turnId: number | null;
   totalMs: number;
   beforeSocketMs: number;
+  queuedForSocket: boolean;
+  socketQueueMs: number;
   connectMs: number;
   responseWaitMs: number;
   bodyMs: number;
@@ -38,15 +40,17 @@ export function createRoutingClient(options: { baseUrl: string; apiKey: string; 
     throw new Error("Routing requiere una URL HTTP de loopback sin ruta ni credenciales");
   }
   if (!options.apiKey || options.apiKey.length < 16) throw new Error("Se requiere una clave de routing de al menos 16 caracteres");
-  const maxSockets = options.maxSockets ?? 32;
+  const maxSockets = options.maxSockets ?? 16;
   if (!Number.isSafeInteger(maxSockets) || maxSockets < 1 || maxSockets > 200) throw new Error("maxSockets debe estar entre 1 y 200");
-  // Los 200 intentos se despachan juntos; un pool acotado evita abrir 200 conexiones frías.
+  // Los 200 intentos se despachan juntos; limitar conexiones reduce el coste
+  // de conexión/escritura de los lotes HTTP sin excluir la cola del timeout.
   // La espera dentro del Agent forma parte de elapsedMs y del timeout individual.
   const agent = new Agent({ keepAlive: true, maxSockets, maxTotalSockets: maxSockets, maxFreeSockets: maxSockets });
   const timings: Readonly<RoutingRequestTiming>[] = [];
   function send(operation: RoutingRequestTiming["operation"], path: string, signal: AbortSignal, body?: unknown): Promise<RoutingHttpResponse> {
     const started = performance.now();
     let socketAt: number | undefined, connectedAt: number | undefined, headersAt: number | undefined;
+    let queuedAt: number | undefined;
     let httpStatus: number | null = null, recorded = false;
     const payload = body === undefined ? undefined : Buffer.from(JSON.stringify(body));
     return new Promise((resolve, reject) => {
@@ -58,6 +62,8 @@ export function createRoutingClient(options: { baseUrl: string; apiKey: string; 
         const turnId = body && typeof body === "object" && "turnId" in body ? (body as { turnId: number }).turnId : null;
         timings.push(Object.freeze({ operation, turnId, totalMs: ended - started,
           beforeSocketMs: (socketAt ?? ended) - started,
+          queuedForSocket: queuedAt !== undefined,
+          socketQueueMs: queuedAt === undefined ? 0 : (socketAt ?? ended) - queuedAt,
           connectMs: socketAt === undefined ? 0 : (connectedAt ?? ended) - socketAt,
           responseWaitMs: connectedAt === undefined ? 0 : (headersAt ?? ended) - connectedAt,
           bodyMs: headersAt === undefined ? 0 : ended - headersAt,
@@ -88,6 +94,9 @@ export function createRoutingClient(options: { baseUrl: string; apiKey: string; 
           resolve({ status: response.statusCode ?? 503, body: parsed });
         });
       });
+      // Leer la cola pública del Agent distingue espera real de construcción y
+      // callbacks de asignación del socket. No modificar sus solicitudes.
+      if (Object.values(agent.requests).some(queue => queue?.includes(request))) queuedAt = performance.now();
       request.on("socket", socket => {
         socketAt = performance.now();
         if (socket.connecting) socket.once("connect", () => { connectedAt = performance.now(); });

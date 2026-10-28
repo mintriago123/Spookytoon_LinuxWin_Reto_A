@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test } from "node:test";
-import { monitorEventLoopDelay } from "node:perf_hooks";
+import { monitorEventLoopDelay, performance } from "node:perf_hooks";
 import WebSocket from "ws";
 import { createBackendApp, startBackendServer } from "../src/server.ts";
 import { createRoundPresets } from "../src/config/round-presets.ts";
@@ -42,43 +42,59 @@ for (const roundId of [1, 2, 3] as const) {
     const worlds: WorldSnapshot[] = [];
     const observers = new Set<(world: WorldSnapshot) => void>();
     const loopDelay = monitorEventLoopDelay({ resolution: 10 }); loopDelay.enable();
-    let previousCounters = { routeTimeouts: 0, invalidRouteResponses: 0, routeErrors: 0 };
+    const captures: { world: WorldSnapshot; requests: ReturnType<typeof simulator.getRoutingRequestTimings>;
+      timing: ReturnType<typeof simulator.getLastTurnTiming>; eventLoopMaxMs: number;
+      observerCostMs: number; afterCommitMs: number | null }[] = [];
     const unsubscribe = simulator.subscribeCommitted(world => {
       if (!world.turnId) return;
-      const requests = simulator.getRoutingRequestTimings().filter(sample => sample.turnId === world.turnId);
-      const steps = requests.filter(sample => sample.operation === "step");
-      const p95 = (values: number[]) => {
-        const sorted = [...values].sort((a, b) => a - b);
-        return sorted.length ? Math.round(sorted[Math.ceil(sorted.length * 0.95) - 1] * 10) / 10 : null;
-      };
-      const deltas = { routeTimeouts: world.metrics.routeTimeouts - previousCounters.routeTimeouts,
-        invalidRouteResponses: world.metrics.invalidRouteResponses - previousCounters.invalidRouteResponses,
-        routeErrors: world.metrics.routeErrors - previousCounters.routeErrors };
-      t.diagnostic(JSON.stringify({ event: "turn-diagnostics", roundId, turnId: world.turnId, status: world.status,
-        counters: deltas, cumulative: { routeTimeouts: world.metrics.routeTimeouts,
-          invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors },
-        availability: world.metrics.routeAvailabilityPercent, rollingP50Ms: world.metrics.routeLatencyP50Ms,
-        rollingP95Ms: world.metrics.routeLatencyP95Ms, turnDurationMs: world.metrics.turnDurationMs,
-        timing: simulator.getLastTurnTiming(), transport: { samples: steps.length,
-          totalP95Ms: p95(steps.map(sample => sample.totalMs)), beforeSocketP95Ms: p95(steps.map(sample => sample.beforeSocketMs)),
-          connectP95Ms: p95(steps.map(sample => sample.connectMs)), responseWaitP95Ms: p95(steps.map(sample => sample.responseWaitMs)),
-          bodyP95Ms: p95(steps.map(sample => sample.bodyMs)), engineP95Ms: p95(steps.flatMap(sample => sample.engineMs === null ? [] : [sample.engineMs])),
-          aborted: steps.filter(sample => sample.aborted).length, reused: steps.filter(sample => sample.reusedSocket).length,
-          errors: steps.filter(sample => sample.errorCode).map(sample => sample.errorCode),
-          httpErrors: steps.filter(sample => sample.httpStatus !== null && sample.httpStatus !== 200).map(sample => sample.httpStatus) },
-        sync: requests.filter(sample => sample.operation === "sync"),
-        eventLoopMaxMs: Math.round(loopDelay.max / 1e5) / 10 }));
-      previousCounters = { routeTimeouts: world.metrics.routeTimeouts,
-        invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors };
-      loopDelay.reset();
+      const observerStarted = performance.now();
+      const timing = simulator.getLastTurnTiming();
+      // Solo referencias inmutables y una copia acotada de hasta 1.000 referencias.
+      // Percentiles, JSON y salida se procesan después de cerrar el runtime.
+      const capture = { world, timing, requests: simulator.getRoutingRequestTimings(),
+        eventLoopMaxMs: loopDelay.max / 1e6, observerCostMs: 0,
+        afterCommitMs: timing ? observerStarted - timing.committedAtMonotonicMs : null };
+      captures.push(capture); loopDelay.reset();
+      capture.observerCostMs = performance.now() - observerStarted;
     });
+    function reportDiagnostics() {
+      let previousCounters = { routeTimeouts: 0, invalidRouteResponses: 0, routeErrors: 0 };
+      for (const capture of captures) {
+        const { world, timing } = capture;
+        const requests = capture.requests.filter(sample => sample.turnId === world.turnId);
+        const steps = requests.filter(sample => sample.operation === "step");
+        const p95 = (values: number[]) => {
+          const sorted = [...values].sort((a, b) => a - b);
+          return sorted.length ? Math.round(sorted[Math.ceil(sorted.length * 0.95) - 1] * 10) / 10 : null;
+        };
+        const deltas = { routeTimeouts: world.metrics.routeTimeouts - previousCounters.routeTimeouts,
+          invalidRouteResponses: world.metrics.invalidRouteResponses - previousCounters.invalidRouteResponses,
+          routeErrors: world.metrics.routeErrors - previousCounters.routeErrors };
+        t.diagnostic(JSON.stringify({ event: "turn-diagnostics", roundId, turnId: world.turnId, status: world.status,
+          counters: deltas, cumulative: { routeTimeouts: world.metrics.routeTimeouts,
+            invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors },
+          availability: world.metrics.routeAvailabilityPercent, rollingP50Ms: world.metrics.routeLatencyP50Ms,
+          rollingP95Ms: world.metrics.routeLatencyP95Ms, turnDurationMs: world.metrics.turnDurationMs,
+          timing, observerCostMs: capture.observerCostMs, afterCommitMs: capture.afterCommitMs,
+          transport: { samples: steps.length,
+            totalP95Ms: p95(steps.map(sample => sample.totalMs)), beforeSocketP95Ms: p95(steps.map(sample => sample.beforeSocketMs)),
+            queuedForSocket: steps.filter(sample => sample.queuedForSocket).length,
+            socketQueueP95Ms: p95(steps.map(sample => sample.socketQueueMs)),
+            connectP95Ms: p95(steps.map(sample => sample.connectMs)), responseWaitP95Ms: p95(steps.map(sample => sample.responseWaitMs)),
+            bodyP95Ms: p95(steps.map(sample => sample.bodyMs)), engineP95Ms: p95(steps.flatMap(sample => sample.engineMs === null ? [] : [sample.engineMs])),
+            aborted: steps.filter(sample => sample.aborted).length, reused: steps.filter(sample => sample.reusedSocket).length,
+            errors: steps.filter(sample => sample.errorCode).map(sample => sample.errorCode),
+            httpErrors: steps.filter(sample => sample.httpStatus !== null && sample.httpStatus !== 200).map(sample => sample.httpStatus) },
+          sync: requests.filter(sample => sample.operation === "sync"),
+          eventLoopMaxMs: Math.round(capture.eventLoopMaxMs * 10) / 10 }));
+        previousCounters = { routeTimeouts: world.metrics.routeTimeouts,
+          invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors };
+      }
+    }
     socket.on("message", data => {
       const message = JSON.parse(data.toString()) as TurnUpdate;
       if (message.event === "TURN_UPDATE") {
         worlds.push(message.world);
-        if (message.world.status === "paused" && message.world.metrics.deadlineMisses > 0) {
-          t.diagnostic(JSON.stringify({ roundId, timing: simulator.getLastTurnTiming() }));
-        }
         for (const observer of observers) observer(message.world);
       }
     });
@@ -167,6 +183,9 @@ for (const roundId of [1, 2, 3] as const) {
         p95Ms: previous.metrics.routeLatencyP95Ms, availability: previous.metrics.routeAvailabilityPercent,
         evacuated: previous.metrics.evacuatedSurvivors, bitten: previous.metrics.bittenSurvivors,
         deadlineMisses: previous.metrics.deadlineMisses }));
-    } finally { unsubscribe(); loopDelay.disable(); socket.terminate(); await app.close(); }
+    } finally {
+      unsubscribe(); loopDelay.disable(); socket.terminate();
+      try { await app.close(); } finally { reportDiagnostics(); }
+    }
   });
 }
