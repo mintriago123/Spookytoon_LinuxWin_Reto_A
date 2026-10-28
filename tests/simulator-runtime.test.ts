@@ -82,13 +82,13 @@ function expectStatus(run: () => unknown, status: number) {
   assert.throws(run, error => error instanceof SimulatorControlError && error.status === status);
 }
 
-test("reloj simulado completa 150 turnos seriales con ticks absolutos 0..298000 y no ejecuta 151", async () => {
+test("reloj simulado calcula desde T0 y publica 150 turnos en fronteras 2000..300000", async () => {
   const clock = new AutoClock(); const env = fixture(clock);
   assert.deepEqual(env.runtime.start(start), { gameId: start.gameId, roundId: 1, status: "running", nextTurnId: 1 });
   await env.runtime.whenStopped();
   assert.equal(env.syncs.length, 150); assert.deepEqual(env.syncs, Array.from({ length: 150 }, (_, i) => i + 1));
-  assert.deepEqual(clock.ticks, Array.from({ length: 150 }, (_, i) => i * 2_000));
-  assert.equal(clock.time, 298_000);
+  assert.deepEqual(clock.ticks, Array.from({ length: 150 }, (_, i) => (i + 1) * 2_000));
+  assert.equal(clock.time, 300_000);
   assert.equal(env.runtime.getCommittedWorld()?.status, "completed");
   assert.equal(env.runtime.getCommittedWorld()?.turnId, 150); assert.equal(env.runtime.getCommittedWorld()?.worldVersion, 150);
   assert.equal(env.runtime.getCommittedWorld()?.metrics.deadlineMisses, 0); assert.deepEqual(env.failures, []);
@@ -103,10 +103,64 @@ test("tiempo de cálculo no acumula deriva en los ticks siguientes", async () =>
     if (request.turnId !== lastTurn) { clock.time += 100; lastTurn = request.turnId; }
     return step(request, signal);
   };
+  const commits: number[] = [];
+  env.runtime.subscribeCommitted(world => { if (world.turnId > 0) commits.push(clock.time); });
   env.runtime.start(start); await env.runtime.whenStopped();
-  assert.deepEqual(clock.ticks.slice(0, 4), [0, 2_000, 4_000, 6_000]);
-  assert.equal(clock.ticks.at(-1), 298_000); assert.equal(clock.time, 298_100);
+  assert.deepEqual(clock.ticks.slice(0, 4), [2_000, 4_000, 6_000, 8_000]);
+  assert.equal(clock.ticks.at(-1), 300_000); assert.equal(clock.time, 300_000);
+  assert.deepEqual(commits, Array.from({ length: 150 }, (_, i) => (i + 1) * 2_000));
+  assert.equal(env.runtime.getCommittedWorld()?.metrics.turnDurationMs, 100);
+  assert.equal(env.runtime.getCommittedWorld()?.metrics.turnBudgetUsedPercent, 5);
   assert.equal(env.runtime.getCommittedWorld()?.metrics.deadlineMisses, 0);
+});
+
+for (const finalCost of [1_900, 2_001]) test(`turno 150 con ${finalCost} ms de trabajo conserva frontera y métricas`, async () => {
+  const clock = new AutoClock(); const env = fixture(clock); const sync = env.client.sync;
+  const starts: number[] = [], commits: number[] = [];
+  env.client.sync = async (request, signal) => {
+    starts.push(clock.time); clock.time += request.turnId === 150 ? finalCost : 100;
+    return sync(request, signal);
+  };
+  env.runtime.subscribeCommitted(world => { if (world.turnId > 0) commits.push(clock.time); });
+  env.runtime.start(start); await env.runtime.whenStopped();
+  const world = env.runtime.getCommittedWorld()!;
+  assert.deepEqual(starts, Array.from({ length: 150 }, (_, i) => i * 2_000));
+  assert.equal(world.turnId, 150); assert.equal(world.worldVersion, 150); assert.equal(world.status, "completed");
+  assert.equal(commits.length, 150); assert.equal(commits[149], Math.max(300_000, 298_000 + finalCost));
+  assert.equal(world.metrics.turnDurationMs, finalCost);
+  assert.equal(world.metrics.deadlineMisses, finalCost > 2_000 ? 1 : 0);
+  assert.equal(world.metrics.turnEfficiencyPercent, finalCost > 2_000 ? 99.3 : 100);
+  assert.deepEqual(env.failures, []);
+});
+
+for (const delayedTurn of [1, 150]) test(`despertar tarde para publicar turno ${delayedTurn} registra incumplimiento sin inflar trabajo`, async () => {
+  const clock = new AutoClock(); const env = fixture(clock); const sync = env.client.sync;
+  env.client.sync = async (request, signal) => { clock.time += 100; return sync(request, signal); };
+  const wait = clock.waitUntil.bind(clock);
+  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); if (tick === delayedTurn * 2_000) clock.time += 5; };
+  env.runtime.start(start); await env.runtime.whenStopped();
+  const world = env.runtime.getCommittedWorld()!;
+  assert.equal(world.turnId, delayedTurn); assert.equal(world.metrics.deadlineMisses, 1);
+  assert.equal(world.status, delayedTurn === 150 ? "completed" : "paused");
+  assert.equal(world.metrics.turnDurationMs, 100); assert.equal(world.metrics.turnBudgetUsedPercent, 5);
+  assert.equal(world.metrics.turnEfficiencyPercent, delayedTurn === 150 ? 99.3 : 0);
+  assert.equal(clock.time, delayedTurn * 2_000 + 5);
+});
+
+test("trabajo de 100 ms queda privado hasta los 2000 ms sin inflar su duración", async () => {
+  const clock = new ManualClock(); const env = fixture(clock); const sync = env.client.sync;
+  env.client.sync = async (request, signal) => { clock.time += 100; return sync(request, signal); };
+  env.runtime.start(start); await new Promise(done => setImmediate(done));
+  assert.equal(clock.time, 100); assert.equal(env.runtime.getCommittedSnapshot()!.turnId, 0);
+  assert.deepEqual(env.syncs, [1]);
+  clock.advance(1_999); await new Promise(done => setImmediate(done));
+  assert.equal(env.runtime.getCommittedSnapshot()!.turnId, 0);
+  env.runtime.pause("detener tras la primera publicación"); clock.advance(2_000); await env.runtime.whenStopped();
+  const world = env.runtime.getCommittedSnapshot()!;
+  assert.equal(world.turnId, 1); assert.equal(world.status, "paused");
+  assert.equal(world.metrics.turnDurationMs, 100); assert.equal(world.metrics.turnBudgetUsedPercent, 5);
+  assert.equal(world.metrics.deadlineMisses, 0);
+  await env.runtime.close();
 });
 
 test("deadline exacto o excedido compromete el turno y pausa antes del siguiente", async () => {
@@ -152,15 +206,24 @@ test("pausa activa cierra el turno y reanuda con misma identidad y semilla sin r
   assert.deepEqual(after.survivors, prior.survivors); assert.deepEqual(env.syncs, [1, 2]);
 });
 
-test("pausar entre ticks cancela la espera; reanudar no recupera ticks antiguos ni solapa loops", async () => {
+test("pausar durante espera cierra en frontera y reanuda sin recuperar ventanas antiguas", async () => {
   const clock = new ManualClock(); const env = fixture(clock);
   env.runtime.start(start); await new Promise(done => setImmediate(done));
-  assert.equal(env.runtime.getCommittedWorld()?.turnId, 1); assert.equal(clock.waiters.size, 1);
-  assert.deepEqual(env.runtime.pause("entre ticks"), { status: "paused", afterTurnId: 1 });
+  assert.equal(env.runtime.getCommittedWorld()?.turnId, 0); assert.equal(clock.waiters.size, 1);
+  const event = env.runtime.scheduleEdge({ eventId: "waiting-close", edgeId: "AB", bloqueada: true, motivo: "fixture" });
+  assert.equal(event.effectiveTurnId, 2);
+  assert.deepEqual(env.runtime.pause("entre cálculo y publicación"), { status: "pausing", afterTurnId: 1 });
+  clock.advance(2_000); await env.runtime.whenStopped();
+  assert.equal(env.runtime.getCommittedWorld()?.turnId, 1);
+  assert.equal(env.runtime.getCommittedWorld()?.pendingCityEvents[0].aplicado, false);
   clock.advance(100_000); assert.equal(clock.waiters.size, 0);
   assert.equal(env.runtime.start(start).nextTurnId, 2);
-  env.runtime.pause("antes del tick de reanudación"); await env.runtime.whenStopped();
-  assert.equal(env.runtime.getCommittedWorld()?.turnId, 1); assert.deepEqual(env.syncs, [1]);
+  await new Promise(done => setImmediate(done));
+  env.runtime.pause("segunda ventana"); clock.advance(102_000); await env.runtime.whenStopped();
+  assert.equal(env.runtime.getCommittedWorld()?.turnId, 2); assert.deepEqual(env.syncs, [1, 2]);
+  assert.equal(env.runtime.getCommittedWorld()?.pendingCityEvents[0].aplicado, true);
+  assert.deepEqual(env.runtime.getCommittedWorld()?.blockedEdges[0].edgeIds, ["AB", "BA"]);
+  assert.equal(env.runtime.getCommittedWorld()?.metrics.deadlineMisses, 0);
   await env.runtime.close(); expectStatus(() => env.runtime.start(start), 503);
 });
 
@@ -219,7 +282,7 @@ test("controles rechazan esquemas extra, identidad inválida y turnos fuera de r
 });
 
 test("Fastify compartido exige clave en controles y mantiene health de routing accesible", async () => {
-  const env = fixture(new ManualClock()); const app = Fastify(); const apiKey = "fixture-control-key";
+  const clock = new ManualClock(); const env = fixture(clock); const app = Fastify(); const apiKey = "fixture-control-key";
   app.register(routingPlugin, { engine: new RouteEngine(env.graph), apiKey });
   app.register(simulatorPlugin, { runtime: env.runtime, apiKey });
   try {
@@ -234,6 +297,7 @@ test("Fastify compartido exige clave en controles y mantiene health de routing a
     assert.equal(created.statusCode, 202); assert.equal(created.json().nextTurnId, 1); assert(!created.body.includes(start.seed));
     assert.equal((await app.inject({ method: "POST", url: "/simulador/iniciar", headers, payload: start })).statusCode, 409);
     assert.equal((await app.inject({ method: "POST", url: "/simulador/pausar", headers, payload: { reason: "inspección" } })).statusCode, 202);
+    await new Promise(done => setImmediate(done)); clock.advance(2_000);
     await env.runtime.whenStopped();
     const closure = await app.inject({ method: "POST", url: "/simulador/bloquear-arista", headers,
       payload: { eventId: "close", edgeId: "AB", bloqueada: true, motivo: "fixture", effectiveTurnId: 2 } });

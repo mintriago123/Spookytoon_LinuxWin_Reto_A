@@ -18,15 +18,26 @@ import { createInitialTelemetryMetrics } from "../backend/src/modules/simulator/
 class ManualClock implements SimulationClock {
   time = 0;
   private pending = new Set<{ tick: number; finish: () => void }>();
+  private observers = new Set<() => void>();
   now() { return this.time; }
   waitUntil(tick: number, signal: AbortSignal) {
     if (signal.aborted || tick <= this.time) return Promise.resolve();
     return new Promise<void>(resolve => {
       const waiter = { tick, finish: () => { this.pending.delete(waiter); signal.removeEventListener("abort", waiter.finish); resolve(); } };
       this.pending.add(waiter); signal.addEventListener("abort", waiter.finish, { once: true });
+      for (const notify of [...this.observers]) notify();
     });
   }
   advance(time: number) { this.time = time; for (const waiter of [...this.pending]) if (time >= waiter.tick) waiter.finish(); }
+  async publishAt(tick: number) {
+    await bounded(new Promise<void>(resolve => {
+      const notify = () => {
+        if ([...this.pending].some(waiter => waiter.tick === tick)) { this.observers.delete(notify); resolve(); }
+      };
+      this.observers.add(notify); notify();
+    }));
+    this.advance(tick);
+  }
 }
 
 function deferred() {
@@ -122,7 +133,7 @@ for (const scenario of cases) test(`segmentos HTTP/WS: ${scenario.name}`, { time
     }
     const started = await post("/simulador/iniciar", { gameId: "segments-fixture", roundId: 1, seed: "synthetic-only" });
     assert.equal(started.status, 202); const zero = await update(0);
-    clock.advance(2_000); await bounded(entered.promise);
+    await bounded(entered.promise);
     const closeCommand = { eventId: "close", edgeId: "B-C", bloqueada: true, motivo: "cierre sintético" };
     if (scenario.close) {
       const accepted = await post("/simulador/bloquear-arista", closeCommand);
@@ -135,13 +146,14 @@ for (const scenario of cases) test(`segmentos HTTP/WS: ${scenario.name}`, { time
     assert.deepEqual(syncs[0].blockedEdges, [], "El control en vuelo no modifica el snapshot ya enviado");
     assert.deepEqual(updates.map(u => u.world.turnId), [0]);
     release.resolve();
+    await clock.publishAt(2_000);
     const first = await update(1); assert(first.survivors.every(s => s.nodeId === path[1]));
     assert.deepEqual(first.blockedEdges, []); assert.deepEqual(await state(), first);
     if (scenario.close) {
       const pending = runtime.getCommittedWorld()!.pendingCityEvents;
       assert.equal(pending.length, 1); assert.equal(pending[0].aplicado, false);
     }
-    clock.advance(4_000); const second = await update(2);
+    await clock.publishAt(4_000); const second = await update(2);
     assert.deepEqual(await state(), second);
     if (!scenario.close) {
       assert(second.survivors.every(s => s.nodeId === path[2]));
@@ -168,10 +180,10 @@ for (const scenario of cases) test(`segmentos HTTP/WS: ${scenario.name}`, { time
     const opened = await post("/simulador/bloquear-arista", openCommand);
     assert.deepEqual(opened, { status: 202, body: { eventId: "open", segmentoId: "BC", effectiveTurnId: 4, status: "programado" } });
     assert.deepEqual(await state(), second, "Programar reapertura no abre anticipadamente");
-    clock.advance(6_000); const third = await update(3);
+    await clock.publishAt(6_000); const third = await update(3);
     assert(third.survivors.every(s => s.nodeId === path[1])); assert.deepEqual(third.blockedEdges, [blocked]);
     assert.deepEqual(await state(), third);
-    clock.advance(8_000); const fourth = await update(4);
+    await clock.publishAt(8_000); const fourth = await update(4);
     assert(fourth.survivors.every(s => s.nodeId === path[2]), "Se vuelve a cruzar exactamente al desbloquear");
     const reopened = { ...blocked, desbloqueadaEnTurno: 4 };
     assert.deepEqual(fourth.blockedEdges, [reopened]); assert.deepEqual(syncs[3].blockedEdges, [reopened]);

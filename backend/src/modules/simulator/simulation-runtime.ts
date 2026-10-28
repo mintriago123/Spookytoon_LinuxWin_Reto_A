@@ -128,13 +128,12 @@ export class SimulationRuntime {
     const origin = this.clock.now();
     this.runner = runner;
     runner.promise = Promise.resolve().then(async () => {
-      // El snapshot inicial ocupa el primer intervalo; los ticks 1..150 caen en 2.000..300.000 ms.
-      let nextTick = origin + 2_000;
+      // Calcular desde T0; publicar en fronteras absolutas T0+2.000..T0+300.000.
+      let closesAt = origin + 2_000;
       while (!runner.controller.signal.aborted && coordinator.getCommittedWorld().status === "running") {
-        await this.clock.waitUntil(nextTick, runner.controller.signal);
-        if (runner.controller.signal.aborted || coordinator.getCommittedWorld().status !== "running") break;
-        await coordinator.runTurn(nextTick + 2_000);
-        nextTick += 2_000; // Absoluto: el tiempo de cálculo no desplaza los ticks siguientes.
+        const boundary = closesAt;
+        await coordinator.runTurn(boundary, () => this.clock.waitUntil(boundary, runner.controller.signal));
+        closesAt += 2_000; // Absoluto: ni el cálculo ni la publicación desplazan ventanas.
       }
     }).catch(() => {
       const world = coordinator.getCommittedWorld();

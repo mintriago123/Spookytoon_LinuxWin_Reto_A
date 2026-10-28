@@ -173,14 +173,14 @@ test("HTTP y WS muestran la misma copia comprometida y no las fases del turno ac
     const client = await connect(env.wsUrl);
     const created = await env.app.inject({ method: "POST", url: "/simulador/iniciar", headers: { "x-api-key": apiKey }, payload: start });
     assert.equal(created.statusCode, 202);
-    env.clock.advance(2_000); // Libera el primer tick; de otro modo `entered` espera indefinidamente.
     await entered.promise;
     const zero = await client.update(update => update.world.turnId === 0);
     const during = await env.app.inject({ method: "GET", url: "/estado" });
     assert.deepEqual(during.json(), zero.world); assert.equal(during.json().worldVersion, 0);
     assert(during.json().survivors.every((s: { nodeId: string }) => s.nodeId === "A"));
     assert(!client.messages.some(update => update.world.turnId === 1));
-    gate.resolve(); const first = await client.update(update => update.world.turnId === 1);
+    gate.resolve(); await flush(); env.clock.advance(2_000);
+    const first = await client.update(update => update.world.turnId === 1);
     const after = await env.app.inject({ method: "GET", url: "/estado" });
     assert.deepEqual(after.json(), first.world); assert.equal(after.statusCode, 200);
     assert(first.world.survivors.every(s => s.nodeId === "B"));
@@ -189,19 +189,19 @@ test("HTTP y WS muestran la misma copia comprometida y no las fases del turno ac
   } finally { gate.resolve(); await env.app.close(); }
 });
 
-test("pausa entre ticks y reanudación notifican status con el mismo turno y versión", async () => {
+test("pausa al cerrar y reanudación notifican status con el mismo turno y versión", async () => {
   const env = await application(); const next = deferred<void>(); const entered = deferred<void>(); const sync = env.client.sync;
   env.client.sync = async (request, signal) => { if (request.turnId === 2) { entered.resolve(); await next.promise; } return sync(request, signal); };
   try {
     const client = await connect(env.wsUrl);
-    env.runtime.start(start); env.clock.advance(2_000); await client.update(update => update.world.turnId === 1);
-    const before = env.runtime.getCommittedSnapshot()!;
-    assert.equal(env.runtime.pause("revisión").status, "paused"); await env.runtime.whenStopped();
+    env.runtime.start(start); await flush();
+    assert.equal(env.runtime.pause("revisión").status, "pausing");
+    env.clock.advance(2_000); await env.runtime.whenStopped();
     const paused = await client.update(update => update.world.turnId === 1 && update.world.status === "paused");
-    assert.equal(paused.world.worldVersion, before.worldVersion);
+    assert.equal(paused.world.worldVersion, 1);
     assert.deepEqual((await env.app.inject({ method: "GET", url: "/estado" })).json(), paused.world);
     const afterPause = client.messages.length;
-    env.runtime.start(start); env.clock.advance(4_000); await entered.promise;
+    env.runtime.start(start); await entered.promise;
     const resumed = await client.update(update => update.world.turnId === 1 && update.world.status === "running", afterPause);
     assert.equal(resumed.world.worldVersion, paused.world.worldVersion);
     assert.equal(env.runtime.getCommittedSnapshot()?.status, "running");
@@ -212,7 +212,7 @@ test("pausa entre ticks y reanudación notifican status con el mismo turno y ver
 test("reconexión recibe el estado vigente y GET recupera un turno perdido", async () => {
   const env = await application();
   try {
-    const first = await connect(env.wsUrl); env.runtime.start(start);
+    const first = await connect(env.wsUrl); env.runtime.start(start); await flush();
     env.clock.advance(2_000);
     await first.update(update => update.world.turnId === 1);
     const closed = once(first.socket, "close"); first.socket.close(); await closed;
@@ -311,7 +311,7 @@ test("excepción de un observador no detiene la partida ni revierte el snapshot 
   const committed = deferred<void>();
   const unsubscribe = env.runtime.subscribeCommitted(() => { throw new Error("observer failure"); });
   env.runtime.subscribeCommitted(snapshot => { seen++; if (snapshot.turnId === 1) committed.resolve(); });
-  env.runtime.start(start); env.clock.advance(2_000); await committed.promise;
+  env.runtime.start(start); await flush(); env.clock.advance(2_000); await committed.promise;
   assert.equal(env.runtime.getCommittedSnapshot()?.turnId, 1); assert.equal(seen, 2); unsubscribe();
   env.runtime.pause("done"); await env.runtime.close(); assert.equal(seen, 3);
 });

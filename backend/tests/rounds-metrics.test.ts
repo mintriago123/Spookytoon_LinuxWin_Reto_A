@@ -145,24 +145,34 @@ test("una respuesta 401 pausa a todos sin convertir otras respuestas válidas en
   assert.equal(result.metrics.invalidRouteResponses, 0);
 });
 
-test("el reloj espera el primer intervalo y programa 150 ticks entre 2.000 y 300.000 ms", async () => {
+for (const finalCost of [1_900, 2_001]) test(`reloj con trabajo no nulo y turno 150 de ${finalCost} ms`, async () => {
   let time = 0;
   const ticks: number[] = [];
+  const starts: number[] = [], commits: number[] = [];
   const engine = new RouteEngine(graph);
   const runtime = new SimulationRuntime({ graph, rounds, initialMetrics: roundId => createInitialTelemetryMetrics(rounds[roundId]),
     clock: { now: () => time, waitUntil: async (tick, signal) => { if (!signal.aborted) { ticks.push(tick); time = tick; } } },
     syncTimeoutMs: 500, emitAlert: () => {}, onFailure: () => assert.fail("El reloj no debe fallar"),
-    clientFactory: () => ({ sync: async request => ({ status: 200, body: engine.sync(request) }),
+    clientFactory: () => ({ sync: async request => {
+      starts.push(time); time += request.turnId === 150 ? finalCost : 100;
+      return { status: 200, body: engine.sync(request) };
+    },
       step: async request => ({ status: 200, body: engine.step(request) }),
       status: async gameId => ({ status: 200, body: engine.getStatus(gameId) }) }) });
+  runtime.subscribeCommitted(world => { if (world.turnId > 0) commits.push(time); });
   try {
     runtime.start({ gameId: "clock-round", roundId: 1, seed: "clock" });
     assert.equal(runtime.getCommittedWorld()!.turnId, 0);
     await runtime.whenStopped();
-    assert.deepEqual(ticks, Array.from({ length: 150 }, (_, index) => (index + 1) * 2_000));
-    assert.equal(time, 300_000);
+    assert.deepEqual(ticks, Array.from({ length: finalCost < 2_000 ? 150 : 149 }, (_, index) => (index + 1) * 2_000));
+    assert.equal(time, Math.max(300_000, 298_000 + finalCost));
+    assert.deepEqual(starts, Array.from({ length: 150 }, (_, index) => index * 2_000));
+    assert.deepEqual(commits, [...Array.from({ length: 149 }, (_, index) => (index + 1) * 2_000), time]);
     assert.equal(runtime.getCommittedWorld()!.status, "completed");
-    assert.equal(runtime.getCommittedWorld()!.metrics.deadlineMisses, 0);
+    assert.equal(runtime.getCommittedWorld()!.metrics.deadlineMisses, finalCost < 2_000 ? 0 : 1);
+    assert.equal(runtime.getCommittedWorld()!.metrics.turnEfficiencyPercent, finalCost < 2_000 ? 100 : 99.3);
+    assert.equal(runtime.getCommittedWorld()!.metrics.turnDurationMs, finalCost);
+    assert.equal(runtime.getCommittedWorld()!.metrics.turnBudgetUsedPercent, finalCost < 2_000 ? 95 : 100.1);
   } finally { await runtime.close(); }
 });
 

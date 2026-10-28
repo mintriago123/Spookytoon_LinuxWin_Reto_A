@@ -142,7 +142,7 @@ export class TurnCoordinator {
     finally { clearTimeout(timer!); }
   }
 
-  async runTurn(deadlineMonotonicMs = this.now() + 2_000): Promise<TurnResult> {
+  async runTurn(deadlineMonotonicMs = this.now() + 2_000, waitForPublication?: () => Promise<void>): Promise<TurnResult> {
     if (this.busy) throw new Error("Ya existe un turno en curso");
     if (this.committed.status !== "running" || this.committed.turnId >= 150) throw new Error("La partida no admite otro turno");
     if (this.committed.survivors.filter(s => s.estado === "vivo").length > 200) throw new Error("Máximo 200 consultas de ruta por turno");
@@ -233,18 +233,29 @@ export class TurnCoordinator {
       work.survivors = admitted.survivors; work.shelters = admitted.shelters;
       work.zombies = awakenDormantZombies({ ...work, turnId, phase: "after-survivor-move" });
       phase("publish");
+      // El resultado sigue privado y el turno activo durante la espera nominal.
+      // Descontar solo la espera; los controles recibidos en ella se incorporan al cierre.
+      const workFinishedAt = this.now();
+      let publicationWaitMs = 0;
+      if (waitForPublication && workFinishedAt < deadlineMonotonicMs) {
+        const waitStartedAt = this.now();
+        await waitForPublication();
+        publicationWaitMs = Math.max(0, this.now() - waitStartedAt);
+      }
       for (const event of this.queuedEvents) if (!work.pendingCityEvents.some(existing => existing.eventId === event.eventId)) {
         work.pendingCityEvents.push({ ...event });
       }
       if (this.pauseRequested !== null && work.pause.status === "none") work.pause = {
         status: "requested", cause: "operator", reason: this.pauseRequested, afterTurnId: turnId,
       };
-      if (this.now() >= deadlineMonotonicMs) {
+      const closingAt = this.now();
+      const turnDurationMs = Math.max(0, closingAt - startedAt - publicationWaitMs);
+      if (workFinishedAt >= deadlineMonotonicMs || closingAt > deadlineMonotonicMs) {
         work.metrics.deadlineMisses++;
         if (work.pause.status === "none") work.pause = { status: "requested", cause: "deadline-miss",
           reason: "El turno no cerró antes del siguiente tick", afterTurnId: turnId };
       }
-      const telemetry = updateTurnMetrics(work, this.routeSamples, attempts, decisions, Math.max(0, this.now() - startedAt));
+      const telemetry = updateTurnMetrics(work, this.routeSamples, attempts, decisions, turnDurationMs);
       work.metrics = telemetry.metrics;
       work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
       if (work.pause.status === "requested") {

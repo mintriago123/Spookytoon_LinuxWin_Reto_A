@@ -922,7 +922,7 @@ export interface RoundConfig {
 
 La lista de spawns DEBE tener IDs únicos y nodeIds del grafo; su longitud de sobrevivientes debe coincidir con survivorCount y la composición de zombieSpawns con las reglas de la ronda. Ningún sobreviviente inicia en nodo zombie, zona de horda o nodo de refugio. Estas posiciones son datos del escenario, no valores inferidos por el motor.
 
-Turnos seriales con reloj monotónico y ticks absolutos cada 2.000 ms. No solapar ni saltar fases. Cada turno debe cerrar antes de su siguiente tick; si termina antes, esperar. Si no cierra antes del tick, terminar y comprometer ese turno, incrementar deadlineMisses y pausar antes de iniciar otro. La ronda con cualquier deadline miss no cumple aceptación temporal. Sin overruns se completan exactamente 150 turnos en 5 minutos. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
+Turnos seriales con reloj monotónico y ventanas absolutas de 2.000 ms. En ejecución continua sin pausas, el trabajo del turno k comienza en T0 + (k-1)×2.000 ms y debe terminar antes de T0 + k×2.000 ms. El turno 1 calcula desde T0; el turno 150 calcula dentro de [T0+298.000, T0+300.000). Si el trabajo acaba antes, conservar el resultado privado y esperar para comprometer/publicar en la frontera nominal de cierre. La espera deliberada no cuenta en turnDurationMs. Trabajo que alcanza o excede el deadline, o cierre que se retrasa más allá de la frontera, incrementa deadlineMisses una sola vez por turno; comprometer siempre el estado consistente y pausar antes de iniciar otro. En el turno 150 prevalece completed aunque haya incumplimiento. Sin incumplimientos, el último commit/publicación ocurre en T0+300.000 ms, nunca antes ni con el cálculo empezando allí. No solapar ni saltar fases. Una reanudación fija un nuevo origen para las ventanas restantes, sin recuperar tiempo pausado. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
 
 ### 5.2 Zombies
 
@@ -931,8 +931,10 @@ Todos calculan intención desde la misma vista pre-movimiento y aplican movimien
 ### 5.3 Orden exacto
 
 ```text
+T0 = monotonicNow() // al iniciar o reanudar
+frontera = T0 + 2.000 ms
 loop mientras status == running:
-  t0 = monotonicNow()
+  inicioTrabajo = monotonicNow()
   k = turnId + 1
 
   phase = city-events
@@ -975,15 +977,26 @@ loop mientras status == running:
   despertar dormidos por posiciones nuevas; recalcular reservas/métricas
 
   phase = publish
-  deadlineMiss = monotonicNow() >= t0 + 2.000 ms
+  finTrabajo = monotonicNow()
+  esperaPublicacionMs = 0
+  si finTrabajo < frontera:
+    inicioEspera = monotonicNow()
+    esperar hasta frontera manteniendo privado el resultado
+    esperaPublicacionMs = monotonicNow() - inicioEspera
+  incorporar controles recibidos durante cálculo/espera; resolver pausa solicitada
+  cierre = monotonicNow()
+  turnDurationMs = cierre - inicioTrabajo - esperaPublicacionMs
+  deadlineMiss = finTrabajo >= frontera o cierre > frontera
   si deadlineMiss: incrementar deadlineMisses
+  turnEfficiencyPercent = 100 × (k - deadlineMisses) / k
+  recalcular métricas con turnDurationMs, excluyendo la espera deliberada
   si k == 150: status=completed
   si no, si pausa solicitada o deadlineMiss: status=paused
   activeTurnId = null
   comprometer snapshot atómicamente; turnId=k; worldVersion++
   actualizar GET /estado y emitir TURN_UPDATE
   encolar snapshot DynamoDB sin esperar
-  si status == running: esperar hasta t0 + 2.000 ms
+  frontera += 2.000 ms // absoluta; comenzar el siguiente cálculo sin otra espera
 ```
 
 Una persona mordida no se evacúa aunque termine en refugio y tenga reserva. La admisión simultánea prioriza primero reservas válidas y después llegadas sin reserva, con orden lexicográfico por survivorId dentro de cada grupo. Al admitir se consume la reserva; las plazas aún reservadas para vivos en camino no se ofrecen al grupo sin reserva. Sin reservas, la admisión sigue estrictamente el orden por survivorId. Siempre se cumple ocupantes.length + reservados.length <= capacidad. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
