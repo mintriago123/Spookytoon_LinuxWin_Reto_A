@@ -8,6 +8,7 @@ import type {
   IniciarResponse,
   PausarRequest,
   PausarResponse,
+  ReanudarRequest,
 } from "../types/contracts";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
@@ -131,12 +132,20 @@ export function RoundControls() {
     }
   };
 
-  const iniciar = () =>
-    callControl<IniciarRequest, IniciarResponse>(
-      "/simulador/iniciar",
-      { gameId, roundId, seed },
-      "iniciar",
+  const iniciar = () => {
+    if (status === "paused") {
+      if (!snapshotGameId || !snapshotRoundId) {
+        setLastError("Falta la identidad de la partida pausada. Recarga el estado antes de reanudar.");
+        return;
+      }
+      return callControl<ReanudarRequest, IniciarResponse>(
+        "/simulador/reanudar", { gameId: snapshotGameId, roundId: snapshotRoundId }, "iniciar",
+      );
+    }
+    return callControl<IniciarRequest, IniciarResponse>(
+      "/simulador/iniciar", { gameId, roundId, seed }, "iniciar",
     );
+  };
 
   const pausar = () =>
     callControl<PausarRequest, PausarResponse>(
@@ -233,7 +242,7 @@ export function RoundControls() {
               disabled={busy || status === "running"}
               className={ACTION_BUTTON_CLASS.green}
             >
-              {pendingControl === "iniciar" ? "Iniciando…" : "Iniciar"}
+              {pendingControl === "iniciar" ? "Reanudando…" : "Reanudar"}
             </button>
             <button
               type="button"

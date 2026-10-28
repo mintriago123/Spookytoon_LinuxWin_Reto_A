@@ -8,6 +8,7 @@ export BACKEND_ENV_FILE
 for command in git node npm pm2 curl flock tar; do command -v "$command" >/dev/null; done
 node -e 'if (+process.versions.node.split(".")[0] !== 24) process.exit(1)'
 test -r "$BACKEND_ENV_FILE"
+node --env-file="$BACKEND_ENV_FILE" -e 'if (!process.env.OPERATOR_PASSWORD || process.env.OPERATOR_PASSWORD === process.env.ROUTE_API_KEY) { console.error("OPERATOR_PASSWORD debe estar definida y ser distinta de ROUTE_API_KEY"); process.exit(1) }'
 mkdir -p "$APP_ROOT/releases"
 exec 9>"$APP_ROOT/deploy.lock"
 flock -n 9 || { echo 'Otro despliegue/rollback está activo' >&2; exit 1; }
@@ -45,6 +46,11 @@ for attempt in {1..30}; do
     sleep 1
 done
 [[ "$healthy" == true ]]
+public_api_url=$(node --env-file="$BACKEND_ENV_FILE" -p 'process.env.PUBLIC_API_URL || ""')
+if [[ -n "$public_api_url" ]]; then
+    operator_response=$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code} %{content_type}' "${public_api_url%/}/operador/sesion")
+    [[ "$operator_response" == "401 application/json"* ]] || { echo 'Caddy no enruta /operador/sesion al backend' >&2; false; }
+fi
 if [[ -n "$previous" ]]; then printf '%s\n' "$previous" > "$APP_ROOT/previous-release"; fi
 ln -sfn "$release" "$APP_ROOT/current-next"
 mv -Tf "$APP_ROOT/current-next" "$APP_ROOT/current"

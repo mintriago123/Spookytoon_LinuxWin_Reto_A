@@ -128,6 +128,14 @@ docker exec caddy-proxy caddy validate --config /etc/caddy/Caddyfile --adapter c
 docker exec caddy-proxy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
+Si el Caddy activo también sirve los archivos del frontend, conservar su bloque
+`file_server` y añadir el proxy de `/operador/*` antes del fallback de la SPA;
+el `infra/Caddyfile` versionado describe el proxy del backend. Comprobar sin
+credenciales que `GET /operador/sesion` devuelve `401` con JSON, nunca `200`
+con HTML. El despliegue del backend falla antes de promover la release si esa
+ruta pública no apunta al backend. Definir `OPERATOR_PASSWORD` en
+`/etc/spookython/backend.env` con un valor distinto de `ROUTE_API_KEY`.
+
 No eliminar los volúmenes TLS. Los logs Caddy de este contenedor se consultan
 dentro de él; para que CloudWatch Agent del host recoja ese archivo hay que
 montar también el directorio de logs del host al crear el contenedor. Los logs

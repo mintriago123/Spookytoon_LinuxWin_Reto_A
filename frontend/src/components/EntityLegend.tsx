@@ -11,9 +11,11 @@ import {
 const COLLAPSED_STORAGE_KEY = "spookython:legend-collapsed";
 
 function readStoredCollapsed(): boolean {
-  if (typeof window === "undefined") return false;
+  if (typeof window === "undefined") return true;
   try {
-    return window.localStorage.getItem(COLLAPSED_STORAGE_KEY) === "1";
+    const stored = window.localStorage.getItem(COLLAPSED_STORAGE_KEY);
+    if (stored !== null) return stored === "1";
+    return window.matchMedia("(max-width: 767px)").matches;
   } catch {
     // Storage bloqueado (modo privado, política del navegador): no es
     // crítico, la leyenda simplemente no recuerda la preferencia.
@@ -65,13 +67,13 @@ export function EntityLegend() {
   };
 
   return (
-    <div className="glass rounded-lg p-3 text-xs text-slate-100">
+    <div className="glass max-h-[40svh] w-[min(260px,calc(100vw-24px))] overflow-y-auto rounded-lg p-3 text-xs text-slate-100 sm:max-h-none sm:w-auto sm:overflow-visible">
       <button
         type="button"
         onClick={toggle}
         aria-expanded={!collapsed}
         aria-controls="entity-legend-body"
-        className="flex w-full items-center justify-between gap-2 text-left font-semibold uppercase tracking-wide text-slate-300 hover:text-slate-100"
+        className="flex min-h-8 w-full items-center justify-between gap-2 text-left font-semibold uppercase tracking-wide text-slate-300 hover:text-slate-100"
       >
         <span>Leyenda</span>
         <span aria-hidden className={`transition-transform duration-150 ${collapsed ? "" : "rotate-180"}`}>

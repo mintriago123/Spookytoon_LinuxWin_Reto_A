@@ -22,8 +22,7 @@ import { parseCameraFixture } from "./modules/simulator/camera-surveillance.ts";
 
 export interface BackendOptions {
   apiKey?: string;
-  /** Contraseña corta para /operador/sesion; por defecto usa la apiKey, pero
-   *  un despliegue real debería definir OPERATOR_PASSWORD por separado. */
+  /** Contraseña para /operador/sesion; en producción debe ser distinta de apiKey. */
   operatorPassword?: string;
   simulator?: ScenarioOptions;
   frontendOrigin?: string;
@@ -63,6 +62,9 @@ export async function createBackendApp(options: BackendOptions = {}) {
   // despliegues existentes, pero un entorno real debería definirla aparte).
   const operatorPassword = options.operatorPassword ?? process.env.OPERATOR_PASSWORD ?? apiKey;
   if (operatorPassword.length < 8) throw new Error("OPERATOR_PASSWORD requiere al menos 8 caracteres");
+  if (process.env.NODE_ENV === "production" && operatorPassword === apiKey) {
+    throw new Error("OPERATOR_PASSWORD debe configurarse distinta de ROUTE_API_KEY en producción");
+  }
   const routingMaxSockets = options.routingMaxSockets ?? Number(process.env.ROUTING_HTTP_MAX_SOCKETS ?? 8);
   if (!Number.isSafeInteger(routingMaxSockets) || routingMaxSockets < 1 || routingMaxSockets > 200) {
     throw new Error("ROUTING_HTTP_MAX_SOCKETS debe estar entre 1 y 200");

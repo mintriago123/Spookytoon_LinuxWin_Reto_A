@@ -42,7 +42,7 @@ export function App() {
   }, [setGraph, setLastError]);
 
   return (
-    <div className="flex h-full w-full flex-col bg-night-900 text-slate-100 md:flex-row">
+    <div className="flex min-h-[100dvh] w-full flex-col bg-night-900 text-slate-100 md:h-full md:min-h-0 md:flex-row">
       {/* min-h-0 flex-1: en móvil (flex-col) este bloque necesita altura
           propia o <main>'s flex-1 de abajo no tiene contra qué crecer y el
           mapa queda en 0px — el eje principal es vertical ahí, a diferencia
@@ -69,13 +69,9 @@ export function App() {
             </p>
           </div>
         </header>
-        {/* min-h-[50vh]: la barra lateral apilada en móvil es más alta que
-            el viewport (métricas + refugios + formulario completo), así que
-            flex-1 solo no basta — sin un piso el flexbox le quita todo el
-            alto al mapa. Con el piso, la página crece más que el viewport y
-            el usuario baja con scroll normal a los controles; el mapa, que
-            es lo primero que debe verse, nunca queda en 0px. */}
-        <main className="relative min-h-[50vh] flex-1">
+        {/* El mapa ocupa casi toda la primera pantalla móvil; los controles
+            continúan debajo con scroll. En escritorio toma el espacio restante. */}
+        <main className="relative h-[74svh] min-h-[420px] max-h-[760px] w-full flex-none md:h-auto md:min-h-0 md:max-h-none md:flex-1">
           <LiveMap />
           {/* z-[1100]: por encima de los controles de Leaflet (z-index 1000
               en leaflet.css), si no quedan tapados aunque estén en el DOM. */}
@@ -90,7 +86,7 @@ export function App() {
           punto puntual. El botón Iniciar se queda verde a propósito — es
           el único color que significa "ir" (ver DESIGN.md, Regla del Verde
           Único); el cian no debe disputarle ese rol. */}
-      <aside className="flex w-full flex-col gap-3 overflow-y-auto border-t border-white/10 bg-night-800 p-3 md:w-80 md:border-l md:border-t-0">
+      <aside className="flex w-full flex-col gap-3 border-t border-white/10 bg-night-800 p-3 md:w-80 md:overflow-y-auto md:border-l md:border-t-0">
         <MetricsPanel />
         <ShelterOccupancy />
         <RoundControls />

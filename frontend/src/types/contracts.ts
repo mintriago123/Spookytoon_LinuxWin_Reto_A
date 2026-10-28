@@ -168,6 +168,10 @@ export interface IniciarRequest {
   roundId: 1 | 2 | 3;
   seed: string;
 }
+export interface ReanudarRequest {
+  gameId: string;
+  roundId: 1 | 2 | 3;
+}
 
 export interface IniciarResponse {
   gameId: string;

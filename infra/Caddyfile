@@ -2,6 +2,8 @@
 	encode zstd gzip
 	@internal path /health/* /motor/* /paso
 	respond @internal 404
+	@operator path /operador/*
+	reverse_proxy @operator localhost:3001
 	reverse_proxy localhost:3001
 	log {
 		output file /var/log/caddy/spookython-access.json {

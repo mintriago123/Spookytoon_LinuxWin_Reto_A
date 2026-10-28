@@ -22,6 +22,9 @@ test("login por contraseña da cookie de sesión que reemplaza a x-api-key en lo
     const wrong = await app.inject({ method: "POST", url: "/operador/sesion", payload: { password: "incorrecta" } });
     assert.equal(wrong.statusCode, 401);
     assert.equal(wrong.headers["set-cookie"], undefined);
+    const extra = await app.inject({ method: "POST", url: "/operador/sesion", payload: { password: "clave-corta-operador", extra: true } });
+    assert.equal(extra.statusCode, 400);
+    assert.equal(extra.headers["set-cookie"], undefined);
 
     // Login correcto: 204 sin cuerpo y cookie httpOnly (SameSite=Lax porque
     // la inyección de test no pasa por https/X-Forwarded-Proto).
