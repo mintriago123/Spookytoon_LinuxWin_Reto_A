@@ -31,6 +31,13 @@ export function createWorldSnapshot(world: Immutable<WorldState>): CommittedWorl
       bittenSurvivors: metrics.bittenSurvivors, evacuatedSurvivors: metrics.evacuatedSurvivors,
       activeZombies: metrics.activeZombies, wsClients: metrics.wsClients,
       snapshotQueueDepth: metrics.snapshotQueueDepth, lastSnapshotTurnId: metrics.lastSnapshotTurnId,
+      routeErrors: metrics.routeErrors ?? 0, routeAvailabilityPercent: metrics.routeAvailabilityPercent ?? 0,
+      survivalRatePercent: metrics.survivalRatePercent ?? 100,
+      activeSurvivorsPercent: metrics.activeSurvivorsPercent ?? 0,
+      bittenSurvivorsPercent: metrics.bittenSurvivorsPercent ?? 0,
+      evacuatedSurvivorsPercent: metrics.evacuatedSurvivorsPercent ?? 0,
+      turnDurationMs: metrics.turnDurationMs ?? 0, turnBudgetUsedPercent: metrics.turnBudgetUsedPercent ?? 0,
+      turnEfficiencyPercent: metrics.turnEfficiencyPercent ?? 100,
     },
   };
   return freeze(snapshot);

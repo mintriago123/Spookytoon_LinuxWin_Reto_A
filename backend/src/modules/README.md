@@ -15,20 +15,20 @@ El Backend es un solo monolito modular: un proceso Fastify, un estado autoritati
 
 ## Límites de dependencia
 
-1. **backend/src/server.ts** es el composition root ejecutable: verifica manifiesto, carga el grafo, crea una instancia de RouteEngine y registra el plugin Fastify en el servidor común. El plugin del game loop debe registrarse en este mismo root y recibir las mismas instancias.
+1. **backend/src/server.ts** verifica el manifiesto, carga el grafo y los tres presets de ronda, crea RouteEngine y SimulationRuntime y registra routing, simulador y realtime en el servidor Fastify común.
 2. **contracts/** contiene DTOs y validadores compartidos. Todos los módulos dependen de estos tipos públicos y de SPEC.md.
 3. **graph** expone datos inmutables. **routing** mantiene su snapshot de lectura y nunca muta WorldState.
-4. **routing** calcula Dijkstra inverso una vez por worldVersion y publica un plan inmutable en RAM. La implementación actual corre con un worker lógico; cada POST /paso consulta bestMoveByNode en O(1).
+4. **routing** calcula el plan Base por worldVersion y planes por refugio cuando hay reservas, siempre durante sync. Publica tablas inmutables en RAM. La implementación corre con un worker lógico; cada POST /paso consulta su tabla en O(1).
 5. **simulator** es el único dueño de la escritura de WorldState. Invoca POST /motor/sincronizar y POST /paso por loopback con los contratos HTTP definidos; valida el resultado antes de aplicar un movimiento. Una respuesta 401 activa `pauseCause=routing-unauthorized` y `alertCode=ROUTING_UNAUTHORIZED`; `applyRoutingFailureSignal` programa la pausa y devuelve el evento crítico que el coordinador debe publicar.
 6. **persistence** y **realtime** reciben snapshots ya comprometidos. No escriben de vuelta al simulador ni retrasan el loop por I/O.
 7. No importar archivos internos de otro módulo. Las integraciones pasan por su interfaz pública, contrato HTTP o snapshot tipado.
 
-## Secuencia de integración
+## Integración actual
 
-- Michael entrega graph, contracts y el módulo routing con sync de versión.
-- Maykel conecta game-loop a los endpoints internos, mantiene WorldState y publica el snapshot al cierre.
-- Michael habilita persistencia y métricas; Maykel conecta realtime al commit.
-- Kristhian consume GET /estado y WSS /ws sin depender de imports del Backend.
+- Graph/contracts/routing, simulador y realtime están ensamblados en `server.ts`; los presets se validan contra el grafo de Manta.
+- Telemetría actualiza contadores y porcentajes de entidades, ventana de 1.000 solicitudes, disponibilidad y eficiencia al cerrar cada turno. El DTO público conserva compatibilidad con los campos existentes.
+- Persistencia DynamoDB sigue pendiente y no participa en esta integración.
+- Los consumidores reciben GET /estado y WS /ws; CORS y orígenes WS comparten configuración. La guía operativa y los indicadores están en [backend/README.md](../../README.md).
 
 Si una regla cambia, actualizar primero SPEC.md, luego contratos y finalmente módulos consumidores. Mantener el despliegue único y el escritor único por partida.
 

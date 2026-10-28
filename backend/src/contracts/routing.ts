@@ -126,6 +126,8 @@ export interface RoutingSnapshot {
   worldVersion: number;
   requestDigest: string;
   plan: RoutePlanSnapshot;
+  reservedPlans: ReadonlyMap<string, Readonly<Record<string, RoutePlanEntry>>>;
+  reservationBySurvivor: ReadonlyMap<string, string>;
   response: SyncResponse;
   survivorById: ReadonlyMap<string, RouteSurvivor>;
   shelterById: ReadonlyMap<string, RouteShelter>;

@@ -19,8 +19,10 @@ export class RealtimeHub {
   private scheduled: ReturnType<typeof setImmediate> | null = null;
   private closed = false;
   private readonly isoNow: () => string;
+  private readonly onClientCount: (count: number) => void;
 
-  constructor(isoNow: () => string = () => new Date().toISOString()) { this.isoNow = isoNow; }
+  constructor(isoNow: () => string = () => new Date().toISOString(),
+    onClientCount: (count: number) => void = () => {}) { this.isoNow = isoNow; this.onClientCount = onClientCount; }
   get clientCount(): number { return this.peers.size; }
 
   publish(world: CommittedWorldSnapshot): void {
@@ -39,9 +41,10 @@ export class RealtimeHub {
   add(peer: RealtimePeer): void {
     if (this.closed) { peer.terminate(); return; }
     this.peers.set(peer, { alive: true, revision: 0 });
+    this.onClientCount(this.peers.size);
     if (this.latest) this.send(peer, this.latest); // Cierra el intervalo entre GET y reconexión WS.
   }
-  remove(peer: RealtimePeer): void { this.peers.delete(peer); }
+  remove(peer: RealtimePeer): void { this.peers.delete(peer); this.onClientCount(this.peers.size); }
   pong(peer: RealtimePeer): void { const state = this.peers.get(peer); if (state) state.alive = true; }
 
   heartbeat(): void {
@@ -61,6 +64,7 @@ export class RealtimeHub {
 
   private drop(peer: RealtimePeer): void {
     this.peers.delete(peer);
+    this.onClientCount(this.peers.size);
     try { peer.terminate(); } catch { /* La caída de un cliente no afecta al resto. */ }
   }
 

@@ -94,8 +94,8 @@ export interface TurnContext {
   randomCursors: RandomCursor[];
 }
 
-/** Forma del SPEC §2.3, sin implementación de telemetría ni cambio semántico.
- * Sustituir por import del contrato público cuando Michael lo exponga.
+/** Los campos opcionales permiten recibir inicializadores del contrato anterior.
+ * El estado inicial y cada commit completan los indicadores de evaluación.
  */
 export interface TelemetryMetrics {
   routeSamples: number;
@@ -112,6 +112,15 @@ export interface TelemetryMetrics {
   wsClients: number;
   snapshotQueueDepth: number;
   lastSnapshotTurnId: number | null;
+  routeAvailabilityPercent?: number;
+  routeErrors?: number;
+  survivalRatePercent?: number;
+  activeSurvivorsPercent?: number;
+  bittenSurvivorsPercent?: number;
+  evacuatedSurvivorsPercent?: number;
+  turnDurationMs?: number;
+  turnBudgetUsedPercent?: number;
+  turnEfficiencyPercent?: number;
 }
 
 /** Único escritor: simulator. No serializar este objeto como DTO público. */
@@ -234,6 +243,8 @@ export interface DecisionBatch {
   decisions: SurvivorDecision[];
   pauseCause: PauseCause | null;
   alertCode: "ROUTING_UNAUTHORIZED" | null;
+  /** Validación individual previa a la política global de espera por 401. */
+  validResponseSurvivorIds?: string[];
 }
 
 export interface SurvivorTraversal {

@@ -102,6 +102,14 @@ export class RouteEngine {
     const worldVersion = request.baseWorldVersion + 1;
     const start = this.now();
     const bestMoveByNode = this.buildPlan(request);
+    const reservedPlans = new Map<string, Readonly<Record<string, RoutePlanEntry>>>();
+    const reservationBySurvivor = new Map<string, string>();
+    for (const shelter of request.shelters) if (shelter.reservados.length) {
+      const entries = this.buildPlan(request, shelter.id);
+      reservedPlans.set(shelter.id, Object.freeze(Object.fromEntries(Object.entries(entries)
+        .map(([nodeId, entry]) => [nodeId, Object.freeze(entry)]))));
+      for (const id of shelter.reservados) reservationBySurvivor.set(id, shelter.id);
+    }
     const buildLatencyMs = Math.max(0, this.now() - start);
     const immutableMoves = Object.freeze(Object.fromEntries(Object.entries(bestMoveByNode)
       .map(([nodeId, entry]) => [nodeId, Object.freeze(entry)])));
@@ -122,7 +130,7 @@ export class RouteEngine {
       }
     }
     const snapshot: RoutingSnapshot = {
-      request, worldVersion, requestDigest, plan, response,
+      request, worldVersion, requestDigest, plan, response, reservedPlans, reservationBySurvivor,
       survivorById: new Map(request.survivors.map(survivor => [survivor.id, survivor])),
       shelterById: new Map(request.shelters.map(shelter => [shelter.id, shelter])),
       blockedEdgeIds,
@@ -155,8 +163,10 @@ export class RouteEngine {
     }
     const start = this.now();
     try {
-      const entry = snapshot.plan.bestMoveByNode[request.currentNodeId];
-      const safe = !!entry && this.isSafeEntry(entry, snapshot);
+      const reservedShelterId = snapshot.reservationBySurvivor.get(request.survivorId);
+      const entry = (reservedShelterId ? snapshot.reservedPlans.get(reservedShelterId)
+        : snapshot.plan.bestMoveByNode)?.[request.currentNodeId];
+      const safe = !!entry && this.isSafeEntry(entry, snapshot, reservedShelterId);
       const latencyMs = Math.max(0, this.now() - start);
       if (!entry || !safe) {
         return {
@@ -182,7 +192,7 @@ export class RouteEngine {
   }
   isReady(gameId?: string) { return gameId ? this.snapshots.has(gameId) : this.snapshots.size > 0; }
 
-  private buildPlan(request: WorldSyncRequest): Record<string, RoutePlanEntry> {
+  private buildPlan(request: WorldSyncRequest, reservedShelterId?: string): Record<string, RoutePlanEntry> {
     const count = this.nodeIds.length;
     const blocked = new Set<string>();
     for (const block of request.blockedEdges) {
@@ -194,7 +204,9 @@ export class RouteEngine {
     const zombieNodes = new Set(request.zombies.filter(zombie => zombie.estado === "activo").map(zombie => zombie.nodeId));
     const hordeNodes = this.hordeNeighborhood(request);
     const hazards = new Set([...zombieNodes, ...hordeNodes]);
-    const availableShelters = request.shelters.filter(shelter => shelter.ocupantes.length + shelter.reservados.length < shelter.capacidad);
+    const availableShelters = request.shelters.filter(shelter => reservedShelterId
+      ? shelter.id === reservedShelterId && shelter.ocupantes.length < shelter.capacidad
+      : shelter.ocupantes.length + shelter.reservados.length < shelter.capacidad);
     const baseCost = new Map<string, number>();
     const openEdges: GraphEdge[] = [];
     for (const edge of this.graph.aristas) if (!blocked.has(edge.id)) {
@@ -313,14 +325,14 @@ export class RouteEngine {
     return result;
   }
 
-  private isSafeEntry(entry: RoutePlanEntry, snapshot: RoutingSnapshot) {
+  private isSafeEntry(entry: RoutePlanEntry, snapshot: RoutingSnapshot, reservedShelterId?: string) {
     if (!this.adjacency.nodeIndex.has(entry.fromNodeId)) return false;
     if (entry.toNodeId === entry.fromNodeId) {
       if (entry.decision !== "esperar" || entry.edgeId !== null || entry.routeCost !== null) return false;
       if (entry.targetShelterId === null) return true;
       const shelter = snapshot.shelterById.get(entry.targetShelterId);
       return !!shelter && shelter.nodoId === entry.fromNodeId &&
-        shelter.ocupantes.length + shelter.reservados.length < shelter.capacidad;
+        shelter.ocupantes.length + (reservedShelterId === shelter.id ? 0 : shelter.reservados.length) < shelter.capacidad;
     }
     if (!this.adjacency.nodeIndex.has(entry.toNodeId) || entry.decision !== "mover" || entry.routeCost === null ||
         entry.targetShelterId === null) return false;
@@ -332,7 +344,8 @@ export class RouteEngine {
           snapshot.hordeNodeIds.has(entry.toNodeId) ||
           snapshot.zombieTraversalPairs.has(`${entry.toNodeId}\0${entry.fromNodeId}`)) return false;
       const targetShelter = snapshot.shelterById.get(entry.targetShelterId);
-      if (!targetShelter || targetShelter.ocupantes.length + targetShelter.reservados.length >= targetShelter.capacidad) return false;
+      if (!targetShelter || targetShelter.ocupantes.length +
+          (reservedShelterId === targetShelter.id ? 0 : targetShelter.reservados.length) >= targetShelter.capacidad) return false;
     }
     return true;
   }

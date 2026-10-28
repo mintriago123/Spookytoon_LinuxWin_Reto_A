@@ -14,6 +14,8 @@ export interface ScenarioOptions {
   /** Solo configuración aprobada suministrada por el composition root; no hay escenario de respaldo. */
   rounds?: Partial<Record<RoundId, unknown>>;
   initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
+  /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
+  clock?: SimulationClock;
 }
 interface RuntimeOptions extends ScenarioOptions {
   graph: Immutable<MantaGraph>;
@@ -35,11 +37,14 @@ export class SimulationRuntime {
   private closed = false;
   private snapshot: CommittedWorldSnapshot | null = null;
   private readonly listeners = new Set<(snapshot: CommittedWorldSnapshot) => void>();
+  private realtimeClientCount = 0;
+  private routingClient: RoutingClient | null = null;
 
   constructor(options: RuntimeOptions) { this.options = options; this.clock = options.clock ?? createSimulationClock(); }
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
+  setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   }
@@ -73,8 +78,11 @@ export class SimulationRuntime {
       catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+        getWsClientCount: () => this.realtimeClientCount,
         onCommitted: world => this.publishCommitted(world) });
       coordinator.resume();
+      this.routingClient?.close?.();
+      this.routingClient = client;
       this.coordinator = coordinator; this.usedGameIds.add(command.gameId);
     }
     const nextTurnId = this.coordinator!.getCommittedWorld().turnId + 1;
@@ -99,6 +107,8 @@ export class SimulationRuntime {
     this.runner?.controller.abort();
     if (this.getCommittedWorld()?.status === "running") this.coordinator!.requestPause("Cierre del proceso");
     await this.whenStopped();
+    this.routingClient?.close?.();
+    this.routingClient = null;
   }
 
   private isoNow(): string { return this.options.isoNow?.() ?? new Date().toISOString(); }
@@ -118,7 +128,8 @@ export class SimulationRuntime {
     const origin = this.clock.now();
     this.runner = runner;
     runner.promise = Promise.resolve().then(async () => {
-      let nextTick = origin; // Acuerdo Etapa 6: turno 1 inmediato; turno 150 en origin + 298.000 ms.
+      // El snapshot inicial ocupa el primer intervalo; los ticks 1..150 caen en 2.000..300.000 ms.
+      let nextTick = origin + 2_000;
       while (!runner.controller.signal.aborted && coordinator.getCommittedWorld().status === "running") {
         await this.clock.waitUntil(nextTick, runner.controller.signal);
         if (runner.controller.signal.aborted || coordinator.getCommittedWorld().status !== "running") break;

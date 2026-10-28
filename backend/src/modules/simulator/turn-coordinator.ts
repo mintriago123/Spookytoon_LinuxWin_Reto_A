@@ -11,6 +11,7 @@ import { applyCityEvents } from "./city-events.ts";
 import { awakenDormantZombies, moveZombies } from "./zombies.ts";
 import { applyBites, applySimultaneousSurvivorMoves, detectBites,
   resolveShelterAdmissions, resolveSurvivorDecisions } from "./survivor-resolution.ts";
+import { updateTurnMetrics, type RouteLatencySample } from "../telemetry/turn-metrics.ts";
 
 function freeze<T>(value: T): Immutable<T> {
   if (value !== null && typeof value === "object") {
@@ -32,6 +33,7 @@ interface CoordinatorOptions {
   /** Notificación síncrona tras el commit; el consumidor no debe realizar I/O bloqueante. */
   onCommitted?: (world: Immutable<WorldState>) => void;
   now?: () => number;
+  getWsClientCount?: () => number;
 }
 
 export interface TurnResult {
@@ -51,6 +53,7 @@ export class TurnCoordinator {
   private readonly options: CoordinatorOptions;
   private pauseRequested: string | null = null;
   private queuedEvents: ScheduledCityEvent[] = [];
+  private routeSamples: RouteLatencySample[] = [];
 
   constructor(initial: WorldState, options: CoordinatorOptions) {
     if (!Number.isSafeInteger(options.syncTimeoutMs) || options.syncTimeoutMs < 1 || options.syncTimeoutMs > 2_000) {
@@ -69,6 +72,7 @@ export class TurnCoordinator {
     }
     const work = structuredClone(this.committed) as WorldState;
     work.status = "running"; work.pause = { status: "none" }; work.updatedAt = this.options.isoNow();
+    work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
     this.pauseRequested = null; this.committed = freeze(work);
     this.options.onCommitted?.(this.committed);
   }
@@ -142,8 +146,8 @@ export class TurnCoordinator {
     if (this.busy) throw new Error("Ya existe un turno en curso");
     if (this.committed.status !== "running" || this.committed.turnId >= 150) throw new Error("La partida no admite otro turno");
     if (this.committed.survivors.filter(s => s.estado === "vivo").length > 200) throw new Error("Máximo 200 consultas de ruta por turno");
-    if (this.committed.shelters.some(s => s.reservados.length)) throw new Error("Política de reservas pendiente de acuerdo");
     if (!Number.isFinite(deadlineMonotonicMs)) throw new Error("Deadline de turno inválido");
+    const startedAt = this.now();
     this.busy = true;
     try {
       const work = structuredClone(this.committed) as WorldState;
@@ -240,6 +244,9 @@ export class TurnCoordinator {
         if (work.pause.status === "none") work.pause = { status: "requested", cause: "deadline-miss",
           reason: "El turno no cerró antes del siguiente tick", afterTurnId: turnId };
       }
+      const telemetry = updateTurnMetrics(work, this.routeSamples, attempts, decisions, Math.max(0, this.now() - startedAt));
+      work.metrics = telemetry.metrics;
+      work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
       if (work.pause.status === "requested") {
         work.pause = { ...work.pause, status: "effective" }; work.status = "paused";
       }
@@ -248,6 +255,7 @@ export class TurnCoordinator {
       work.activeTurn = null; work.activeTurnId = null; work.phase = "idle";
       work.updatedAt = this.options.isoNow();
       this.committed = freeze(work); // Único intercambio de la versión completa.
+      this.routeSamples = telemetry.samples;
       this.pauseRequested = null; this.queuedEvents = [];
       this.options.onCommitted?.(this.committed);
       let alertDeliveryFailed = false;
