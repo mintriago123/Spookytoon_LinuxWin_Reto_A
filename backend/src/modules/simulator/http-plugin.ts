@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { parseEdgeCommand, parsePauseCommand, parseStartCommand, SimulatorControlError } from "./controls.ts";
+import { parseEdgeCommand, parsePauseCommand, parseResumeCommand, parseStartCommand, SimulatorControlError } from "./controls.ts";
 import type { SimulationRuntime } from "./simulation-runtime.ts";
 import { createOperatorSessionStore, OPERATOR_SESSION_COOKIE, parseCookies } from "./operator-session.ts";
 
@@ -84,7 +84,14 @@ export const simulatorPlugin: FastifyPluginAsync<{
     // sin disparar un control real (RoundControls la llama al montar).
     protectedApp.get("/operador/sesion", async (_request, reply) => reply.code(204).send());
     protectedApp.post("/simulador/iniciar", async (request, reply) => reply.code(202).send(options.runtime.start(parseStartCommand(request.body))));
-    protectedApp.post("/simulador/reanudar", async (request, reply) => reply.code(202).send(options.runtime.resume(parseStartCommand(request.body))));
+    protectedApp.post("/simulador/reanudar", async (request, reply) => {
+      const command = parseResumeCommand(request.body);
+      const current = options.runtime.getCommittedWorld();
+      if (!current || current.status !== "paused") {
+        throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Solo se reanuda una partida pausada");
+      }
+      return reply.code(202).send(options.runtime.resume({ ...command, seed: command.seed ?? current.rngSeed }));
+    });
     protectedApp.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseStartCommand(request.body))));
     protectedApp.post("/simulador/pausar", async (request, reply) => reply.code(202).send(options.runtime.pause(parsePauseCommand(request.body).reason)));
     protectedApp.post("/simulador/bloquear-arista", async (request, reply) => reply.code(202).send(options.runtime.scheduleEdge(parseEdgeCommand(request.body))));

@@ -9,6 +9,7 @@ export class SimulatorControlError extends Error {
 }
 
 export interface StartCommand { gameId: string; roundId: RoundId; seed: string }
+export interface ResumeCommand { gameId: string; roundId: RoundId; seed?: string }
 export interface EdgeCommand { eventId: string; edgeId: string; bloqueada: boolean; motivo: string; effectiveTurnId?: number }
 
 function object(value: unknown, required: string[], optional: string[] = []): Record<string, unknown> {
@@ -36,6 +37,14 @@ export function parseStartCommand(value: unknown): StartCommand {
 export function parsePauseCommand(value: unknown): { reason: string } {
   const item = object(value, ["reason"]);
   return { reason: text(item.reason, "reason") };
+}
+export function parseResumeCommand(value: unknown): ResumeCommand {
+  const item = object(value, ["gameId", "roundId"], ["seed"]);
+  if (item.roundId !== 1 && item.roundId !== 2 && item.roundId !== 3) {
+    throw new SimulatorControlError(400, "VALIDATION_ERROR", "roundId debe ser 1, 2 o 3");
+  }
+  return { gameId: text(item.gameId, "gameId", 128), roundId: item.roundId,
+    ...(Object.hasOwn(item, "seed") ? { seed: text(item.seed, "seed") } : {}) };
 }
 export function parseEdgeCommand(value: unknown): EdgeCommand {
   const item = object(value, ["eventId", "edgeId", "bloqueada", "motivo"], ["effectiveTurnId"]);

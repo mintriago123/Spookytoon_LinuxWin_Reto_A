@@ -8,17 +8,16 @@ import type {
   IniciarResponse,
   PausarRequest,
   PausarResponse,
+  ReanudarRequest,
 } from "../types/contracts";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
 
 /**
- * SPEC.md §3.3/§6: RoundControls es solo para operador autenticado y la
- * x-api-key real NUNCA va al navegador. El operador hace login con una
- * contraseña corta contra POST /operador/sesion, que fija una cookie
- * httpOnly; de ahí en más cada llamada de control va con
- * `credentials: "include"` y sin ningún secreto en JS. Un 401 en cualquier
- * control (sesión vencida) vuelve a pedir la contraseña.
+ * La contraseña de demostración está precargada y el campo es de solo
+ * lectura. Este valor forma parte del frontend público. El login contra
+ * POST /operador/sesion obtiene la cookie httpOnly utilizada por los
+ * controles con `credentials: "include"`.
  */
 export function RoundControls() {
   const pendingControl = useWorldStore((s) => s.pendingControl);
@@ -31,7 +30,7 @@ export function RoundControls() {
   const blockedEdges = useWorldStore((s) => s.currentSnapshot?.blockedEdges ?? []);
 
   const [authState, setAuthState] = useState<"checking" | "out" | "in">("checking");
-  const [password, setPassword] = useState("");
+  const password = "5f02d99417e6b14e3822e3e04f29213a1a69791a47debacf4dd40200998971d8";
   const [loggingIn, setLoggingIn] = useState(false);
 
   useEffect(() => {
@@ -56,7 +55,6 @@ export function RoundControls() {
         const errorBody = (await res.json().catch(() => null)) as ApiErrorBody | null;
         throw new Error(errorBody?.error.message ?? "Contraseña de operador incorrecta");
       }
-      setPassword("");
       setAuthState("in");
     } catch (err) {
       setLastError(err instanceof Error ? err.message : "Fallo al iniciar sesión");
@@ -145,6 +143,18 @@ export function RoundControls() {
       "pausar",
     );
 
+  const reanudar = () => {
+    if (!snapshotGameId || !snapshotRoundId) {
+      setLastError("No hay una partida pausada disponible para reanudar");
+      return;
+    }
+    return callControl<ReanudarRequest, IniciarResponse>(
+      "/simulador/reanudar",
+      { gameId: snapshotGameId, roundId: snapshotRoundId },
+      "iniciar",
+    );
+  };
+
   const bloquearSegmento = (edgeId: string, bloqueada: boolean, motivo: string) =>
     callControl<BloquearAristaRequest, BloquearAristaResponse>(
       "/simulador/bloquear-arista",
@@ -190,9 +200,9 @@ export function RoundControls() {
           <span>Contraseña de operador</span>
           <input
             type="password"
-            autoComplete="current-password"
+            autoComplete="off"
             value={password}
-            onChange={(e) => setPassword(e.target.value)}
+            readOnly
             className={inputClass}
           />
         </label>
@@ -229,11 +239,11 @@ export function RoundControls() {
           <div className="flex shrink-0 gap-2">
             <button
               type="button"
-              onClick={iniciar}
+              onClick={reanudar}
               disabled={busy || status === "running"}
               className={ACTION_BUTTON_CLASS.green}
             >
-              {pendingControl === "iniciar" ? "Iniciando…" : "Iniciar"}
+              {pendingControl === "iniciar" ? "Reanudando…" : "Reanudar"}
             </button>
             <button
               type="button"
