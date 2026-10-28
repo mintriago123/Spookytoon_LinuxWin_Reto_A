@@ -14,7 +14,7 @@ test("readiness 200 antes de sincronizar; pierde readiness si el pool deja de op
   try {
     assert.equal((await app.inject("/health/ready")).statusCode, 200);
     assert.equal(engine.isReady(), false, "No existe plan de partida, pero el servicio está preparado");
-    assert.equal((await app.inject("/estado")).statusCode, 503);
+    assert.deepEqual((await app.inject("/estado")).json(), { status: "idle" });
     await workers.close();
     assert.equal((await app.inject("/health/ready")).statusCode, 503);
     assert.equal((await app.inject("/health/live")).statusCode, 200);

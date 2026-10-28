@@ -67,6 +67,22 @@ test("sin OPERATOR_PASSWORD explícita, la propia apiKey sirve como contraseña 
   } finally { await app.close(); }
 });
 
+test("login rechaza propiedades adicionales prohibidas por OperadorSesionRequest", async () => {
+  const { app } = await createBackendApp({ apiKey, operatorPassword: "clave-corta-operador", logger: false });
+  try {
+    const extra = await app.inject({ method: "POST", url: "/operador/sesion", payload: {
+      password: "clave-corta-operador",
+      roundId: 1,
+    } });
+    assert.equal(extra.statusCode, 400);
+    assert.equal(extra.json().error.code, "VALIDATION_ERROR");
+    assert.equal(extra.headers["set-cookie"], undefined);
+
+    const missing = await app.inject({ method: "POST", url: "/operador/sesion", payload: { other: "value" } });
+    assert.equal(missing.statusCode, 400);
+  } finally { await app.close(); }
+});
+
 test("una OPERATOR_PASSWORD separada invalida el login con la apiKey larga", async () => {
   const { app } = await createBackendApp({ apiKey, operatorPassword: "otra-clave-operador", logger: false });
   try {

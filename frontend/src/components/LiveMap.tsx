@@ -1,6 +1,9 @@
+import { buildGraphBounds } from "../lib/map-bounds";
 import { Fragment, useMemo } from "react";
 import {
+  AttributionControl,
   Circle,
+  CircleMarker,
   MapContainer,
   Marker,
   Pane,
@@ -14,6 +17,9 @@ import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld";
 import { ZOMBIE_COLOR, cameraIcon, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
 import type { GraphEdge, GraphNode, RoadType, Zone } from "../types/contracts";
+import { SelectedSegment, type SegmentSelection } from "./SelectedSegment";
+import { MantaMapArea } from "./MantaMapArea";
+import { MapSelectionFocus } from "./MapSelectionFocus";
 
 const ROAD_COLOR: Record<RoadType, string> = {
   avenida: "#9aa8c0",
@@ -28,31 +34,6 @@ function buildNodeIndex(
   const index = new Map<string, LatLngTuple>();
   for (const n of nodos) index.set(n.id, [n.lat, n.lng]);
   return index;
-}
-
-/**
- * Caja que encierra todos los nodos del grafo. Se usa para encuadrar el
- * mapa a su extensión real en vez de centrar en graph.nodos[0] (arbitrario,
- * puede quedar en un borde) con un zoom fijo adivinado.
- */
-function buildBounds(
-  nodos: { lat: number; lng: number }[],
-): [LatLngTuple, LatLngTuple] | null {
-  if (nodos.length === 0) return null;
-  let south = nodos[0].lat;
-  let north = nodos[0].lat;
-  let west = nodos[0].lng;
-  let east = nodos[0].lng;
-  for (const n of nodos) {
-    if (n.lat < south) south = n.lat;
-    if (n.lat > north) north = n.lat;
-    if (n.lng < west) west = n.lng;
-    if (n.lng > east) east = n.lng;
-  }
-  return [
-    [south, west],
-    [north, east],
-  ];
 }
 
 /** Centroide aproximado por zona, solo para rotular el mapa (no es dato del juego). */
@@ -115,11 +96,13 @@ function findPreviousNodeId(
  * refugios con ocupación, sobrevivientes, zombies, hordas, radio de
  * corredor y dormidos atenuados. No decide nada: solo pinta el snapshot.
  */
-export function LiveMap() {
+export function LiveMap({ selection = null }: { selection?: SegmentSelection | null }) {
   const graph = useWorldStore((s) => s.graph);
   const snapshot = useWorldStore((s) => s.currentSnapshot);
   const previousSnapshot = useWorldStore((s) => s.previousSnapshot);
   const mismatch = useWorldStore(hasGraphVersionMismatch);
+  const selectedEntity = useWorldStore(s => s.selection);
+  const selectEntity = useWorldStore(s => s.selectEntity);
   const { progress } = useInterpolatedWorld();
 
   const nodeIndex = useMemo(
@@ -137,7 +120,7 @@ export function LiveMap() {
   }, [graph]);
   const zoneLabels = useMemo(() => (graph ? buildZoneLabels(graph.nodos) : []), [graph]);
   const bounds = useMemo(
-    () => (graph ? buildBounds(graph.nodos) : null),
+    () => (graph ? buildGraphBounds(graph.nodos) : null),
     [graph],
   );
 
@@ -164,14 +147,16 @@ export function LiveMap() {
     );
   }
 
+  if (!bounds) return <div role="alert">El grafo no contiene nodos para encuadrar Manta.</div>;
+
   return (
-    // bounds: encuadra automáticamente toda la extensión real del grafo en
-    // vez de adivinar center/zoom. El esquema de SPEC.md §2.1 exige
-    // nodos.minItems=250, así que bounds nunca es null aquí; el "!" solo
-    // documenta esa garantía de datos, no una suposición nueva.
     <MapContainer
-      bounds={bounds!}
+      attributionControl={false}
+      bounds={bounds}
       boundsOptions={{ padding: [24, 24] }}
+      maxBoundsViscosity={1}
+      maxZoom={19}
+      zoomSnap={0.25}
       className="h-full w-full bg-night-900"
     >
       {/* CartoDB Dark Matter dejó de servirse gratis sin cuenta (devuelve
@@ -180,9 +165,15 @@ export function LiveMap() {
           ya verificado) y se invierte a oscuro por CSS en .leaflet-tile-pane
           — una técnica estándar, no afecta a las capas de entidades. */}
       <TileLayer
-        attribution={graph.metadata.osmAttribution}
+        attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        maxZoom={19}
+        noWrap
       />
+      <AttributionControl position="bottomright" prefix={false} />
+      <MantaMapArea bounds={bounds} />
+      <MapSelectionFocus graph={graph} />
+      <SelectedSegment graph={graph} selection={selection} />
 
       {/* Rótulos de zona, solo orientación visual */}
       {zoneLabels.map(({ zona, center: zoneCenter }) => (
@@ -202,6 +193,7 @@ export function LiveMap() {
           <Polyline
             key={edge.id}
             positions={[from, to]}
+            eventHandlers={{ click: () => selectEntity({ kind: "segment", id: edge.segmentoId }) }}
             pathOptions={{ color: ROAD_COLOR[edge.tipo], weight: 2, opacity: 0.55 }}
           />
         );
@@ -240,13 +232,13 @@ export function LiveMap() {
         const position = nodeIndex.get(observation.nodeId);
         if (!position) return null;
         return (
-          <Circle key={`${observation.cameraId}-${observation.zombieId}`} center={position} radius={55}
+          <CircleMarker key={`${observation.cameraId}-${observation.zombieId}`} center={position} radius={10}
             pathOptions={{ color: "#ff5a5a", fillColor: "#ff5a5a", fillOpacity: 0.16, weight: 2 }}>
             <Popup>
               Detección simulada · {observation.zombieId}<br />
               Turno {observation.detectedTurnId} · riesgo hasta el turno {observation.expiresAfterTurnId - 1}
             </Popup>
-          </Circle>
+          </CircleMarker>
         );
       })}
 
@@ -276,6 +268,7 @@ export function LiveMap() {
                       opacity: 1,
                       dashArray: "8 6",
                     }}
+                    eventHandlers={{ click: () => selectEntity({ kind: "segment", id: blocked.segmentoId }) }}
                   >
                     <Tooltip sticky>Segmento cerrado · {blocked.segmentoId}</Tooltip>
                     <Popup>
@@ -297,7 +290,11 @@ export function LiveMap() {
         const live = snapshot?.shelters.find((s) => s.id === refugio.id);
         const ocupacion = live?.ocupantes.length ?? 0;
         return (
-          <Marker key={refugio.id} position={pos} icon={shelterIcon()}>
+          <Marker key={refugio.id} position={pos} icon={shelterIcon()} title={`Refugio ${refugio.id}`} alt={`Refugio ${refugio.id}`}
+            eventHandlers={{
+              click: () => selectEntity({ kind: "shelter", id: refugio.id }),
+              keypress: event => { if (event.originalEvent.key === "Enter") selectEntity({ kind: "shelter", id: refugio.id }); },
+            }}>
             <Popup>
               Refugio {refugio.id}: {ocupacion}/{refugio.capacidad}
             </Popup>
@@ -317,13 +314,26 @@ export function LiveMap() {
         );
         if (!pos) return null;
         return (
-          <Marker key={survivor.id} position={pos} icon={survivorIcon(survivor.estado)}>
+          <Marker key={survivor.id} position={pos} icon={survivorIcon(survivor.estado)} title={`Sobreviviente ${survivor.id}`} alt={`Sobreviviente ${survivor.id}`}
+            eventHandlers={{
+              click: () => selectEntity({ kind: "survivor", id: survivor.id }),
+              keypress: event => { if (event.originalEvent.key === "Enter") selectEntity({ kind: "survivor", id: survivor.id }); },
+            }}>
             <Popup>
               {survivor.id} — {survivor.estado}
             </Popup>
           </Marker>
         );
       })}
+
+      {selectedEntity?.kind !== "segment" && selectedEntity && (() => {
+        const nodeId = selectedEntity.kind === "survivor"
+          ? snapshot?.survivors.find(s => s.id === selectedEntity.id)?.nodeId
+          : graph.refugios.find(s => s.id === selectedEntity.id)?.nodoId;
+        const position = nodeId ? nodeIndex.get(nodeId) : undefined;
+        return position ? <CircleMarker center={position} radius={17} interactive={false}
+          pathOptions={{ color: "#22d3ee", weight: 3, fillOpacity: 0 }} /> : null;
+      })()}
 
       {/* Zombies: caminante/corredor interpolan, horda/dormido son inmóviles */}
       {snapshot?.zombies.map((zombie) => {

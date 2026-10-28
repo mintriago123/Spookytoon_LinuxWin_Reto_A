@@ -2,7 +2,11 @@ import type { Immutable, WorldState } from "../simulator/types.ts";
 
 export const DEFAULT_AWS_REGION = "us-east-2";
 export const DEFAULT_DYNAMODB_TABLE = "spookython-manta-state";
-export type StoredGame = Omit<WorldState, "graph" | "activeTurn" | "activeTurnId"> & { graphVersion: string };
+// Checkpoints anteriores a 3D no incluían la huella. Se conserva compatibilidad explícita.
+export type StoredGame = Omit<WorldState, "graph" | "activeTurn" | "activeTurnId" | "configurationIdentity"> & {
+  graphVersion: string;
+  configurationIdentity?: WorldState["configurationIdentity"];
+};
 export interface PersistenceAdapter {
   initialize(): Promise<void>;
   isReady(): boolean;

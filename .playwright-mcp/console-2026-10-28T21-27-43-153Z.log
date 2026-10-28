@@ -1,0 +1,39 @@
+[    1536ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[    1636ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[    1637ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[    1643ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5173/favicon.ico:0
+[  203551ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[  255068ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[  870310ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5180/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[  870756ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3010/operador/sesion:0
+[  870764ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3010/operador/sesion:0
+[  870828ms] [ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ http://localhost:5180/favicon.ico:0
+[  908543ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5180/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[  914490ms] [ERROR] Failed to load resource: the server responded with a status of 400 (Bad Request) @ http://localhost:3010/simulador/bloquear-arista:0
+[  994917ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5180/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1244629ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5180/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1291289ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5180/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1465190ms] [LOG] [vite] server connection lost. Polling for restart... @ http://localhost:5180/@vite/client:559
+[ 1465264ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1466110ms] [ERROR] WebSocket connection to 'ws://localhost:3010/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/src/lib/world-connection.ts:28
+[ 1466285ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1467301ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1468128ms] [ERROR] WebSocket connection to 'ws://localhost:3010/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/src/lib/world-connection.ts:28
+[ 1468332ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1469359ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1470379ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1471400ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1472149ms] [ERROR] WebSocket connection to 'ws://localhost:3010/ws' failed: Error in connection establishment: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/src/lib/world-connection.ts:28
+[ 1472413ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1473418ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1474443ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1475463ms] [ERROR] Failed to load resource: net::ERR_CONNECTION_REFUSED @ http://localhost:5180/:0
+[ 1476584ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1476690ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[ 1476704ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[ 1578636ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1578693ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[ 1578694ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[ 1721440ms] [INFO] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold @ http://localhost:5173/node_modules/.vite/deps/chunk-TYILIMWK.js?v=d22a9c24:21550
+[ 1721493ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0
+[ 1721493ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3002/operador/sesion:0

@@ -165,11 +165,11 @@ test("HTTP y WS publican las mismas 23 métricas, incluidas disponibilidad y efi
   } finally { await env.app.close(); }
 });
 
-test("antes de crear partida GET devuelve 503 no-store y WS conecta sin mundo inventado", async () => {
+test("antes de crear partida GET devuelve 200 idle no-store y WS conecta sin mundo inventado", async () => {
   const env = await application();
   try {
     const response = await env.app.inject({ method: "GET", url: "/estado" });
-    assert.equal(response.statusCode, 503); assert.equal(response.json().error.code, "GAME_NOT_STARTED");
+    assert.equal(response.statusCode, 200); assert.deepEqual(response.json(), { status: "idle" });
     assert.equal(response.headers["cache-control"], "no-store");
     const client = await connect(env.wsUrl); await flush();
     assert.deepEqual(client.messages, []);
@@ -243,7 +243,7 @@ test("CORS y upgrade aceptan solo el origen configurado; no requieren clave de c
     const denied = await env.app.inject({ method: "GET", url: "/estado", headers: { origin: "https://other.test" } });
     assert.equal(denied.statusCode, 403); assert.equal(denied.headers["access-control-allow-origin"], undefined);
     const allowed = await env.app.inject({ method: "GET", url: "/estado", headers: { origin: "https://frontend.test" } });
-    assert.equal(allowed.statusCode, 503); assert.equal(allowed.headers["access-control-allow-origin"], "https://frontend.test");
+    assert.equal(allowed.statusCode, 200); assert.equal(allowed.headers["access-control-allow-origin"], "https://frontend.test");
     const options = await env.app.inject({ method: "OPTIONS", url: "/estado", headers: { origin: "https://frontend.test" } });
     assert.equal(options.statusCode, 204); assert.equal(options.headers["access-control-allow-methods"], "GET");
     await connect(env.wsUrl, "https://frontend.test");

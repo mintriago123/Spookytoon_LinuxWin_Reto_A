@@ -1,45 +1,30 @@
 import { useWorldStore } from "../state/world-store";
 
-/**
- * Ocupación de refugios como barras, además del popup en LiveMap (boceto
- * de diseño del equipo, "Centro de mando"). Lee directo del snapshot; no
- * decide admisión ni capacidad — eso es responsabilidad del Simulador.
- */
+/** Always-visible summary: occupancy and reservations remain distinct. */
 export function ShelterOccupancy() {
-  const graph = useWorldStore((s) => s.graph);
-  const shelters = useWorldStore((s) => s.currentSnapshot?.shelters);
-
-  if (!graph || graph.refugios.length === 0) return null;
-
-  return (
-    <div className="glass flex flex-col gap-2 rounded-lg p-3 text-xs text-slate-100">
-      <span className="font-semibold uppercase tracking-wide text-accent-cyan/85">
-        Refugios · ocupación
-      </span>
-      <ul className="flex flex-col gap-2">
-        {graph.refugios.map((refugio) => {
-          const live = shelters?.find((s) => s.id === refugio.id);
-          const ocupacion = live?.ocupantes.length ?? 0;
-          const lleno = ocupacion >= refugio.capacidad;
-          const pct = Math.min(100, (ocupacion / refugio.capacidad) * 100);
-          return (
-            <li key={refugio.id} className="flex flex-col gap-1">
-              <div className="flex items-center justify-between">
-                <span>{refugio.id}</span>
-                <span className={lleno ? "text-accent-rose" : "text-slate-300"}>
-                  {ocupacion}/{refugio.capacidad} {lleno ? "lleno" : ""}
-                </span>
-              </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#14323a]">
-                <div
-                  className={`h-full rounded-full ${lleno ? "bg-accent-rose" : "bg-accent-cyan"}`}
-                  style={{ width: `${pct}%` }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
+  const graph = useWorldStore(s => s.graph);
+  const shelters = useWorldStore(s => s.currentSnapshot?.shelters);
+  const selectEntity = useWorldStore(s => s.selectEntity);
+  if (!graph?.refugios.length) return null;
+  const reservations = shelters && graph.refugios.every(refugio => shelters.some(s => s.id === refugio.id))
+    ? graph.refugios.reduce((sum, refugio) => sum + shelters.find(s => s.id === refugio.id)!.reservados.length, 0) : null;
+  return <section className="shelter-overview" aria-label="Resumen de refugios">
+    <h3>Refugios · ocupación {reservations !== null && reservations > 0 && <span>{reservations} reservas</span>}</h3>
+    <ul>{graph.refugios.map(refugio => {
+      const live = shelters?.find(s => s.id === refugio.id);
+      const name = refugio.id.replace(/^R-/, "").toLocaleLowerCase("es").replace(/^./, letter => letter.toLocaleUpperCase("es"));
+      const full = live ? live.ocupantes.length >= live.capacidad : false;
+      const percent = live ? Math.min(100, live.ocupantes.length / live.capacidad * 100) : 0;
+      return <li key={refugio.id} className={full ? "shelter-full" : ""}>
+        <button type="button" className="shelter-bar-label" title={refugio.id} onClick={() => selectEntity({ kind: "shelter", id: refugio.id })}>
+          <span>{name}</span><strong>{live ? `${live.ocupantes.length}/${live.capacidad}${full ? " · Lleno" : ""}` : "Sin dato"}</strong>
+        </button>
+        <div className="shelter-bar" role="progressbar" aria-label={`Ocupación de ${name}`} aria-valuemin={0}
+          aria-valuemax={live?.capacidad ?? refugio.capacidad} aria-valuenow={live?.ocupantes.length}
+          aria-valuetext={live ? `${live.ocupantes.length} ocupantes de ${live.capacidad} plazas` : "Ocupación sin dato"}>
+          <span style={{ width: `${percent}%` }} />
+        </div>
+      </li>;
+    })}</ul>
+  </section>;
 }
