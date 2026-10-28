@@ -1,0 +1,15 @@
+{
+  "verifiedAt": "2026-10-28T08:37:20.920Z",
+  "url": "https://3-128-78-190.sslip.io",
+  "commit": "78cff56dadc61a4cad0c560af48bded612b1cefc",
+  "frontendHttp": 200,
+  "jsAssetHttp": 200,
+  "jsContentType": "text/javascript; charset=utf-8",
+  "bundle": "/assets/index-DFPuzLwe.js",
+  "graphSha256": "7c010a06aef690403e9578cdbfc7cddafcac2102e9dc88a2dc28a03f33ce3b73",
+  "graphMatchesBackend": true,
+  "gameId": "deploy-prueba-78cff56",
+  "turnId": 4,
+  "status": "paused",
+  "cameras": 4
+}
