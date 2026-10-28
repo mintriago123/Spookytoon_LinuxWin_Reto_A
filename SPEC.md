@@ -268,6 +268,10 @@ export interface TelemetryMetrics {
   activeSurvivors: number; bittenSurvivors: number; evacuatedSurvivors: number;
   activeZombies: number; wsClients: number; snapshotQueueDepth: number;
   lastSnapshotTurnId: number | null;
+  routeErrors: number; routeAvailabilityPercent: number;
+  survivalRatePercent: number; activeSurvivorsPercent: number;
+  bittenSurvivorsPercent: number; evacuatedSurvivorsPercent: number;
+  turnDurationMs: number; turnBudgetUsedPercent: number; turnEfficiencyPercent: number;
 }
 export interface WorldState {
   gameId: string; roundId: 1 | 2 | 3; status: GameStatus; phase: TurnPhase;
@@ -751,7 +755,7 @@ components:
         metrics:
           type: object
           additionalProperties: false
-          required: [routeSamples, routeLatencyP50Ms, routeLatencyP95Ms, routeLatencyP99Ms, routeTimeouts, invalidRouteResponses, deadlineMisses, activeSurvivors, bittenSurvivors, evacuatedSurvivors, activeZombies, wsClients, snapshotQueueDepth, lastSnapshotTurnId]
+          required: [routeSamples, routeLatencyP50Ms, routeLatencyP95Ms, routeLatencyP99Ms, routeTimeouts, invalidRouteResponses, deadlineMisses, activeSurvivors, bittenSurvivors, evacuatedSurvivors, activeZombies, wsClients, snapshotQueueDepth, lastSnapshotTurnId, routeErrors, routeAvailabilityPercent, survivalRatePercent, activeSurvivorsPercent, bittenSurvivorsPercent, evacuatedSurvivorsPercent, turnDurationMs, turnBudgetUsedPercent, turnEfficiencyPercent]
           properties:
             routeSamples: { type: integer, minimum: 0 }
             routeLatencyP50Ms: { type: number, minimum: 0 }
@@ -767,6 +771,15 @@ components:
             wsClients: { type: integer, minimum: 0 }
             snapshotQueueDepth: { type: integer, minimum: 0 }
             lastSnapshotTurnId: { type: [integer, "null"] }
+            routeErrors: { type: integer, minimum: 0 }
+            routeAvailabilityPercent: { type: number, minimum: 0, maximum: 100 }
+            survivalRatePercent: { type: number, minimum: 0, maximum: 100 }
+            activeSurvivorsPercent: { type: number, minimum: 0, maximum: 100 }
+            bittenSurvivorsPercent: { type: number, minimum: 0, maximum: 100 }
+            evacuatedSurvivorsPercent: { type: number, minimum: 0, maximum: 100 }
+            turnDurationMs: { type: number, minimum: 0 }
+            turnBudgetUsedPercent: { type: number, minimum: 0 }
+            turnEfficiencyPercent: { type: number, minimum: 0, maximum: 100 }
     TurnUpdate:
       type: object
       additionalProperties: false

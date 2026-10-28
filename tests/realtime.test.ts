@@ -21,7 +21,10 @@ const start = { gameId: "realtime-fixture", roundId: 1 as const, seed: "private-
 const apiKey = "fixture-realtime-key";
 const publicMetricKeys = ["routeSamples", "routeLatencyP50Ms", "routeLatencyP95Ms", "routeLatencyP99Ms",
   "routeTimeouts", "invalidRouteResponses", "deadlineMisses", "activeSurvivors", "bittenSurvivors",
-  "evacuatedSurvivors", "activeZombies", "wsClients", "snapshotQueueDepth", "lastSnapshotTurnId"] as const;
+  "evacuatedSurvivors", "activeZombies", "wsClients", "snapshotQueueDepth", "lastSnapshotTurnId",
+  "routeErrors", "routeAvailabilityPercent", "survivalRatePercent", "activeSurvivorsPercent",
+  "bittenSurvivorsPercent", "evacuatedSurvivorsPercent", "turnDurationMs", "turnBudgetUsedPercent",
+  "turnEfficiencyPercent"] as const;
 class ManualClock implements SimulationClock {
   time = 0;
   private waiters = new Set<{ tick: number; finish: () => void }>();
@@ -104,19 +107,19 @@ test("proyección pública es cerrada, independiente e inmutable y no filtra dat
   const world = fixture().initial();
   Object.assign(world.survivors[0], { privateField: "do-not-leak" });
   Object.assign(world.metrics, { privateField: "do-not-leak" });
-  const internalMetrics = { routeErrors: 7, routeAvailabilityPercent: 91, survivalRatePercent: 85,
+  const additionalMetrics = { routeErrors: 7, routeAvailabilityPercent: 91, survivalRatePercent: 85,
     activeSurvivorsPercent: 60, bittenSurvivorsPercent: 15, evacuatedSurvivorsPercent: 25,
     turnDurationMs: 100, turnBudgetUsedPercent: 5, turnEfficiencyPercent: 95 };
-  Object.assign(world.metrics, internalMetrics);
+  Object.assign(world.metrics, additionalMetrics);
   const metricsBefore = structuredClone(world.metrics);
   const snapshot = createWorldSnapshot(world);
   assert.deepEqual(Object.keys(snapshot).sort(), ["schemaVersion", "gameId", "roundId", "status", "turnId", "worldVersion",
     "graphVersion", "updatedAt", "zombies", "survivors", "shelters", "blockedEdges", "metrics"].sort());
-  assert.equal(Object.keys(snapshot.metrics).length, 14);
+  assert.equal(Object.keys(snapshot.metrics).length, 23);
   assert.deepEqual(Object.keys(snapshot.metrics).sort(), [...publicMetricKeys].sort());
   for (const key of publicMetricKeys) assert.equal(snapshot.metrics[key], metricsBefore[key]);
   assert.deepEqual(world.metrics, metricsBefore, "Proyectar no modifica métricas internas");
-  for (const key of Object.keys(internalMetrics)) assert(!Object.hasOwn(snapshot.metrics, key));
+  for (const [key, value] of Object.entries(additionalMetrics)) assert.equal(snapshot.metrics[key as keyof typeof additionalMetrics], value);
   for (const field of ["privateField", "rngSeed", "randomState", "pendingCityEvents", "pause", "routing", "activeTurn", "graph"]) {
     assert(!JSON.stringify(snapshot).includes(`"${field}"`));
   }
@@ -130,7 +133,7 @@ test("proyección pública es cerrada, independiente e inmutable y no filtra dat
   assert.throws(() => { (snapshot.metrics as TelemetryMetrics).activeSurvivors = 2; }, TypeError);
 });
 
-test("HTTP y WS publican las mismas 14 métricas del SPEC y conservan extras solo internamente", async () => {
+test("HTTP y WS publican las mismas 23 métricas, incluidas disponibilidad y eficiencia", async () => {
   const env = await application();
   try {
     const client = await connect(env.wsUrl);
@@ -144,7 +147,7 @@ test("HTTP y WS publican las mismas 14 métricas del SPEC y conservan extras sol
       const internal = env.runtime.getCommittedWorld()!.metrics;
       for (const key of publicMetricKeys) assert.equal(update.world.metrics[key], internal[key]);
       assert(Object.hasOwn(internal, "turnDurationMs"));
-      assert(!Object.hasOwn(update.world.metrics, "turnDurationMs"));
+      assert(Object.hasOwn(update.world.metrics, "turnDurationMs"));
       assert(Object.isFrozen(env.runtime.getCommittedSnapshot()!.metrics));
       if (turnId === 0) env.clock.advance(2_000);
     }

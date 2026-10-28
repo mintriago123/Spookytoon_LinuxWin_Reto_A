@@ -164,7 +164,7 @@ export interface WorldSnapshot {
   survivors: RouteSurvivor[];
   shelters: RouteShelter[];
   blockedEdges: RouteBlockedEdge[];
-  metrics: TelemetryMetrics;
+  metrics: Required<TelemetryMetrics>;
 }
 
 /** Se construye únicamente después del commit; el tipo no hace el commit. */
