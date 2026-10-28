@@ -29,6 +29,7 @@ flowchart LR
 - [Checklist de lanzamiento](docs/launch-checklist.md): prioridades, aceptación y evidencias pendientes.
 - [Costos AWS](docs/costos.md): plantilla para estimar región y configuración reales.
 - [Refugios provisionales](docs/refugios-provisionales.md): sitios del escenario aceptados y alternativas con mejor potencial de defensa.
+- [Complemento «Ojos de Águila»](docs/complemento-ojos-de-aguila.md): contexto de videovigilancia en Manta y fixture JSON de sensores simulados.
 - [Módulos Backend](backend/src/modules/README.md): límites y ownership.
 - [Michael](docs/team/michael/README.md), [Maykel](docs/team/maykel/README.md), [Kristhian](docs/team/kristhian/README.md): guías por persona.
 - [Extracción del grafo](scripts/README.md).
