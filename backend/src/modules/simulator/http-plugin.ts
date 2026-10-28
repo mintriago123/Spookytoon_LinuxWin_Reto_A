@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { parseEdgeCommand, parsePauseCommand, parseResumeCommand, parseStartCommand, SimulatorControlError } from "./controls.ts";
+import { parseEdgeCommand, parsePauseCommand, parseResumeCommand, parseStartCommand, parseRestartCommand, parsePreparationCommand, SimulatorControlError } from "./controls.ts";
 import type { SimulationRuntime } from "./simulation-runtime.ts";
 import { createOperatorSessionStore, OPERATOR_SESSION_COOKIE, parseCookies } from "./operator-session.ts";
 
@@ -47,13 +47,21 @@ export const simulatorPlugin: FastifyPluginAsync<{
   // Login/logout quedan fuera del contexto protegido de abajo a propósito:
   // sin ellos el operador nunca podría obtener la cookie de sesión.
   app.post("/operador/sesion", async (request, reply) => {
-    const body = request.body as { password?: unknown } | undefined;
-    // Tope alineado con OperadorSesionRequest.password (maxLength 256 en
-    // openapi.yaml): un valor fuera de rango se trata igual que una
-    // contraseña incorrecta, sin distinguir el motivo en la respuesta.
-    const password = typeof body?.password === "string" && body.password.length <= 256 ? body.password : "";
+    const body: unknown = request.body;
+    const bodyRecord = typeof body === "object" && body !== null && !Array.isArray(body)
+      ? body as Record<string, unknown>
+      : null;
+    const fields = bodyRecord ? Object.keys(bodyRecord) : [];
+    const candidate = bodyRecord?.password;
+    const password = fields.length === 1 && fields[0] === "password" &&
+      typeof candidate === "string" && candidate.length >= 1 && candidate.length <= 256
+      ? candidate
+      : null;
+    if (password === null) {
+      return reply.code(400).send({ error: { code: "VALIDATION_ERROR", message: "El cuerpo debe contener solo una contraseña válida", requestId: request.id } });
+    }
     const hash = createHash("sha256").update(password).digest();
-    if (!password || !timingSafeEqual(hash, expectedPasswordHash)) {
+    if (!timingSafeEqual(hash, expectedPasswordHash)) {
       return reply.code(401).send({ error: { code: "UNAUTHORIZED", message: "Contraseña de operador incorrecta", requestId: request.id } });
     }
     setSessionCookie(request, reply, sessions.create());
@@ -83,7 +91,19 @@ export const simulatorPlugin: FastifyPluginAsync<{
     // Permite al Frontend confirmar si la cookie de sesión sigue vigente
     // sin disparar un control real (RoundControls la llama al montar).
     protectedApp.get("/operador/sesion", async (_request, reply) => reply.code(204).send());
+    protectedApp.get("/simulador/rondas", async (_request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.getRoundCatalog();
+    });
+    protectedApp.get<{ Params: { gameId: string } }>("/simulador/configuracion/:gameId", async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.getGameConfiguration(request.params.gameId);
+    });
     protectedApp.post("/simulador/iniciar", async (request, reply) => reply.code(202).send(options.runtime.start(parseStartCommand(request.body))));
+    protectedApp.post("/simulador/prevalidar", async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.prevalidate(parsePreparationCommand(request.body));
+    });
     protectedApp.post("/simulador/reanudar", async (request, reply) => {
       const command = parseResumeCommand(request.body);
       const current = options.runtime.getCommittedWorld();
@@ -92,7 +112,7 @@ export const simulatorPlugin: FastifyPluginAsync<{
       }
       return reply.code(202).send(options.runtime.resume({ ...command, seed: command.seed ?? current.rngSeed }));
     });
-    protectedApp.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseStartCommand(request.body))));
+    protectedApp.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseRestartCommand(request.body))));
     protectedApp.post("/simulador/pausar", async (request, reply) => reply.code(202).send(options.runtime.pause(parsePauseCommand(request.body).reason)));
     protectedApp.post("/simulador/bloquear-arista", async (request, reply) => reply.code(202).send(options.runtime.scheduleEdge(parseEdgeCommand(request.body))));
   });

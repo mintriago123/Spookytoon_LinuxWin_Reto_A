@@ -5,6 +5,72 @@ info:
   description: Contrato del backend EC2 en Ohio. API key solo para operador y routing
     interno; nunca incluirla en el bundle web.
 paths:
+  /simulador/configuracion/{gameId}:
+    get:
+      operationId: consultarConfiguracionGuardada
+      description: Configuración congelada de la partida actual, incluida su semilla. Requiere identidad exacta y autenticación de operador. La huella cubre grafo y ronda; no identifica cámaras ni versión del software. No modifica la partida.
+      security:
+      - ApiKey: []
+      parameters:
+      - name: gameId
+        in: path
+        required: true
+        schema: { type: string, minLength: 1, maxLength: 128 }
+      responses:
+        '200':
+          description: Configuración guardada de la partida solicitada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GameConfiguration'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+  /simulador/prevalidar:
+    post:
+      operationId: prevalidarPartida
+      description: Comprueba una partida nueva sin crear mundo, consumir RNG, iniciar reloj ni escribir persistencia. La huella vincula identidad, semilla, grafo, configuración, cámaras y descriptor RNG; no reserva el derecho a iniciar. Iniciar vuelve a comprobar el estado y la huella.
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PreparationRequest'
+      responses:
+        '200':
+          description: Preparación válida en el momento de la consulta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PreparationResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+  /simulador/rondas:
+    get:
+      operationId: consultarRondas
+      description: Catálogo de presets efectivos del servidor. Solo lectura; no crea partida ni reloj. Admite la misma sesión de operador que los controles. El inicio valida nuevamente la configuración vigente.
+      security:
+      - ApiKey: []
+      responses:
+        '200':
+          description: Resumen de las tres rondas para el grafo cargado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoundCatalog'
+        '401':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
   /paso:
     post:
       operationId: calcularPaso
@@ -376,6 +442,7 @@ paths:
   /simulador/reiniciar:
     post:
       operationId: reiniciarSimulador
+      description: Sustituye una partida pausada o completada por una identidad nueva. Sin restart conserva el comportamiento previo con preset vigente. restart identifica el origen; reuseSavedConfig conserva su ronda y semilla desde posiciones iniciales, sin reproducir órdenes manuales. La preparación y construcción se completan antes de sustituir el mundo.
       security:
       - ApiKey: []
       requestBody:
@@ -383,7 +450,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IniciarRequest'
+              $ref: '#/components/schemas/RestartRequest'
       responses:
         '202':
           description: Ronda aceptada
@@ -409,8 +476,6 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-      description: Requiere partida pausada o completada y gameId nuevo; crea estado
-        inicial y conserva el historial anterior.
   /ws:
     get:
       operationId: conectarWebSocket
@@ -547,6 +612,58 @@ components:
           type: string
           minLength: 1
           maxLength: 256
+        preparationRevision:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          description: Huella opcional para compatibilidad con clientes anteriores. El frontend la obtiene mediante prevalidar. Si no coincide, responde 409 PREPARATION_CONFLICT antes de crear o sustituir la partida.
+    PreparationRequest:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId, seed, graphVersion]
+      properties:
+        gameId: { type: string, minLength: 1, maxLength: 128 }
+        roundId: { type: integer, enum: [1, 2, 3] }
+        seed: { type: string, minLength: 1, maxLength: 256 }
+        graphVersion: { type: string, minLength: 1, maxLength: 256 }
+        restart:
+          $ref: '#/components/schemas/RestartSource'
+    PreparationResponse:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId, seed, graphVersion, preparationRevision, round]
+      properties:
+        gameId: { type: string, minLength: 1, maxLength: 128 }
+        roundId: { type: integer, enum: [1, 2, 3] }
+        seed: { type: string, minLength: 1, maxLength: 256 }
+        graphVersion: { type: string, minLength: 1, maxLength: 256 }
+        preparationRevision: { type: string, pattern: '^[a-f0-9]{64}$' }
+        round:
+          $ref: '#/components/schemas/RoundPresetSummary'
+        restart:
+          $ref: '#/components/schemas/RestartSource'
+    RestartSource:
+      type: object
+      additionalProperties: false
+      required: [sourceGameId, sourceConfigurationRevision, reuseSavedConfig]
+      properties:
+        sourceGameId: { type: string, minLength: 1, maxLength: 128 }
+        sourceConfigurationRevision: { type: string, pattern: '^[a-f0-9]{64}$' }
+        reuseSavedConfig: { type: boolean }
+    RestartRequest:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId, seed]
+      properties:
+        gameId:
+          $ref: '#/components/schemas/IniciarRequest/properties/gameId'
+        roundId:
+          $ref: '#/components/schemas/IniciarRequest/properties/roundId'
+        seed:
+          $ref: '#/components/schemas/IniciarRequest/properties/seed'
+        preparationRevision:
+          $ref: '#/components/schemas/IniciarRequest/properties/preparationRevision'
+        restart:
+          $ref: '#/components/schemas/RestartSource'
     IniciarResponse:
       type: object
       additionalProperties: false
@@ -568,6 +685,82 @@ components:
         nextTurnId:
           type: integer
           minimum: 1
+    ConfigurationIdentity:
+      type: object
+      additionalProperties: false
+      required: [format, graphVersion, revision, provenance]
+      properties:
+        format: { const: spookython-round-configuration-v1 }
+        graphVersion: { type: string, minLength: 1 }
+        revision: { type: string, pattern: '^[a-f0-9]{64}$' }
+        provenance:
+          type: string
+          enum: [recorded-at-start, derived-from-legacy-checkpoint]
+          description: Un checkpoint antiguo sin huella se marca derivado al recuperar; no acredita el contenido original del grafo.
+    GameConfiguration:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId, graphVersion, configurationIdentity, random, round]
+      properties:
+        gameId: { type: string, minLength: 1, maxLength: 128 }
+        roundId: { type: integer, enum: [1, 2, 3] }
+        graphVersion: { type: string, minLength: 1 }
+        configurationIdentity:
+          $ref: '#/components/schemas/ConfigurationIdentity'
+        random:
+          type: object
+          additionalProperties: false
+          required: [seed, algorithm, algorithmVersion, strategy]
+          properties:
+            seed: { type: string, minLength: 1, maxLength: 256 }
+            algorithm: { const: sha256-counter }
+            algorithmVersion: { const: '1' }
+            strategy: { const: per-zombie-turn-draw }
+        round:
+          $ref: '#/components/schemas/RoundPresetSummary'
+    RoundCatalog:
+      type: object
+      additionalProperties: false
+      required: [graphVersion, rounds]
+      properties:
+        graphVersion: { type: string, minLength: 1 }
+        rounds:
+          type: array
+          minItems: 3
+          maxItems: 3
+          items:
+            $ref: '#/components/schemas/RoundPresetSummary'
+    RoundPresetSummary:
+      type: object
+      additionalProperties: false
+      required: [roundId, durationMs, turnIntervalMs, turnCount, survivorCount, zombieCounts, eventPlan]
+      properties:
+        roundId: { type: integer, enum: [1, 2, 3] }
+        durationMs: { type: integer, const: 300000 }
+        turnIntervalMs: { type: integer, const: 2000 }
+        turnCount: { type: integer, const: 150 }
+        survivorCount: { type: integer, enum: [20, 80, 200] }
+        zombieCounts:
+          type: object
+          additionalProperties: false
+          required: [caminante, corredor, horda, dormido]
+          properties:
+            caminante: { type: integer, minimum: 0 }
+            corredor: { type: integer, minimum: 0 }
+            horda: { type: integer, minimum: 0 }
+            dormido: { type: integer, minimum: 0 }
+        eventPlan:
+          type: array
+          maxItems: 2
+          items:
+            type: object
+            additionalProperties: false
+            required: [eventId, edgeId, effectiveTurnId, reason]
+            properties:
+              eventId: { type: string, minLength: 1, maxLength: 256 }
+              edgeId: { type: string, minLength: 1, maxLength: 256 }
+              effectiveTurnId: { type: integer, minimum: 1, maximum: 150 }
+              reason: { type: string, enum: [colapso-puente, bloqueo-calle] }
     OperadorSesionRequest:
       type: object
       additionalProperties: false

@@ -139,8 +139,8 @@ export async function createBackendApp(options: BackendOptions = {}) {
     } });
   const rounds = { ...createRoundPresets(graph), ...options.simulator?.rounds };
   const simulator = new SimulationRuntime({ ...options.simulator, cameras, rounds,
-    initialMetrics: options.simulator?.initialMetrics ?? (roundId =>
-      createInitialTelemetryMetrics(validateRoundConfig(rounds[roundId], graph))),
+    initialMetrics: options.simulator?.initialMetrics ?? ((roundId, config) =>
+      createInitialTelemetryMetrics(config ?? validateRoundConfig(rounds[roundId], graph))),
     graph, syncTimeoutMs: 500,
     getPersistenceProgress: () => { const stats = queue.stats(); return {
       snapshotQueueDepth: stats.depth, lastSnapshotTurnId: stats.lastSnapshotTurnId,

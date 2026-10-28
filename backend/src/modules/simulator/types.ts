@@ -48,6 +48,14 @@ export interface RoundConfig {
   }>;
 }
 
+/** Versión de grafo+ronda; no es una versión del catálogo de cámaras ni del software. */
+export interface ConfigurationIdentity {
+  format: "spookython-round-configuration-v1";
+  graphVersion: string;
+  revision: string;
+  provenance: "recorded-at-start" | "derived-from-legacy-checkpoint";
+}
+
 export interface CityEvent {
   eventId: string;
   tipo: "bloquear-segmento" | "desbloquear-segmento";
@@ -152,6 +160,7 @@ export interface WorldState {
   activeTurn: TurnContext | null;
   graph: Immutable<MantaGraph>;
   roundConfig: Immutable<RoundConfig>;
+  configurationIdentity: Immutable<ConfigurationIdentity>;
   zombies: RouteZombie[];
   survivors: RouteSurvivor[];
   shelters: RouteShelter[];
@@ -202,6 +211,7 @@ export interface TurnUpdate {
 export interface SimulatorCheckpoint {
   world: CommittedWorldSnapshot;
   roundConfig: Immutable<RoundConfig>;
+  configurationIdentity: Immutable<ConfigurationIdentity>;
   randomState: Immutable<RandomState>;
   pendingCityEvents: Immutable<ScheduledCityEvent[]>;
   lastZombieTraversals: Immutable<ZombieTraversal[]>;

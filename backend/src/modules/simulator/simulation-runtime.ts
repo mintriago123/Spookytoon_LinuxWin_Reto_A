@@ -2,7 +2,9 @@ import type { MantaGraph } from "../../contracts/types.ts";
 import type { CommittedWorldSnapshot, Immutable, RoundConfig, RoundId, SurveillanceCamera, TelemetryMetrics, WorldState } from "./types.ts";
 import type { RoutingClient } from "./routing-client.ts";
 import type { RoutingAlert } from "./routing-failure.ts";
-import { SimulatorControlError, type EdgeCommand, type StartCommand } from "./controls.ts";
+import { SimulatorControlError, type EdgeCommand, type StartCommand, type PreparationCommand, type RestartCommand } from "./controls.ts";
+import { createConfigurationIdentity } from "./configuration-identity.ts";
+import { preparationRevision, summarizeRound } from "./preparation.ts";
 import { createSimulationClock, type SimulationClock } from "./simulation-clock.ts";
 import { createWorldState } from "./world-state.ts";
 import { validateRoundConfig } from "./round-validation.ts";
@@ -14,7 +16,7 @@ export interface ScenarioOptions {
   /** Solo configuración aprobada suministrada por el composition root; no hay escenario de respaldo. */
   rounds?: Partial<Record<RoundId, unknown>>;
   cameras?: readonly SurveillanceCamera[];
-  initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
+  initialMetrics?: (roundId: RoundId, config?: Immutable<RoundConfig>) => Immutable<TelemetryMetrics>;
   /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
   clock?: SimulationClock;
   /** Tolerancia de cierre explícita; por defecto 10 ms. No se aplica al cálculo. */
@@ -39,6 +41,7 @@ export class SimulationRuntime {
   private runner: { controller: AbortController; promise: Promise<void> } | null = null;
   private readonly usedGameIds = new Set<string>();
   private closed = false;
+  private restartPending = false;
   private snapshot: CommittedWorldSnapshot | null = null;
   private readonly listeners = new Set<(snapshot: CommittedWorldSnapshot) => void>();
   private realtimeClientCount = 0;
@@ -47,6 +50,55 @@ export class SimulationRuntime {
   constructor(options: RuntimeOptions) { this.options = options; this.clock = options.clock ?? createSimulationClock(); }
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
+  /** Consulta la configuración efectiva; no crea mundo, cliente ni reloj de partida. */
+  getRoundCatalog() {
+    const rounds = ([1, 2, 3] as const).map(roundId => summarizeRound(this.resolveRound(roundId)));
+    return { graphVersion: this.options.graph.metadata.graphVersion, rounds };
+  }
+  /** Configuración de la partida comprometida, independiente de los presets del proceso. */
+  getGameConfiguration(gameId: string) {
+    const world = this.getCommittedWorld();
+    if (!world || world.gameId !== gameId) throw new SimulatorControlError(404, "GAME_NOT_FOUND", "La partida solicitada no es la partida actual");
+    return { gameId: world.gameId, roundId: world.roundId, graphVersion: world.graph.metadata.graphVersion,
+      configurationIdentity: { ...world.configurationIdentity }, random: { ...world.randomState },
+      round: summarizeRound(world.roundConfig) };
+  }
+  private resolveRound(roundId: RoundId): RoundConfig {
+    try {
+      const config = validateRoundConfig(this.options.rounds?.[roundId], this.options.graph);
+      if (config.roundId !== roundId) throw new Error("La ronda configurada no coincide");
+      return config;
+    } catch {
+      throw new SimulatorControlError(503, "ROUND_NOT_CONFIGURED", "La ronda no tiene configuración completa y aprobada");
+    }
+  }
+  private checkPreparation(command: RestartCommand, config: RoundConfig, cameras = this.options.cameras): void {
+    if (command.preparationRevision && command.preparationRevision !==
+        preparationRevision(command, this.options.graph, config, cameras, command.restart)) {
+      throw new SimulatorControlError(409, "PREPARATION_CONFLICT", "La preparación cambió. Revisa la configuración e inténtalo de nuevo");
+    }
+  }
+  prevalidate(command: PreparationCommand) {
+    if (this.closed) throw new SimulatorControlError(503, "SIMULATOR_CLOSED", "El simulador está cerrando");
+    if (this.restartPending) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Hay un reinicio en curso");
+    const current = this.getCommittedWorld();
+    if (!command.restart && current && current.status !== "completed") {
+      throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Hay una partida activa; pausa o reanuda desde sus controles");
+    }
+    if (this.usedGameIds.has(command.gameId)) throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Una partida nueva requiere un gameId no utilizado");
+    if (command.graphVersion !== this.options.graph.metadata.graphVersion) {
+      throw new SimulatorControlError(409, "GRAPH_VERSION_CONFLICT", "El grafo del mapa no coincide con el del servidor");
+    }
+    const replacement = command.restart ? this.resolveReplacement(command) : null;
+    const config = replacement?.config ?? this.resolveRound(command.roundId);
+    const cameras = replacement?.cameras ?? this.options.cameras;
+    if (!this.options.initialMetrics) throw new SimulatorControlError(503, "TELEMETRY_NOT_CONFIGURED", "Faltan las métricas iniciales de telemetría");
+    return { gameId: command.gameId, roundId: command.roundId, seed: command.seed,
+      graphVersion: this.options.graph.metadata.graphVersion,
+      preparationRevision: preparationRevision(command, this.options.graph, config, cameras, command.restart),
+      ...(command.restart ? { restart: { ...command.restart } } : {}),
+      round: summarizeRound(config) };
+  }
   /** Recuperación entre turnos: no arranca reloj ni conserva planes del proceso anterior. */
   restorePaused(world: WorldState): void {
     if (this.coordinator || this.runner || world.status !== "paused" || world.turnId >= 150) {
@@ -67,14 +119,41 @@ export class SimulationRuntime {
     return this.start(command);
   }
 
-  async restart(command: StartCommand) {
+  private resolveReplacement(command: RestartCommand) {
     const current = this.getCommittedWorld();
     if (!current || !["paused", "completed"].includes(current.status)) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Pausa la partida antes de reiniciar");
     if (this.usedGameIds.has(command.gameId)) throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Reiniciar requiere un gameId nuevo");
-    validateRoundConfig(this.options.rounds?.[command.roundId], this.options.graph);
-    await this.whenStopped();
-    this.routingClient?.close?.(); this.routingClient = null; this.coordinator = null;
-    return this.start(command);
+    if (command.restart && (command.restart.sourceGameId !== current.gameId ||
+        command.restart.sourceConfigurationRevision !== current.configurationIdentity.revision)) {
+      throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "La partida de origen cambió; revisa su configuración guardada");
+    }
+    const repeat = command.restart?.reuseSavedConfig === true;
+    if (repeat && (command.roundId !== current.roundId || command.seed !== current.rngSeed)) {
+      throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Repetir conserva ronda y semilla guardadas");
+    }
+    const config = repeat ? validateRoundConfig(current.roundConfig, this.options.graph) : this.resolveRound(command.roundId);
+    if (repeat && createConfigurationIdentity(this.options.graph, config).revision !== current.configurationIdentity.revision) {
+      throw new SimulatorControlError(409, "GRAPH_VERSION_CONFLICT", "El grafo vigente no permite repetir la configuración guardada");
+    }
+    return { source: current, config, cameras: repeat ? current.cameras : this.options.cameras };
+  }
+  async restart(command: RestartCommand) {
+    if (this.closed) throw new SimulatorControlError(503, "SIMULATOR_CLOSED", "El simulador está cerrando");
+    if (this.restartPending) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Hay un reinicio en curso");
+    const replacement = this.resolveReplacement(command);
+    this.checkPreparation(command, replacement.config, replacement.cameras);
+    const sourceCoordinator = this.coordinator;
+    this.restartPending = true;
+    try {
+      await this.whenStopped();
+      if (this.closed || this.coordinator !== sourceCoordinator) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La partida cambió durante el reinicio");
+      const latest = this.resolveReplacement(command);
+      this.checkPreparation(command, latest.config, latest.cameras);
+      // Construcción completa antes de sustituir el mundo anterior.
+      this.installNewGame(command, latest.config, latest.cameras);
+      this.launch();
+      return { gameId: command.gameId, roundId: command.roundId, status: "running" as const, nextTurnId: 1 };
+    } finally { this.restartPending = false; }
   }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
   getLastTurnTiming() { return this.coordinator?.getLastTurnTiming() ?? null; }
@@ -87,44 +166,53 @@ export class SimulationRuntime {
 
   start(command: StartCommand): { gameId: string; roundId: RoundId; status: "running"; nextTurnId: number } {
     if (this.closed) throw new SimulatorControlError(503, "SIMULATOR_CLOSED", "El simulador está cerrando");
+    if (this.restartPending) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Hay un reinicio en curso");
     const current = this.getCommittedWorld();
     if (current?.status === "running") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La partida ya está en ejecución");
     if (current?.status === "paused" || current?.status === "idle") {
+      if (command.preparationRevision) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "La preparación es para una partida nueva; usa reanudar para continuar");
       if (current.gameId !== command.gameId || current.roundId !== command.roundId || current.rngSeed !== command.seed) {
         throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "La reanudación debe conservar gameId, roundId y seed");
       }
       this.coordinator!.resume();
     } else {
       if (this.usedGameIds.has(command.gameId)) throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Una partida nueva requiere un gameId no utilizado");
-      let config: RoundConfig;
-      try {
-        config = validateRoundConfig(this.options.rounds?.[command.roundId], this.options.graph);
-        if (config.roundId !== command.roundId) throw new Error("La ronda configurada no coincide");
-      } catch {
-        throw new SimulatorControlError(503, "ROUND_NOT_CONFIGURED", "La ronda no tiene configuración completa y aprobada");
-      }
-      if (!this.options.initialMetrics) throw new SimulatorControlError(503, "TELEMETRY_NOT_CONFIGURED", "Faltan las métricas iniciales de telemetría");
-      const initial = createWorldState({ gameId: command.gameId, graph: this.options.graph, roundConfig: config,
-        randomState: { seed: command.seed, algorithm: RANDOM_ALGORITHM, algorithmVersion: RANDOM_ALGORITHM_VERSION,
-          strategy: "per-zombie-turn-draw" }, initialMetrics: this.options.initialMetrics(command.roundId),
-        updatedAt: this.isoNow(), cameras: this.options.cameras });
-      let client: RoutingClient;
-      try { client = this.options.clientFactory(); }
-      catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
+      const config = this.resolveRound(command.roundId);
+      this.checkPreparation(command, config);
+      this.installNewGame(command, config, this.options.cameras);
+    }
+    const nextTurnId = this.coordinator!.getCommittedWorld().turnId + 1;
+    this.launch();
+    return { gameId: command.gameId, roundId: command.roundId, status: "running", nextTurnId };
+  }
+
+  private installNewGame(command: StartCommand, config: RoundConfig, cameras = this.options.cameras): void {
+    if (!this.options.initialMetrics) throw new SimulatorControlError(503, "TELEMETRY_NOT_CONFIGURED", "Faltan las métricas iniciales de telemetría");
+    const initial = createWorldState({ gameId: command.gameId, graph: this.options.graph, roundConfig: config,
+      randomState: { seed: command.seed, algorithm: RANDOM_ALGORITHM, algorithmVersion: RANDOM_ALGORITHM_VERSION,
+        strategy: "per-zombie-turn-draw" }, initialMetrics: this.options.initialMetrics(command.roundId, config),
+      updatedAt: this.isoNow(), cameras });
+    let client: RoutingClient;
+    try { client = this.options.clientFactory(); }
+    catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
+    let installed = false;
+    try {
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
         getWsClientCount: () => this.realtimeClientCount,
         getPersistenceProgress: this.options.getPersistenceProgress,
         commitJitterToleranceMs: this.options.commitJitterToleranceMs,
-        onCommitted: world => this.publishCommitted(world) });
+        onCommitted: world => { if (installed) this.publishCommitted(world); } });
+      coordinator.resume();
       this.routingClient?.close?.();
       this.routingClient = client;
       this.coordinator = coordinator; this.usedGameIds.add(command.gameId);
-      coordinator.resume();
+      installed = true;
+      this.publishCommitted(coordinator.getCommittedWorld());
+    } catch (error) {
+      if (!installed) client.close?.();
+      throw error;
     }
-    const nextTurnId = this.coordinator!.getCommittedWorld().turnId + 1;
-    this.launch();
-    return { gameId: command.gameId, roundId: command.roundId, status: "running", nextTurnId };
   }
 
   pause(reason: string): { status: "pausing" | "paused"; afterTurnId: number } {
