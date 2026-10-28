@@ -111,3 +111,28 @@ body {
 .zone-label-tooltip::before {
   display: none !important;
 }
+
+.scenario-map-control {
+  margin: 0 12px 12px 0;
+}
+
+.scenario-map-control__button {
+  display: block;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 6px;
+  background: rgb(17 24 39 / 96%);
+  padding: 8px 12px;
+  color: #e2e8f0;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 30%);
+  cursor: pointer;
+  font: 600 12px/1.2 ui-sans-serif, system-ui, sans-serif;
+}
+
+.scenario-map-control__button:hover {
+  background: rgb(31 41 55 / 98%);
+}
+
+.scenario-map-control__button:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}

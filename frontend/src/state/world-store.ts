@@ -1,9 +1,10 @@
 import { create } from "zustand";
 import type { MantaGraph, WorldSnapshot } from "../types/contracts";
+import { useOperatorReceipts } from "./operator-receipts";
 
 export type SocketStatus = "connecting" | "open" | "reconnecting" | "closed";
 
-export type PendingControl = "iniciar" | "pausar" | "bloquear-arista" | null;
+export type PendingControl = "iniciar" | "reiniciar" | "pausar" | "bloquear-arista" | null;
 
 /**
  * Store mínimo definido en SPEC.md §6:
@@ -86,9 +87,11 @@ export const useWorldStore = create<WorldStoreState>((set, get) => ({
         currentSnapshot: snapshot,
         receivedAt: Date.now(),
       });
+      useOperatorReceipts.getState().observeSnapshot(snapshot);
       return;
     }
     set({ previousSnapshot: null, currentSnapshot: snapshot, receivedAt: Date.now() });
+    useOperatorReceipts.getState().observeSnapshot(snapshot);
   },
 
   setSocketStatus: (status) => set({ socketStatus: status }),

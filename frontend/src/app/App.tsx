@@ -17,6 +17,8 @@ import type { MantaGraph } from "../types/contracts";
 export function App() {
   const setGraph = useWorldStore((s) => s.setGraph);
   const setLastError = useWorldStore((s) => s.setLastError);
+  const mapReady = useWorldStore((s) => s.graph !== null &&
+    (!s.currentSnapshot || s.graphVersion === s.currentSnapshot.graphVersion));
   useTurnSocket();
 
   useEffect(() => {
@@ -77,6 +79,11 @@ export function App() {
             es lo primero que debe verse, nunca queda en 0px. */}
         <main className="relative min-h-[50vh] flex-1">
           <LiveMap />
+          {mapReady && (
+            <div className="pointer-events-none absolute bottom-16 right-3 z-[1100] rounded border border-white/10 bg-night-900/85 px-2 py-1 text-[10px] text-slate-300">
+              Escenario de simulación de Manta · encuadre derivado del grafo
+            </div>
+          )}
           {/* z-[1100]: por encima de los controles de Leaflet (z-index 1000
               en leaflet.css), si no quedan tapados aunque estén en el DOM. */}
           <div className="absolute left-3 top-3 z-[1100] flex flex-col gap-2">

@@ -1,4 +1,4 @@
-import { Fragment, useMemo } from "react";
+import { Fragment, useEffect, useMemo } from "react";
 import {
   Circle,
   MapContainer,
@@ -8,8 +8,10 @@ import {
   Popup,
   TileLayer,
   Tooltip,
+  useMap,
 } from "react-leaflet";
-import type { LatLngTuple } from "leaflet";
+import { Control, DomEvent, DomUtil, point, type LatLngTuple } from "leaflet";
+import { buildGraphBounds, expandGraphBounds, fitScenarioToViewport, viewportFitPadding, type GraphBounds } from "../lib/map-bounds";
 import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld";
 import { ZOMBIE_COLOR, cameraIcon, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
@@ -28,31 +30,6 @@ function buildNodeIndex(
   const index = new Map<string, LatLngTuple>();
   for (const n of nodos) index.set(n.id, [n.lat, n.lng]);
   return index;
-}
-
-/**
- * Caja que encierra todos los nodos del grafo. Se usa para encuadrar el
- * mapa a su extensión real en vez de centrar en graph.nodos[0] (arbitrario,
- * puede quedar en un borde) con un zoom fijo adivinado.
- */
-function buildBounds(
-  nodos: { lat: number; lng: number }[],
-): [LatLngTuple, LatLngTuple] | null {
-  if (nodos.length === 0) return null;
-  let south = nodos[0].lat;
-  let north = nodos[0].lat;
-  let west = nodos[0].lng;
-  let east = nodos[0].lng;
-  for (const n of nodos) {
-    if (n.lat < south) south = n.lat;
-    if (n.lat > north) north = n.lat;
-    if (n.lng < west) west = n.lng;
-    if (n.lng > east) east = n.lng;
-  }
-  return [
-    [south, west],
-    [north, east],
-  ];
 }
 
 /** Centroide aproximado por zona, solo para rotular el mapa (no es dato del juego). */
@@ -109,6 +86,93 @@ function findPreviousNodeId(
   return list?.find((e) => e.id === id)?.nodeId;
 }
 
+/** Mide cada viewport real y mantiene el escenario completo como zoom mínimo. */
+function ScenarioViewportConstraints({ graphBounds, navigationBounds }: {
+  graphBounds: GraphBounds;
+  navigationBounds: GraphBounds;
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    let frame: number | null = null;
+    const applyViewport = () => {
+      frame = null;
+      map.invalidateSize({ pan: false, debounceMoveend: true });
+      const size = map.getSize();
+      if (size.x <= 0 || size.y <= 0) return;
+
+      const [horizontalPadding, verticalPadding] = viewportFitPadding(size.x, size.y);
+      const minimumZoom = map.getBoundsZoom(
+        graphBounds,
+        false,
+        point(horizontalPadding, verticalPadding),
+      );
+      if (!Number.isFinite(minimumZoom)) return;
+
+      map.setMaxBounds(navigationBounds);
+      map.setMinZoom(minimumZoom);
+      // Si el viewport se estrecha/orienta y el zoom actual ya no contiene
+      // el grafo, se acerca lo necesario conservando el centro actual.
+      if (map.getZoom() < minimumZoom) map.setZoom(minimumZoom, { animate: false });
+    };
+    const scheduleViewport = () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(applyViewport);
+    };
+
+    map.setMaxBounds(navigationBounds);
+    applyViewport();
+    const observer = new ResizeObserver(scheduleViewport);
+    observer.observe(map.getContainer());
+    return () => {
+      observer.disconnect();
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [map, graphBounds, navigationBounds]);
+
+  return null;
+}
+
+/** Control explícito de recuperación; los snapshots nunca ejecutan fitBounds. */
+function ScenarioMapControl({ graphBounds }: { graphBounds: GraphBounds }) {
+  const map = useMap();
+
+  useEffect(() => {
+    const control = new Control({ position: "bottomright" });
+    let button: HTMLButtonElement | null = null;
+    const fitScenario = () => {
+      map.invalidateSize({ pan: false, debounceMoveend: true });
+      fitScenarioToViewport(graphBounds, map.getSize(), (bounds, padding) => {
+        map.fitBounds(bounds, {
+          padding: point(padding[0], padding[1]),
+          animate: true,
+        });
+      });
+    };
+
+    control.onAdd = () => {
+      const container = DomUtil.create("div", "scenario-map-control");
+      button = DomUtil.create("button", "scenario-map-control__button", container) as HTMLButtonElement;
+      button.type = "button";
+      button.textContent = "Ver escenario";
+      button.title = "Encuadrar todo el escenario de simulación de Manta";
+      button.setAttribute("aria-label", button.title);
+      DomEvent.disableClickPropagation(container);
+      DomEvent.disableScrollPropagation(container);
+      DomEvent.on(button, "click", fitScenario);
+      return container;
+    };
+    control.addTo(map);
+
+    return () => {
+      if (button) DomEvent.off(button, "click", fitScenario);
+      control.remove();
+    };
+  }, [map, graphBounds]);
+
+  return null;
+}
+
 /**
  * Mapa en vivo (SPEC.md §6 / docs/team/kristhian).
  * Capas: vías por tipo, cierres, nodos por zona (vía refugios/entidades),
@@ -137,8 +201,12 @@ export function LiveMap() {
   }, [graph]);
   const zoneLabels = useMemo(() => (graph ? buildZoneLabels(graph.nodos) : []), [graph]);
   const bounds = useMemo(
-    () => (graph ? buildBounds(graph.nodos) : null),
+    () => (graph ? buildGraphBounds(graph.nodos) : null),
     [graph],
+  );
+  const navigationBounds = useMemo(
+    () => (bounds ? expandGraphBounds(bounds) : null),
+    [bounds],
   );
 
   if (!graph) {
@@ -164,16 +232,24 @@ export function LiveMap() {
     );
   }
 
+  if (!bounds || !navigationBounds) {
+    return (
+      <div role="alert" className="flex h-full w-full items-center justify-center bg-night-900 text-sm text-rose-200">
+        El grafo no contiene nodos para encuadrar el escenario de simulación de Manta.
+      </div>
+    );
+  }
+
   return (
-    // bounds: encuadra automáticamente toda la extensión real del grafo en
-    // vez de adivinar center/zoom. El esquema de SPEC.md §2.1 exige
-    // nodos.minItems=250, así que bounds nunca es null aquí; el "!" solo
-    // documenta esa garantía de datos, no una suposición nueva.
     <MapContainer
-      bounds={bounds!}
+      bounds={bounds}
       boundsOptions={{ padding: [24, 24] }}
+      maxBounds={navigationBounds}
+      maxBoundsViscosity={1}
       className="h-full w-full bg-night-900"
     >
+      <ScenarioViewportConstraints graphBounds={bounds} navigationBounds={navigationBounds} />
+      <ScenarioMapControl graphBounds={bounds} />
       {/* CartoDB Dark Matter dejó de servirse gratis sin cuenta (devuelve
           tiles con marca "API KEY REQUIRED"). En vez de depender de una key
           de un servicio pago, se usa el tile OSM estándar (gratis, sin key,
@@ -182,6 +258,7 @@ export function LiveMap() {
       <TileLayer
         attribution={graph.metadata.osmAttribution}
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+        noWrap
       />
 
       {/* Rótulos de zona, solo orientación visual */}

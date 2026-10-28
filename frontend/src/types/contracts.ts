@@ -14,6 +14,39 @@ export type ZombieType = "caminante" | "corredor" | "horda" | "dormido";
 export type EntityStatus = "vivo" | "mordido" | "evacuado";
 export type GameStatus = "idle" | "running" | "paused" | "completed";
 
+/** Catálogo de lectura de GET /simulador/rondas, definido en OpenAPI. */
+export interface RoundCatalog {
+  graphVersion: string;
+  rounds: Array<{
+    roundId: 1 | 2 | 3;
+    durationMs: 300000;
+    turnIntervalMs: 2000;
+    turnCount: 150;
+    survivorCount: 20 | 80 | 200;
+    zombieCounts: Record<ZombieType, number>;
+    eventPlan: Array<{
+      eventId: string;
+      edgeId: string;
+      effectiveTurnId: number;
+      reason: "colapso-puente" | "bloqueo-calle";
+    }>;
+  }>;
+}
+
+export interface GameConfiguration {
+  gameId: string;
+  roundId: 1 | 2 | 3;
+  graphVersion: string;
+  configurationIdentity: {
+    format: "spookython-round-configuration-v1";
+    graphVersion: string;
+    revision: string;
+    provenance: "recorded-at-start" | "derived-from-legacy-checkpoint";
+  };
+  random: { seed: string; algorithm: "sha256-counter"; algorithmVersion: "1"; strategy: "per-zombie-turn-draw" };
+  round: RoundCatalog["rounds"][number];
+}
+
 export interface GraphNode {
   id: string;
   lat: number;
@@ -167,6 +200,26 @@ export interface IniciarRequest {
   gameId: string;
   roundId: 1 | 2 | 3;
   seed: string;
+  preparationRevision?: string;
+}
+
+export interface PreparationRequest {
+  gameId: string;
+  roundId: 1 | 2 | 3;
+  seed: string;
+  graphVersion: string;
+  restart?: RestartSource;
+}
+
+export interface RestartSource {
+  sourceGameId: string;
+  sourceConfigurationRevision: string;
+  reuseSavedConfig: boolean;
+}
+
+export interface PreparationResponse extends PreparationRequest {
+  preparationRevision: string;
+  round: RoundCatalog["rounds"][number];
 }
 
 export interface IniciarResponse {
