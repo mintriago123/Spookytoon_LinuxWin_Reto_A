@@ -82,7 +82,7 @@ export class RouteEngine {
     if (!Number.isSafeInteger(this.workerCount) || this.workerCount < 1) throw new Error("workerCount debe ser positivo");
   }
 
-  sync(value: unknown): SyncResponse {
+  sync(value: unknown, computed?: RoutingSnapshot): SyncResponse {
     const request = validateWorldSyncRequest(value, this.graph);
     const requestDigest = createHash("sha256").update(stableJson(request)).digest("hex");
     const previous = this.snapshots.get(request.gameId);
@@ -99,6 +99,30 @@ export class RouteEngine {
     if (!previous && request.baseWorldVersion !== 0) {
       throw new RoutingError(409, "STALE_WORLD", "La primera sincronización debe partir de worldVersion 0");
     }
+    const snapshot = computed ?? this.computeSnapshot(request);
+    if (snapshot.requestDigest !== requestDigest || snapshot.worldVersion !== request.baseWorldVersion + 1 ||
+        snapshot.plan.graphVersion !== this.graph.metadata.graphVersion) {
+      throw new RoutingError(409, "STALE_WORLD", "El plan calculado no corresponde al snapshot");
+    }
+    // structuredClone de worker_threads no conserva Object.freeze.
+    if (computed) {
+      for (const entry of Object.values(snapshot.plan.bestMoveByNode)) Object.freeze(entry);
+      Object.freeze(snapshot.plan.bestMoveByNode); Object.freeze(snapshot.plan);
+      for (const entries of snapshot.reservedPlans.values()) {
+        for (const entry of Object.values(entries)) Object.freeze(entry);
+        Object.freeze(entries);
+      }
+      Object.freeze(snapshot.response);
+    }
+    // La referencia completa cambia al final: ninguna lectura ve un snapshot parcial.
+    this.snapshots.set(request.gameId, snapshot);
+    return snapshot.response;
+  }
+
+  /** Cálculo aislable: no instala versiones ni muta el mundo del simulador. */
+  computeSnapshot(value: unknown): RoutingSnapshot {
+    const request = validateWorldSyncRequest(value, this.graph);
+    const requestDigest = createHash("sha256").update(stableJson(request)).digest("hex");
     const worldVersion = request.baseWorldVersion + 1;
     const start = this.now();
     const bestMoveByNode = this.buildPlan(request);
@@ -138,10 +162,11 @@ export class RouteEngine {
       hordeNodeIds: this.hordeNeighborhood(request),
       zombieTraversalPairs: new Set(request.zombieTraversals.map(traversal => `${traversal.fromNodeId}\0${traversal.toNodeId}`)),
     };
-    // La referencia completa cambia al final: ninguna lectura ve un snapshot parcial.
-    this.snapshots.set(request.gameId, snapshot);
-    return response;
+    return snapshot;
   }
+
+  /** Preparado desde el arranque, independiente de que exista partida. */
+  isInitialized(): boolean { return this.nodeIds.length > 0; }
 
   step(value: unknown): PasoResponse {
     const request = validatePasoRequest(value) as PasoRequest;

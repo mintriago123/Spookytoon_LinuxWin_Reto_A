@@ -26,6 +26,8 @@ export const simulatorPlugin: FastifyPluginAsync<{ runtime: SimulationRuntime; a
     } });
   });
   app.post("/simulador/iniciar", async (request, reply) => reply.code(202).send(options.runtime.start(parseStartCommand(request.body))));
+  app.post("/simulador/reanudar", async (request, reply) => reply.code(202).send(options.runtime.resume(parseStartCommand(request.body))));
+  app.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseStartCommand(request.body))));
   app.post("/simulador/pausar", async (request, reply) => reply.code(202).send(options.runtime.pause(parsePauseCommand(request.body).reason)));
   app.post("/simulador/bloquear-arista", async (request, reply) => reply.code(202).send(options.runtime.scheduleEdge(parseEdgeCommand(request.body))));
   app.addHook("onClose", async () => { await options.runtime.close(); });

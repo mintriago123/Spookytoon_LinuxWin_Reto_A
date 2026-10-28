@@ -100,6 +100,7 @@ for (const roundId of [1, 2, 3] as const) {
         assert.equal(world.metrics.activeSurvivors + world.metrics.bittenSurvivors + world.metrics.evacuatedSurvivors, initial.survivors.length);
         assert(world.metrics.routeSamples > 0);
         assert(world.metrics.routeLatencyP95Ms > 0);
+        assert(world.metrics.routeLatencyP95Ms <= 150, `p95 ${world.metrics.routeLatencyP95Ms} ms supera 150 ms`);
         assert.equal(world.metrics.routeAvailabilityPercent, 100);
         assert.equal(world.metrics.deadlineMisses, 0);
         assert.equal(world.metrics.turnEfficiencyPercent, 100);

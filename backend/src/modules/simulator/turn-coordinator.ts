@@ -34,6 +34,7 @@ interface CoordinatorOptions {
   onCommitted?: (world: Immutable<WorldState>) => void;
   now?: () => number;
   getWsClientCount?: () => number;
+  getPersistenceProgress?: () => { snapshotQueueDepth: number; lastSnapshotTurnId: number | null };
 }
 
 export interface TurnResult {
@@ -73,6 +74,7 @@ export class TurnCoordinator {
     const work = structuredClone(this.committed) as WorldState;
     work.status = "running"; work.pause = { status: "none" }; work.updatedAt = this.options.isoNow();
     work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
+    Object.assign(work.metrics, this.options.getPersistenceProgress?.());
     this.pauseRequested = null; this.committed = freeze(work);
     this.options.onCommitted?.(this.committed);
   }
@@ -247,6 +249,7 @@ export class TurnCoordinator {
       const telemetry = updateTurnMetrics(work, this.routeSamples, attempts, decisions, Math.max(0, this.now() - startedAt));
       work.metrics = telemetry.metrics;
       work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
+      Object.assign(work.metrics, this.options.getPersistenceProgress?.());
       if (work.pause.status === "requested") {
         work.pause = { ...work.pause, status: "effective" }; work.status = "paused";
       }

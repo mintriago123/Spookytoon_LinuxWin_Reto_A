@@ -25,6 +25,7 @@ interface RuntimeOptions extends ScenarioOptions {
   onFailure: (event: { code: "SIMULATOR_TURN_FAILED"; gameId: string; turnId: number }) => void;
   clock?: SimulationClock;
   isoNow?: () => string;
+  getPersistenceProgress?: () => { snapshotQueueDepth: number; lastSnapshotTurnId: number | null };
 }
 
 /** Programa turnos; la escritura del mundo permanece exclusivamente en TurnCoordinator. */
@@ -43,6 +44,34 @@ export class SimulationRuntime {
   constructor(options: RuntimeOptions) { this.options = options; this.clock = options.clock ?? createSimulationClock(); }
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
+  /** Recuperación entre turnos: no arranca reloj ni conserva planes del proceso anterior. */
+  restorePaused(world: WorldState): void {
+    if (this.coordinator || this.runner || world.status !== "paused" || world.turnId >= 150) {
+      throw new Error("La recuperación requiere un runtime vacío y una partida pausada incompleta");
+    }
+    this.routingClient = this.options.clientFactory();
+    this.coordinator = new TurnCoordinator(world, { client: this.routingClient, syncTimeoutMs: this.options.syncTimeoutMs,
+      now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+      getWsClientCount: () => this.realtimeClientCount, getPersistenceProgress: this.options.getPersistenceProgress,
+      onCommitted: state => this.publishCommitted(state) });
+    this.usedGameIds.add(world.gameId);
+    this.publishCommitted(this.coordinator.getCommittedWorld());
+  }
+
+  resume(command: StartCommand) {
+    if (this.getCommittedWorld()?.status !== "paused") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Solo se reanuda una partida pausada");
+    return this.start(command);
+  }
+
+  async restart(command: StartCommand) {
+    const current = this.getCommittedWorld();
+    if (!current || !["paused", "completed"].includes(current.status)) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Pausa la partida antes de reiniciar");
+    if (this.usedGameIds.has(command.gameId)) throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Reiniciar requiere un gameId nuevo");
+    validateRoundConfig(this.options.rounds?.[command.roundId], this.options.graph);
+    await this.whenStopped();
+    this.routingClient?.close?.(); this.routingClient = null; this.coordinator = null;
+    return this.start(command);
+  }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
   setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
@@ -79,11 +108,12 @@ export class SimulationRuntime {
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
         getWsClientCount: () => this.realtimeClientCount,
+        getPersistenceProgress: this.options.getPersistenceProgress,
         onCommitted: world => this.publishCommitted(world) });
-      coordinator.resume();
       this.routingClient?.close?.();
       this.routingClient = client;
       this.coordinator = coordinator; this.usedGameIds.add(command.gameId);
+      coordinator.resume();
     }
     const nextTurnId = this.coordinator!.getCommittedWorld().turnId + 1;
     this.launch();

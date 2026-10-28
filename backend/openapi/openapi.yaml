@@ -1,0 +1,1038 @@
+openapi: 3.1.0
+info:
+  title: SpookyThon Manta Zombie API
+  version: 1.0.0
+  description: Contrato del backend EC2 en Ohio. API key solo para operador y routing
+    interno; nunca incluirla en el bundle web.
+paths:
+  /paso:
+    post:
+      operationId: calcularPaso
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PasoRequest'
+      responses:
+        '200':
+          description: Decisión de movimiento o espera
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PasoResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /estado:
+    get:
+      operationId: obtenerEstado
+      responses:
+        '200':
+          description: Último snapshot completo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WorldSnapshot'
+        '503':
+          $ref: '#/components/responses/Error'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      security: []
+  /simulador/iniciar:
+    post:
+      operationId: iniciarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
+      responses:
+        '202':
+          description: Ronda aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /simulador/pausar:
+    post:
+      operationId: pausarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PausarRequest'
+      responses:
+        '202':
+          description: Pausa solicitada al cerrar turno
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PausarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /simulador/bloquear-arista:
+    post:
+      operationId: bloquearArista
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BloquearAristaRequest'
+      responses:
+        '202':
+          description: Evento programado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BloquearAristaResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+  /motor/sincronizar:
+    post:
+      operationId: sincronizarMotor
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorldSyncRequest'
+      responses:
+        '200':
+          description: Snapshot instalado y plan precalculado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
+  /motor/estado/{gameId}:
+    get:
+      operationId: estadoMotor
+      security:
+      - ApiKey: []
+      parameters:
+      - in: path
+        name: gameId
+        required: true
+        schema:
+          type: string
+          minLength: 1
+      responses:
+        '200':
+          description: Última versión instalada para conciliar una sincronización
+            incierta
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoutingStatusResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+  /health/live:
+    get:
+      operationId: healthLive
+      responses:
+        '200':
+          description: Proceso vivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      security: []
+  /health/ready:
+    get:
+      operationId: healthReady
+      responses:
+        '200':
+          description: Backend listo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Grafo o workers no listos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      security: []
+  /simulador/reanudar:
+    post:
+      operationId: reanudarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
+      responses:
+        '202':
+          description: Ronda aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      description: Misma identidad gameId/roundId/seed de una partida pausada.
+  /simulador/reiniciar:
+    post:
+      operationId: reiniciarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
+      responses:
+        '202':
+          description: Ronda aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      description: Requiere partida pausada o completada y gameId nuevo; crea estado
+        inicial y conserva el historial anterior.
+  /ws:
+    get:
+      operationId: conectarWebSocket
+      security: []
+      description: Upgrade WebSocket (wss://3-128-78-190.sslip.io/ws). TURN_UPDATE
+        al conectar y tras cada commit. Ping/pong 30 s; payload máximo 1 MiB. Sin
+        partida no inventa snapshot. Clientes lentos se desconectan. Canal solo lectura.
+      x-websocket-message:
+        $ref: '#/components/schemas/TurnUpdate'
+      responses:
+        '101':
+          description: WebSocket conectado; mensajes JSON TURN_UPDATE
+        '403':
+          $ref: '#/components/responses/Error'
+        '426':
+          $ref: '#/components/responses/Error'
+components:
+  securitySchemes:
+    ApiKey:
+      type: apiKey
+      in: header
+      name: x-api-key
+  responses:
+    Error:
+      description: Error de contrato
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+  schemas:
+    PasoRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - turnId
+      - worldVersion
+      - survivorId
+      - currentNodeId
+      properties:
+        gameId:
+          type: string
+          minLength: 1
+        turnId:
+          type: integer
+          minimum: 1
+        worldVersion:
+          type: integer
+          minimum: 1
+        survivorId:
+          type: string
+          minLength: 1
+        currentNodeId:
+          type: string
+          minLength: 1
+        targetShelterId:
+          type:
+          - string
+          - 'null'
+    PasoResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - turnId
+      - worldVersion
+      - survivorId
+      - fromNodeId
+      - toNodeId
+      - edgeId
+      - decision
+      - targetShelterId
+      - reason
+      - routeCost
+      - latencyMs
+      properties:
+        gameId:
+          type: string
+        turnId:
+          type: integer
+        worldVersion:
+          type: integer
+        survivorId:
+          type: string
+        fromNodeId:
+          type: string
+        toNodeId:
+          type: string
+        edgeId:
+          type:
+          - string
+          - 'null'
+        decision:
+          enum:
+          - mover
+          - esperar
+        targetShelterId:
+          type:
+          - string
+          - 'null'
+        reason:
+          enum:
+          - ruta-segura
+          - sin-ruta-segura
+          - nodo-bloqueado
+          - no-hay-refugio-disponible
+          - fallback-interno
+        routeCost:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+        latencyMs:
+          type: number
+          minimum: 0
+    IniciarRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - roundId
+      - seed
+      properties:
+        gameId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        seed:
+          type: string
+          minLength: 1
+          maxLength: 256
+    IniciarResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - roundId
+      - status
+      - nextTurnId
+      properties:
+        gameId:
+          type: string
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        status:
+          const: running
+        nextTurnId:
+          type: integer
+          minimum: 1
+    PausarRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - reason
+      properties:
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 256
+    PausarResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      - afterTurnId
+      properties:
+        status:
+          enum:
+          - pausing
+          - paused
+        afterTurnId:
+          type: integer
+          minimum: 0
+    BloquearAristaRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - eventId
+      - edgeId
+      - bloqueada
+      - motivo
+      properties:
+        eventId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        edgeId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        bloqueada:
+          type: boolean
+        motivo:
+          type: string
+          minLength: 1
+          maxLength: 256
+        effectiveTurnId:
+          type: integer
+          minimum: 1
+          maximum: 150
+    BloquearAristaResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - eventId
+      - segmentoId
+      - effectiveTurnId
+      - status
+      properties:
+        eventId:
+          type: string
+        segmentoId:
+          type: string
+        effectiveTurnId:
+          type: integer
+          minimum: 1
+        status:
+          const: programado
+    SyncResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - turnId
+      - worldVersion
+      - graphVersion
+      - workerCount
+      - buildLatencyMs
+      - ready
+      properties:
+        turnId:
+          type: integer
+          minimum: 1
+        worldVersion:
+          type: integer
+          minimum: 1
+        graphVersion:
+          type: string
+          minLength: 1
+        workerCount:
+          type: integer
+          minimum: 1
+        buildLatencyMs:
+          type: number
+          minimum: 0
+        ready:
+          const: true
+    RoutingStatusResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - installed
+      properties:
+        gameId:
+          type: string
+          minLength: 1
+        installed:
+          oneOf:
+          - $ref: '#/components/schemas/SyncResponse'
+          - type: 'null'
+    WorldSyncRequest:
+      type: object
+      additionalProperties: false
+      required:
+      - gameId
+      - turnId
+      - baseWorldVersion
+      - survivors
+      - zombies
+      - shelters
+      - blockedEdges
+      - zombieTraversals
+      - dormantUncertaintyNodeIds
+      properties:
+        gameId:
+          type: string
+        turnId:
+          type: integer
+          minimum: 1
+        baseWorldVersion:
+          type: integer
+          minimum: 0
+        survivors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Survivor'
+        zombies:
+          type: array
+          description: Solo zombies visibles; excluir dormidos no despiertos.
+          items:
+            $ref: '#/components/schemas/Zombie'
+        shelters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shelter'
+        blockedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedEdge'
+        zombieTraversals:
+          type: array
+          description: Recorridos reales ordenados por zombieId y stepIndex; los pasos
+            de cada zombie son contiguos.
+          items:
+            $ref: '#/components/schemas/ZombieTraversal'
+        dormantUncertaintyNodeIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
+    Zombie:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - tipo
+      - estado
+      - nodeId
+      - despertadoEnTurno
+      - siguienteMovimientoTurno
+      properties:
+        id:
+          type: string
+        tipo:
+          enum:
+          - caminante
+          - corredor
+          - horda
+          - dormido
+        estado:
+          enum:
+          - activo
+          - dormido
+        nodeId:
+          type: string
+        despertadoEnTurno:
+          type:
+          - integer
+          - 'null'
+        siguienteMovimientoTurno:
+          type:
+          - integer
+          - 'null'
+    Survivor:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - nodeId
+      - estado
+      - targetShelterId
+      - eliminadoEnTurno
+      - evacuadoEnTurno
+      properties:
+        id:
+          type: string
+        nodeId:
+          type: string
+        estado:
+          enum:
+          - vivo
+          - mordido
+          - evacuado
+        targetShelterId:
+          type:
+          - string
+          - 'null'
+        eliminadoEnTurno:
+          type:
+          - integer
+          - 'null'
+        evacuadoEnTurno:
+          type:
+          - integer
+          - 'null'
+    Shelter:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - nodoId
+      - capacidad
+      - ocupantes
+      - reservados
+      properties:
+        id:
+          type: string
+        nodoId:
+          type: string
+        capacidad:
+          type: integer
+          minimum: 1
+        ocupantes:
+          type: array
+          items:
+            type: string
+        reservados:
+          type: array
+          items:
+            type: string
+    BlockedEdge:
+      type: object
+      additionalProperties: false
+      required:
+      - segmentoId
+      - edgeIds
+      - motivo
+      - origen
+      - bloqueadaDesdeTurno
+      - desbloqueadaEnTurno
+      properties:
+        segmentoId:
+          type: string
+        edgeIds:
+          type: array
+          items:
+            type: string
+        motivo:
+          type: string
+        origen:
+          enum:
+          - evento-ciudad
+          - control
+        bloqueadaDesdeTurno:
+          type: integer
+          minimum: 1
+        desbloqueadaEnTurno:
+          type:
+          - integer
+          - 'null'
+    ZombieTraversal:
+      type: object
+      additionalProperties: false
+      required:
+      - zombieId
+      - stepIndex
+      - edgeId
+      - fromNodeId
+      - toNodeId
+      properties:
+        zombieId:
+          type: string
+        stepIndex:
+          enum:
+          - 1
+          - 2
+        edgeId:
+          type: string
+        fromNodeId:
+          type: string
+        toNodeId:
+          type: string
+    WorldSnapshot:
+      type: object
+      additionalProperties: false
+      required:
+      - schemaVersion
+      - gameId
+      - roundId
+      - status
+      - turnId
+      - worldVersion
+      - graphVersion
+      - updatedAt
+      - zombies
+      - survivors
+      - shelters
+      - blockedEdges
+      - metrics
+      properties:
+        schemaVersion:
+          const: 1.0.0
+        gameId:
+          type: string
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        status:
+          enum:
+          - idle
+          - running
+          - paused
+          - completed
+        turnId:
+          type: integer
+          minimum: 0
+          maximum: 150
+        worldVersion:
+          type: integer
+          minimum: 0
+        graphVersion:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        zombies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zombie'
+        survivors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Survivor'
+        shelters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shelter'
+        blockedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedEdge'
+        metrics:
+          $ref: '#/components/schemas/TelemetryMetrics'
+    TurnUpdate:
+      type: object
+      additionalProperties: false
+      required:
+      - event
+      - emittedAt
+      - world
+      properties:
+        event:
+          const: TURN_UPDATE
+        emittedAt:
+          type: string
+          format: date-time
+        world:
+          $ref: '#/components/schemas/WorldSnapshot'
+      description: Mensaje completo de servidor a cliente; sin comandos entrantes.
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          enum:
+          - live
+          - ready
+          - not-ready
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+          - code
+          - message
+          - requestId
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+    TelemetryMetrics:
+      type: object
+      additionalProperties: false
+      required:
+      - routeSamples
+      - routeLatencyP50Ms
+      - routeLatencyP95Ms
+      - routeLatencyP99Ms
+      - routeTimeouts
+      - invalidRouteResponses
+      - deadlineMisses
+      - activeSurvivors
+      - bittenSurvivors
+      - evacuatedSurvivors
+      - activeZombies
+      - wsClients
+      - snapshotQueueDepth
+      - lastSnapshotTurnId
+      - routeErrors
+      - routeAvailabilityPercent
+      - survivalRatePercent
+      - activeSurvivorsPercent
+      - bittenSurvivorsPercent
+      - evacuatedSurvivorsPercent
+      - turnDurationMs
+      - turnBudgetUsedPercent
+      - turnEfficiencyPercent
+      properties:
+        routeSamples:
+          type: integer
+          minimum: 0
+        routeLatencyP50Ms:
+          type: number
+          minimum: 0
+        routeLatencyP95Ms:
+          type: number
+          minimum: 0
+        routeLatencyP99Ms:
+          type: number
+          minimum: 0
+        routeTimeouts:
+          type: integer
+          minimum: 0
+        invalidRouteResponses:
+          type: integer
+          minimum: 0
+        deadlineMisses:
+          type: integer
+          minimum: 0
+        activeSurvivors:
+          type: integer
+          minimum: 0
+        bittenSurvivors:
+          type: integer
+          minimum: 0
+        evacuatedSurvivors:
+          type: integer
+          minimum: 0
+        activeZombies:
+          type: integer
+          minimum: 0
+        wsClients:
+          type: integer
+          minimum: 0
+        snapshotQueueDepth:
+          type: integer
+          minimum: 0
+        lastSnapshotTurnId:
+          type:
+          - integer
+          - 'null'
+        routeErrors:
+          type: integer
+          minimum: 0
+        routeAvailabilityPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        survivalRatePercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        activeSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        bittenSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        evacuatedSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        turnDurationMs:
+          type: number
+          minimum: 0
+        turnBudgetUsedPercent:
+          type: number
+          minimum: 0
+        turnEfficiencyPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+servers:
+- url: https://3-128-78-190.sslip.io
+  description: EC2 Ohio / Caddy TLS
+- url: http://localhost:3001
+  description: Desarrollo

@@ -4,6 +4,12 @@ import { resolve } from "node:path";
 import Fastify from "fastify";
 import { loadGraph } from "./modules/graph/load-graph.ts";
 import { RouteEngine } from "./modules/routing/route-engine.ts";
+import { RoutingWorkerPool } from "./modules/routing/worker-pool.ts";
+import { validateWorldSyncRequest } from "./contracts/routing-validation.ts";
+import { createPersistenceAdapter, type PersistenceAdapter } from "./modules/persistence/index.ts";
+import { SnapshotQueue } from "./modules/persistence/snapshot-queue.ts";
+import { recoverWorld } from "./modules/persistence/recovery.ts";
+import type { RoutingClient } from "./modules/simulator/routing-client.ts";
 import { routingPlugin } from "./modules/routing/http-server.ts";
 import { SimulationRuntime, type ScenarioOptions } from "./modules/simulator/simulation-runtime.ts";
 import { simulatorPlugin } from "./modules/simulator/http-plugin.ts";
@@ -18,6 +24,9 @@ export interface BackendOptions {
   simulator?: ScenarioOptions;
   frontendOrigin?: string;
   logger?: boolean;
+  persistence?: PersistenceAdapter;
+  workerCount?: number;
+  snapshotQueueLimit?: number;
 }
 
 function frontendOrigins(config: string | undefined): string[] {
@@ -38,7 +47,10 @@ export async function createBackendApp(options: BackendOptions = {}) {
   const { graph } = await loadGraph(new URL("../data/grafo_manta.json", import.meta.url), manifest);
   const apiKey = options.apiKey ?? process.env.ROUTE_API_KEY;
   if (!apiKey) throw new Error("ROUTE_API_KEY es obligatoria");
-  const engine = new RouteEngine(graph);
+  if (apiKey.length < 16) throw new Error("ROUTE_API_KEY requiere al menos 16 caracteres");
+  const workers = new RoutingWorkerPool(graph, { size: options.workerCount ?? Number(process.env.ROUTING_WORKERS ?? 1) });
+  const persistence = options.persistence ?? createPersistenceAdapter();
+  const engine = new RouteEngine(graph, { workerCount: workers.size });
   const app = Fastify({ bodyLimit: 1_048_576, logger: options.logger ?? true });
   const origins = frontendOrigins(options.frontendOrigin ?? process.env.FRONTEND_ORIGIN);
   app.addHook("onRequest", async (request, reply) => {
@@ -56,38 +68,109 @@ export async function createBackendApp(options: BackendOptions = {}) {
   });
   app.options("/*", async (_request, reply) => reply.code(204).send());
   app.decorate("routeEngine", engine);
-  app.register(routingPlugin, { engine, apiKey });
+  let saturationRecovery = false;
+  const queue = new SnapshotQueue(persistence, { limit: options.snapshotQueueLimit,
+    onAlarm: event => {
+      app.log.error({ event: "persistence-alarm", ...event });
+      if (event.code === "SNAPSHOT_QUEUE_FULL" && saturationRecovery) return;
+      if (event.code === "SNAPSHOT_QUEUE_FULL") saturationRecovery = true;
+      // El callback de commit puede estar activo: solicitar pausa en el siguiente microtask.
+      queueMicrotask(() => {
+        if (simulator.getCommittedWorld()?.status === "running") simulator.pause(event.code);
+        if (event.code === "SNAPSHOT_QUEUE_FULL") void queue.flush().then(() => {
+          const paused = simulator.getCommittedWorld();
+          if (paused?.status === "paused") queue.enqueue(paused);
+        }).catch(() => { /* El fallo persistente ya emite alarma y deja readiness en 503. */ })
+          .finally(() => { saturationRecovery = false; });
+      });
+    } });
+  let initialized = false, closing = false;
+  app.register(routingPlugin, { engine, apiKey,
+    readiness: () => initialized && !closing && engine.isInitialized() && workers.isReady() && persistence.isReady() && queue.isHealthy(),
+    synchronize: async value => {
+      const request = validateWorldSyncRequest(value, graph);
+      // Idempotencia y conflictos se comprueban en el escritor antes de publicar el plan.
+      const installed = engine.getStatus(request.gameId).installed;
+      if (installed && request.turnId <= installed.turnId) return engine.sync(request);
+      const computed = await workers.compute(request);
+      return engine.sync(request, computed);
+    } });
   const rounds = { ...createRoundPresets(graph), ...options.simulator?.rounds };
   const simulator = new SimulationRuntime({ ...options.simulator, rounds,
     initialMetrics: options.simulator?.initialMetrics ?? (roundId =>
       createInitialTelemetryMetrics(validateRoundConfig(rounds[roundId], graph))),
     graph, syncTimeoutMs: 500,
+    getPersistenceProgress: () => { const stats = queue.stats(); return {
+      snapshotQueueDepth: stats.depth, lastSnapshotTurnId: stats.lastSnapshotTurnId,
+    }; },
     clientFactory: () => {
-      const address = app.server.address();
-      if (!address || typeof address === "string") throw new Error("El servidor HTTP todavía no escucha");
-      return createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey });
+      let client: RoutingClient | undefined;
+      const get = () => {
+        if (client) return client;
+        const address = app.server.address();
+        if (!address || typeof address === "string") throw new Error("El servidor HTTP todavía no escucha");
+        return client = createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey, maxSockets: 16 });
+      };
+      return { sync: (r, signal) => get().sync(r, signal), status: (id, signal) => get().status(id, signal),
+        step: (r, signal) => get().step(r, signal), close: () => client?.close?.() };
     }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
   app.register(simulatorPlugin, { runtime: simulator, apiKey });
   app.register(realtimePlugin, { runtime: simulator, allowedOrigins: origins });
-  return { app, engine, graph, simulator };
+  const unsubscribe = simulator.subscribeCommitted(() => {
+    const world = simulator.getCommittedWorld();
+    if (world) queue.enqueue(world);
+  });
+  app.addHook("onReady", async () => {
+    try {
+      await workers.initialize();
+      await persistence.initialize();
+      const restored = await persistence.loadLatestPausedGame();
+      if (restored) simulator.restorePaused(recoverWorld(restored, graph));
+      initialized = true;
+      app.log.info({ event: "dependencies-ready", region: process.env.AWS_REGION ?? "us-east-2", workers: workers.size,
+        persistence: persistence.constructor.name, recovered: !!restored });
+    } catch (error) { await workers.close(); await persistence.close(); throw error; }
+  });
+  app.addHook("preClose", async () => { closing = true; await simulator.close(); });
+  app.addHook("onClose", async () => {
+    unsubscribe();
+    try { await queue.close(); } catch { app.log.error({ event: "snapshot-flush-failed" }); }
+    await workers.close();
+  });
+  const telemetry = setInterval(() => {
+    const world = simulator.getCommittedWorld();
+    app.log.info({ event: "backend-metrics", gameId: world?.gameId, turnId: world?.turnId, worldVersion: world?.worldVersion,
+      routeP95Ms: world?.metrics.routeLatencyP95Ms ?? 0, routeTimeouts: world?.metrics.routeTimeouts ?? 0,
+      wsClients: world?.metrics.wsClients ?? 0, snapshotQueue: queue.stats(), workersReady: workers.isReady(), rssBytes: process.memoryUsage().rss });
+  }, 30_000);
+  telemetry.unref(); app.addHook("onClose", async () => clearInterval(telemetry));
+  return { app, engine, graph, simulator, workers, persistence, queue };
 }
 
 export async function startBackendServer(options: BackendOptions & { port?: number; host?: string } = {}) {
   const port = options.port ?? Number(process.env.PORT ?? 3001);
   const host = options.host ?? process.env.HOST ?? "127.0.0.1";
   if (!Number.isSafeInteger(port) || port < (options.port === 0 ? 0 : 1) || port > 65535) throw new Error("PORT inválido");
-  const { app, engine, graph, simulator } = await createBackendApp(options);
-  await app.listen({ port, host });
+  const backend = await createBackendApp(options);
+  const { app, graph, workers } = backend;
+  try { await app.listen({ port, host }); }
+  catch (error) { await app.close(); throw error; }
   app.log.info({ event: "backend-ready", host, port, graphVersion: graph.metadata.graphVersion,
-    nodes: graph.nodos.length, edges: graph.aristas.length, workerCount: 1 });
-  return { app, engine, graph, simulator };
+    nodes: graph.nodos.length, edges: graph.aristas.length, workerCount: workers.size });
+  return backend;
 }
 
 function isMain() {
   return !!process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href;
 }
 
-if (isMain()) startBackendServer().catch(error => {
+if (isMain()) startBackendServer().then(({ app }) => {
+  let stopping = false;
+  for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => {
+    if (stopping) return; stopping = true;
+    void app.close().then(() => { process.exitCode = 0; }, () => { process.exitCode = 1; });
+  });
+}).catch(error => {
   console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

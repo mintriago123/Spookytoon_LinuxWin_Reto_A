@@ -13,6 +13,13 @@ El servidor escucha en `127.0.0.1:3001`. `HOST` y `PORT` permiten cambiarlo.
 Para cargar un archivo de entorno explícitamente: `node --env-file=.env src/server.ts`.
 La plantilla está en `.env.example`; la clave de operador/routing es obligatoria.
 
+El despliegue EC2 confirmado por el equipo utiliza `AWS_REGION=us-east-2`
+(Ohio), zona `us-east-2a`, y `DYNAMODB_TABLE_NAME=spookython-manta-state`.
+La base pública HTTPS es `https://3-128-78-190.sslip.io`; el canal WebSocket
+es `wss://3-128-78-190.sslip.io/ws`. La zona de EC2 no se debe pasar como
+región al cliente DynamoDB. Configuración y alcance de la persistencia en
+[infra/README.md](../infra/README.md).
+
 ## Partidas listas para iniciar
 
 `src/config/round-presets.ts` construye y valida los tres presets usando el
@@ -66,7 +73,7 @@ Cada turno recalcula vivos, mordidos, evacuados y zombies activos.
 | `wsClients` | Conexiones WS presentes al comprometer el snapshot |
 
 El cliente HTTP interno despacha el lote de hasta 200 intentos y conserva
-conexiones con un pool de 32 sockets (configurable entre 1 y 200 en su fábrica),
+conexiones con un pool de 16 sockets en el servidor (configurable entre 1 y 200 en su fábrica),
 respeta AbortSignal y no sigue redirecciones. Las reservas tienen planes
 precalculados por refugio para no bloquear a quien ya posee un cupo.
 
@@ -82,3 +89,27 @@ métricas/timeout, reservas/capacidad, reloj de 150 ticks y tres pruebas de humo
 con `startBackendServer()`, grafo real, reloj real, routing HTTP y WS. Cada
 ronda avanza tres turnos; R2/R3 ejercitan cierres mediante controles HTTP.
 Estas pruebas locales no sustituyen medir rondas completas en el despliegue.
+
+## Dependencias operativas de Michael
+
+El servidor inicializa un worker de precompute por defecto (`ROUTING_WORKERS=1`),
+valida el checksum del grafo y prepara persistencia antes de reportar readiness.
+`/paso` conserva lookup local sin IPC. El pool soporta hasta 8 workers y una cola
+acotada de 200 sincronizaciones; exceso responde 429.
+
+`DYNAMODB_TABLE_NAME` selecciona DynamoDB; sin esa variable o bajo node:test se
+usa memoria. Una configuración DynamoDB con errores de red/tabla/IAM falla el
+arranque; no se cambia silenciosamente a memoria. El constructor DynamoDB usa
+Ohio y `spookython-manta-state` por defecto. Checkpoints con gzip/checksum,
+fragmentación, publicación atómica de manifiesto/puntero, cola de 32 y hasta 3
+reintentos. La última partida incompleta se recupera pausada y valida graphVersion.
+
+`/simulador/reanudar` exige la identidad de la partida pausada. `/simulador/reiniciar`
+exige estado paused/completed y gameId nuevo. Ambos requieren x-api-key y usan el
+mismo DTO de iniciar. El temporizador del simulador no se modifica en esta entrega;
+la alineación de sus ventanas con la rama de Maykel se conserva como trabajo de integración.
+
+[OpenAPI](openapi/openapi.yaml), [operación y rollback](../docs/operacion-rollback.md)
+y [costos Ohio](../docs/costos.md) describen despliegue y verificación. Los tests de
+persistencia usan un transporte inyectado, sin AWS. No son evidencia de escritura
+real en la tabla de producción ni de 150 turnos en EC2.
