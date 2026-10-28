@@ -52,12 +52,16 @@ try {
    const http=await request('/estado');assert.deepEqual(http,world,'GET /estado y WS difieren');summary.httpWsEqual++;
    assert(world.shelters.every(s=>s.ocupantes.length+s.reservados.length<=s.capacidad));
    assert.equal(world.metrics.activeSurvivors+world.metrics.bittenSurvivors+world.metrics.evacuatedSurvivors,summary.survivors);
+   assert.equal(world.cameras.length,4);assert.equal(world.cameras.filter(c=>c.enabled).length,3);
+   summary.routeTimeouts=world.metrics.routeTimeouts;
+   summary.invalidRouteResponses=world.metrics.invalidRouteResponses;
+   summary.routeErrors=world.metrics.routeErrors;
    if(previous){const nodes=new Map(previous.survivors.map(s=>[s.id,s.nodeId]));summary.movements+=world.survivors.filter(s=>nodes.get(s.id)!==s.nodeId).length;}
    summary.routeTargetsObserved+=world.survivors.filter(s=>s.targetShelterId!==null).length;
    summary.turns=turn;summary.maxP95Ms=Math.max(summary.maxP95Ms,world.metrics.routeLatencyP95Ms);
    if(world.metrics.routeSamples)summary.minAvailability=Math.min(summary.minAvailability,world.metrics.routeAvailabilityPercent);
    summary.deadlineMisses=world.metrics.deadlineMisses;summary.blockedSegments=world.blockedEdges.filter(b=>b.desbloqueadaEnTurno===null).length;
-   summary.observations.push({turnId:turn,worldVersion:world.worldVersion,status:world.status,p95Ms:world.metrics.routeLatencyP95Ms,active:world.metrics.activeSurvivors,saved:world.metrics.evacuatedSurvivors,bitten:world.metrics.bittenSurvivors,deadlineMisses:world.metrics.deadlineMisses,queueDepth:world.metrics.snapshotQueueDepth,lastPersistedTurn:world.metrics.lastSnapshotTurnId});
+   summary.observations.push({turnId:turn,worldVersion:world.worldVersion,status:world.status,p95Ms:world.metrics.routeLatencyP95Ms,active:world.metrics.activeSurvivors,saved:world.metrics.evacuatedSurvivors,bitten:world.metrics.bittenSurvivors,deadlineMisses:world.metrics.deadlineMisses,queueDepth:world.metrics.snapshotQueueDepth,lastPersistedTurn:world.metrics.lastSnapshotTurnId,cameraObservations:world.cameraObservations.length,turnDurationMs:world.metrics.turnDurationMs});
    if(turn>0&&world.status==='paused'){
     await save();
     const healthy=await fetch('http://127.0.0.1:3001/health/ready');
@@ -80,11 +84,12 @@ try {
    await new Promise(r=>setTimeout(r,200));
   }
   assert.equal(pointer?.gamePK,`GAME#${gameId}`);assert.equal(pointer?.turnSK,'TURN#000150');summary.dynamoDbTurn150=true;
-  summary.slaPassed=summary.maxP95Ms<=150&&summary.minAvailability===100&&summary.deadlineMisses===0;
+  summary.routingSlaPassed=summary.maxP95Ms<=150&&summary.minAvailability===100&&summary.routeTimeouts===0&&summary.invalidRouteResponses===0&&summary.routeErrors===0;
+  summary.slaPassed=summary.routingSlaPassed&&summary.deadlineMisses===0;
   await save();console.log(JSON.stringify({event:'round-completed',...summary,observations:undefined}));
   socket.close();socket=null;
  }
- result.complete=true;result.slaPassed=result.rounds.every(r=>r.slaPassed);result.finishedAt=new Date().toISOString();await save();console.log(JSON.stringify({event:'acceptance-completed',slaPassed:result.slaPassed,rounds:3}));
+ result.complete=true;result.functionalVerified=true;result.routingSlaPassed=result.rounds.every(r=>r.routingSlaPassed);result.slaPassed=result.rounds.every(r=>r.slaPassed);result.finishedAt=new Date().toISOString();await save();console.log(JSON.stringify({event:'acceptance-completed',slaPassed:result.slaPassed,routingSlaPassed:result.routingSlaPassed,rounds:3}));
  if(!result.slaPassed)process.exitCode=1;
 }catch(error){result.error=error.message;result.finishedAt=new Date().toISOString();await save();console.error(JSON.stringify({event:'acceptance-failed',error:error.message}));process.exitCode=1;}
 finally{socket?.terminate();raw.destroy();}

@@ -47,3 +47,11 @@ persistencia), tema SNS y correo confirmado. Configuración reproducible:
 Los permisos adicionales de instalación están en
 `iam-policy-cloudwatch-setup.json`; no modifican IAM automáticamente.
 Ver [evidencia y métricas](../docs/evidence/cloudwatch-2026-10-28/README.md).
+
+## Despliegue integrado
+
+Desde Node 24: `SSH_KEY="$HOME/Descargas/Michi.pem" bash infra/deploy-release.sh origin/prueba`.
+Compila y verifica frontend localmente, comprueba artefactos y ejecuta las pruebas
+del backend en EC2 antes del corte. El rollback restaura frontend/backend/Caddy
+mediante manifests de release. No cambia secretos ni DynamoDB.
+Pruebas sin AWS: `npm run test:infra`. Detalles en operación y rollback.

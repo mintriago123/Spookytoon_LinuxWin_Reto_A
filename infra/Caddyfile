@@ -1,8 +1,19 @@
 3-128-78-190.sslip.io {
 	encode zstd gzip
 	@internal path /health/* /motor/* /paso
-	respond @internal 404
-	reverse_proxy localhost:3001
+	handle @internal {
+		respond 404
+	}
+	@api path /estado /ws /simulador/*
+	handle @api {
+		reverse_proxy localhost:3001
+	}
+	handle {
+		root * /srv/spookython/current
+		try_files {path} /index.html
+		header Cache-Control "no-cache"
+		file_server
+	}
 	log {
 		output file /var/log/caddy/spookython-access.json {
 			roll_size 10MiB

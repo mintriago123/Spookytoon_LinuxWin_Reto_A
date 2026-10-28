@@ -26,20 +26,54 @@ La instancia necesita un IAM Role con permisos sobre la tabla, no access keys en
 
 La tabla existente `spookython-manta-state` está ACTIVE y On-Demand con `gameId` (partition, S) y `turnId` (sort, N), verificado por SSH el 28 de octubre. El adaptador detecta ese esquema y también admite PK/SK de texto; no migra ni borra datos. Usa prefijos GAME#/META# para separar sus checkpoints de ítems anteriores. Un esquema distinto falla antes de readiness. Confirmar con `aws dynamodb describe-table --region us-east-2 --table-name spookython-manta-state`. El esquema se consultó desde EC2 antes de preparar la release.
 
-## Desplegar una release
+## Desplegar frontend y backend juntos
 
-Desde un checkout que contenga el commit deseado, con árbol de backend preparado y cambios ya versionados:
+Desde la estación de trabajo, Node 24.12+ de la serie 24, Python 3.9+, Git,
+SSH/SCP y la clave SSH existente. La rama final de integración es `prueba`.
 
 ```bash
-bash infra/deploy-ec2.sh COMMIT_SHA
-curl --fail http://127.0.0.1:3001/health/ready
-pm2 status
-curl -i https://3-128-78-190.sslip.io/estado
+git fetch origin
+SSH_KEY="$HOME/Descargas/Michi.pem" bash infra/deploy-release.sh origin/prueba
 ```
 
-El script extrae solo `backend/`, `infra/` y `tsconfig.json` del commit; no modifica el frontend. Instala mediante lockfile, ejecuta typecheck y pruebas de backend en la release nueva mientras la anterior sigue sirviendo. Un fallo previo al corte no detiene producción. Después detiene/elimina al proceso PM2 anterior antes de iniciar el nuevo, espera readiness y promueve `/opt/spookython/current`. Esto implica una interrupción breve y reconexión WS; evita dos escritores simultáneos. No usar reload de cluster para buscar cero interrupción.
+El comando extrae el commit a un temporal, instala por lockfile, ejecuta
+los tests, typecheck y lint del frontend y compila sus estáticos para el dominio
+público. No modifica archivos fuente ni obtiene la API key. Transfiere un
+artefacto con commit, inventario SHA-256 y hash/version del grafo. EC2 comprueba
+checksum de transferencia, rutas seguras, inventario y grafo antes de preparar
+la release. El build web ocurre localmente para no cargar la t3.micro activa.
 
-El checkout puede estar en otra ruta usando `REPO_DIR`; `APP_ROOT` y `BACKEND_ENV_FILE` son configurables. La release previa se guarda en `previous-release`; el lock de despliegue también lo toma rollback. Caddy se valida/instala en la preparación; si su archivo cambia, validar, instalar y recargar explícitamente como arriba. Verificar `/estado` tras el corte: 503 GAME_NOT_STARTED es normal si no existe checkpoint ni partida, aun con readiness 200. Si había partida incompleta, debe aparecer `paused`, con el último turno completamente persistido. Reanudar explícitamente con misma identidad/semilla. No esperar que una cola asíncrona sobreviva a SIGKILL o a pérdida de la máquina.
+El comando remoto `deploy-ec2.sh COMMIT FRONTEND_TGZ SHA256` ejecuta npm ci,
+typecheck y pruebas del backend antes del corte. Requiere `release-common.sh`
+y `release-artifact.py` junto al script; el orquestador los transfiere.
+La identidad AWS sigue siendo el role de EC2, sin llaves adicionales.
+
+Se aplica un lock común a deploy y rollback. Primero se detiene y elimina el
+proceso PM2 anterior y se comprueba que no quede un escritor vivo; después se
+activan los dos enlaces de release, se inicia un solo backend y se verifica
+readiness. Solo entonces se recarga Caddy y se comprueban la web y el grafo
+públicos. Un fallo restaura frontend, backend y configuración anteriores.
+La transición tiene una interrupción breve y los clientes WS reconectan.
+
+Backend: `/opt/spookython/current`. Frontend: `/opt/spookython/web/current`,
+con enlace relativo a `releases/ID` para funcionar dentro del contenedor.
+`current-release.json` y `previous-release.json` identifican la pareja de rutas,
+commit y configuración Caddy. `deployments/` conserva los estados antes/después;
+no contienen la API key. Las releases antiguas se conservan para rollback.
+
+El Caddy de esta instancia corre en Docker, con certificados persistentes en
+`caddy_data` y `caddy_config`. Debe tener el bind mount de solo lectura
+`/opt/spookython/web:/srv/spookython:ro` y el archivo existente
+`/home/ec2-user/Caddyfile:/etc/caddy/Caddyfile`. El despliegue verifica ese montaje
+antes del corte; no recrea el contenedor ni elimina certificados. La raíz sirve
+el frontend; `/estado`, `/ws` y `/simulador/*` hacen proxy a localhost:3001.
+`/health/*`, `/motor/*` y `/paso` permanecen internos.
+
+Configuración opcional del orquestador: `EC2_HOST`, `SSH_KEY`,
+`REMOTE_REPO_DIR` y `REMOTE_NODE_BINARY`. En EC2 se admiten `APP_ROOT`,
+`BACKEND_ENV_FILE`, `CADDY_CONFIG`, `CADDY_CONTAINER` y `PUBLIC_API_URL`.
+Readiness 200 no exige partida. `/estado` responde 503 GAME_NOT_STARTED sin
+partida; una recuperación válida queda pausada y se reanuda explícitamente.
 
 ## Persistencia y recuperación
 
@@ -84,13 +118,24 @@ La configuración activa recoge solo backend y errores de PM2. El access log de 
 ## Rollback
 
 ```bash
-bash infra/rollback-ec2.sh
+export NODE_BINARY=/home/ec2-user/.local/node/node-v24.22.0-linux-x64/bin/node
+export PATH="$(dirname "$NODE_BINARY"):$PATH"
+bash /opt/spookython/current/infra/rollback-ec2.sh
 curl --fail http://127.0.0.1:3001/health/ready
-curl -i https://3-128-78-190.sslip.io/estado
-pm2 logs spookython-backend --lines 50 --nostream
+curl --fail https://3-128-78-190.sslip.io/ >/dev/null
 ```
 
-Rollback utiliza la release previa ya instalada; detiene al escritor actual, inicia el anterior, comprueba readiness y cambia el symlink. Si falla, intenta restablecer el proceso que estaba activo. No elimina releases ni revierte datos en DynamoDB. Probar compatibilidad del esquema de checkpoint y graphVersion antes de migrar formatos; un binario anterior que no pueda leer el último checkpoint debe fallar cerrado. Conservar una copia/backup antes de una migración de formato. Este rollback de código no es restauración a un turno histórico.
+El rollback toma el mismo lock, valida la pareja anterior, detiene al escritor,
+restaura frontend/backend/Caddy y comprueba readiness y la web. Si el objetivo
+no queda saludable, intenta recuperar la pareja que estaba activa. Intercambia
+los manifests actual/anterior solo después del éxito; permite volver adelante.
+No revierte DynamoDB, borra partidas ni cambia la API key. Antes de introducir
+migraciones de checkpoints, debe comprobarse compatibilidad con la release
+anterior; este cierre no modifica esos esquemas.
+
+Para probar fallos sin afectar EC2: `npm run test:infra`. La suite usa dobles
+de comandos y directorios temporales para checksums, grafo, Caddy, readiness,
+rollback, repetición y exclusión de escritores; no necesita red ni credenciales.
 
 ## Alternativa Docker
 

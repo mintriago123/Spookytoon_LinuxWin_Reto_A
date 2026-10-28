@@ -14,7 +14,8 @@
     "benchmark:routing": "node scripts/benchmark-routing.ts",
     "test": "node --test tests/*.test.ts",
     "test:integration": "node --test tests/simulator-integrated.test.ts tests/simulator-http-failures.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:infra": "python3 -m unittest discover -s infra/tests -p 'test_*.py' -v"
   },
   "dependencies": {
     "ajv": "^8.17.1",
