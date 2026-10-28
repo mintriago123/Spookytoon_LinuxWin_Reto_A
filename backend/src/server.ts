@@ -25,6 +25,7 @@ export interface BackendOptions {
   frontendOrigin?: string;
   logger?: FastifyServerOptions["logger"];
   requestLogging?: boolean;
+  routingMaxSockets?: number;
   persistence?: PersistenceAdapter;
   workerCount?: number;
   snapshotQueueLimit?: number;
@@ -49,6 +50,10 @@ export async function createBackendApp(options: BackendOptions = {}) {
   const apiKey = options.apiKey ?? process.env.ROUTE_API_KEY;
   if (!apiKey) throw new Error("ROUTE_API_KEY es obligatoria");
   if (apiKey.length < 16) throw new Error("ROUTE_API_KEY requiere al menos 16 caracteres");
+  const routingMaxSockets = options.routingMaxSockets ?? Number(process.env.ROUTING_HTTP_MAX_SOCKETS ?? 8);
+  if (!Number.isSafeInteger(routingMaxSockets) || routingMaxSockets < 1 || routingMaxSockets > 200) {
+    throw new Error("ROUTING_HTTP_MAX_SOCKETS debe estar entre 1 y 200");
+  }
   const workers = new RoutingWorkerPool(graph, { size: options.workerCount ?? Number(process.env.ROUTING_WORKERS ?? 1) });
   const persistence = options.persistence ?? createPersistenceAdapter();
   const engine = new RouteEngine(graph, { workerCount: workers.size });
@@ -122,7 +127,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
         if (client) return client;
         const address = app.server.address();
         if (!address || typeof address === "string") throw new Error("El servidor HTTP todavía no escucha");
-        return client = createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey, maxSockets: 16 });
+        return client = createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey, maxSockets: routingMaxSockets });
       };
       return { sync: (r, signal) => get().sync(r, signal), status: (id, signal) => get().status(id, signal),
         step: (r, signal) => get().step(r, signal), close: () => client?.close?.(), getTimings: () => client?.getTimings?.() ?? [] };
@@ -140,7 +145,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
       const restored = await persistence.loadLatestPausedGame();
       if (restored) simulator.restorePaused(recoverWorld(restored, graph));
       initialized = true;
-      app.log.info({ event: "dependencies-ready", region: process.env.AWS_REGION ?? "us-east-2", workers: workers.size,
+      app.log.info({ event: "dependencies-ready", region: process.env.AWS_REGION ?? "us-east-2", workers: workers.size, httpMaxSockets: routingMaxSockets,
         persistence: persistence.constructor.name, recovered: !!restored });
     } catch (error) { await workers.close(); await persistence.close(); throw error; }
   });
