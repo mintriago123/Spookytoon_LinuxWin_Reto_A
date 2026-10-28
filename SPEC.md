@@ -34,7 +34,7 @@ AWS: imagen en ECR; Backend en ECS Fargate detrás de ALB; TLS en ALB; API key e
 
 Después de cada turno comprometido, se encola un snapshot dinámico para DynamoDB sin esperar su escritura. Claves: PK=GAME#<gameId>, SK=TURN#<turnId con 6 dígitos>. Validar el tamaño serializado: hasta 350 KiB se escribe como un ítem; encima, dividir en fragmentos con manifiesto. Cola limitada, reintentos con backoff exponencial y jitter. Cola llena dispara alarma y pausa tras cerrar el turno activo. Tras reinicio, restaurar el último snapshot completo y dejar la partida pausada.
 
-### 1.2 Árbol exacto
+### 1.2 Estructura objetivo
 
 ```text
 .
@@ -830,7 +830,16 @@ El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la env
       "activeZombies": 12,
       "wsClients": 1,
       "snapshotQueueDepth": 0,
-      "lastSnapshotTurnId": 11
+      "lastSnapshotTurnId": 11,
+      "routeErrors": 0,
+      "routeAvailabilityPercent": 100,
+      "survivalRatePercent": 100,
+      "activeSurvivorsPercent": 100,
+      "bittenSurvivorsPercent": 0,
+      "evacuatedSurvivorsPercent": 0,
+      "turnDurationMs": 100,
+      "turnBudgetUsedPercent": 5,
+      "turnEfficiencyPercent": 100
     }
   }
 }
@@ -922,7 +931,7 @@ export interface RoundConfig {
 
 La lista de spawns DEBE tener IDs únicos y nodeIds del grafo; su longitud de sobrevivientes debe coincidir con survivorCount y la composición de zombieSpawns con las reglas de la ronda. Ningún sobreviviente inicia en nodo zombie, zona de horda o nodo de refugio. Estas posiciones son datos del escenario, no valores inferidos por el motor.
 
-Turnos seriales con reloj monotónico y ventanas absolutas de 2.000 ms. En ejecución continua sin pausas, el trabajo del turno k comienza en T0 + (k-1)×2.000 ms y debe terminar antes de T0 + k×2.000 ms. El turno 1 calcula desde T0; el turno 150 calcula dentro de [T0+298.000, T0+300.000). Si el trabajo acaba antes, conservar el resultado privado y esperar para comprometer/publicar en la frontera nominal de cierre. La espera deliberada no cuenta en turnDurationMs. Trabajo que alcanza o excede el deadline, o cierre que se retrasa más allá de la frontera, incrementa deadlineMisses una sola vez por turno; comprometer siempre el estado consistente y pausar antes de iniciar otro. En el turno 150 prevalece completed aunque haya incumplimiento. Sin incumplimientos, el último commit/publicación ocurre en T0+300.000 ms, nunca antes ni con el cálculo empezando allí. No solapar ni saltar fases. Una reanudación fija un nuevo origen para las ventanas restantes, sin recuperar tiempo pausado. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
+Turnos seriales con reloj monotónico y ventanas absolutas de 2.000 ms. En ejecución continua sin pausas, el trabajo del turno k tiene inicio nominal T0 + (k-1)×2.000 ms y debe terminar antes de T0 + k×2.000 ms. El turno 1 calcula desde T0; el turno 150 calcula dentro de [T0+298.000, T0+300.000). Si el trabajo acaba antes, conservar el resultado privado y esperar la frontera nominal de cierre. La espera deliberada no cuenta en turnDurationMs. Para el cierre se admite exclusivamente la tolerancia de jitter de §5.4, sin ampliar el presupuesto de cálculo ni desplazar las siguientes ventanas. Un incumplimiento incrementa deadlineMisses una sola vez por turno; comprometer siempre el estado consistente y pausar antes de iniciar otro. En el turno 150 prevalece completed aunque haya incumplimiento. La frontera nominal final es T0+300.000 ms: nunca iniciar allí el cálculo del último turno ni publicar antes de esa frontera. La tolerancia no autoriza afirmar un cierre físico exacto en 300.000 ms. No solapar ni saltar fases. Una reanudación fija un nuevo origen para las ventanas restantes, sin recuperar tiempo pausado. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
 
 ### 5.2 Zombies
 
@@ -933,6 +942,7 @@ Todos calculan intención desde la misma vista pre-movimiento y aplican movimien
 ```text
 T0 = monotonicNow() // al iniciar o reanudar
 frontera = T0 + 2.000 ms
+jitterCierreMs = 10 // fijo durante la partida; configurable explícitamente
 loop mientras status == running:
   inicioTrabajo = monotonicNow()
   k = turnId + 1
@@ -977,6 +987,7 @@ loop mientras status == running:
   despertar dormidos por posiciones nuevas; recalcular reservas/métricas
 
   phase = publish
+  preparar métricas de rutas y congelar los datos del nuevo snapshot privado
   finTrabajo = monotonicNow()
   esperaPublicacionMs = 0
   si finTrabajo < frontera:
@@ -984,16 +995,19 @@ loop mientras status == running:
     esperar hasta frontera manteniendo privado el resultado
     esperaPublicacionMs = monotonicNow() - inicioEspera
   incorporar controles recibidos durante cálculo/espera; resolver pausa solicitada
-  cierre = monotonicNow()
-  turnDurationMs = cierre - inicioTrabajo - esperaPublicacionMs
-  deadlineMiss = finTrabajo >= frontera o cierre > frontera
+  completar fecha y conteo WS; los datos pesados ya estaban preparados antes de esperar
+  cierreLogico = monotonicNow() // después de preparar/congelar; antes del sellado e intercambio síncronos
+  turnDurationMs = cierreLogico - inicioTrabajo - esperaPublicacionMs
+  deadlineMiss = finTrabajo >= frontera o turnDurationMs >= 2.000 ms
+                 o cierreLogico > frontera + jitterCierreMs
   si deadlineMiss: incrementar deadlineMisses
   turnEfficiencyPercent = 100 × (k - deadlineMisses) / k
-  recalcular métricas con turnDurationMs, excluyendo la espera deliberada
+  sellar métricas temporales con turnDurationMs, excluyendo la espera deliberada
   si k == 150: status=completed
   si no, si pausa solicitada o deadlineMiss: status=paused
   activeTurnId = null
   comprometer snapshot atómicamente; turnId=k; worldVersion++
+  observar instante posterior al intercambio para diagnóstico interno de retraso real
   actualizar GET /estado y emitir TURN_UPDATE
   encolar snapshot DynamoDB sin esperar
   frontera += 2.000 ms // absoluta; comenzar el siguiente cálculo sin otra espera
@@ -1006,6 +1020,12 @@ Una persona mordida no se evacúa aunque termine en refugio y tenga reserva. La 
 Usar Promise.allSettled para hasta 200 solicitudes con límite de 200 en vuelo. Todas comparten turnId/worldVersion; no sincronizar nueva versión hasta cerrar lote. Requests idempotentes. Pool rechaza exceso con 429. Workers no comparten datos mutables; sync publica snapshot completo de forma atómica.
 
 Medir una muestra por request incluyendo error; timeout cuenta como 500 ms. Ring buffer deslizante de últimas 1.000 solicitudes. Percentiles nearest-rank: ordenar muestra, índice ceil(p*n)-1; reportar una decimal. p95 de extremo a extremo de POST /paso. routeTimeouts, invalidRouteResponses y deadlineMisses son acumulados por partida; controles fuera de la ventana. Un timeout no detiene el loop ni mueve al sobreviviente.
+
+**Cierre y jitter.** `commitJitterToleranceMs` es 10 ms por defecto, acordados para el cierre, y queda fijo durante la partida. Puede configurarse explícitamente entre 0 y menos de 2.000 ms; el valor usado debe acompañar la evidencia de aceptación. El trabajo que alcanza el deadline absoluto o consume 2.000 ms de duración activa incumple aunque el exceso sea menor que la tolerancia. Esta solo evita atribuir al cálculo el pequeño retraso del temporizador o del cierre: un cierre lógico exactamente en frontera + tolerancia es admisible; por encima incumple. No se acumula la tolerancia por turno ni se mueve T0, la siguiente frontera o el deadline de cálculo.
+
+La muestra `commitReadyAtMonotonicMs` se toma después de calcular métricas de rutas, actualizar estado/fecha y congelar los datos. Es el punto lógico usado para clasificar el cierre; después solo se sellan los cuatro indicadores temporales y se intercambia la referencia, sin await, callbacks de usuario ni I/O. `turnDurationMs` incluye preparación y congelado hasta esa muestra, descontando la espera completa de publicación. Inmediatamente después del intercambio se observa `committedAtMonotonicMs`; esa segunda muestra es diagnóstica y no introduce otro commit. El diagnóstico interno `TurnTiming` conserva ambos instantes, deadline, tolerancia, retraso del despertar y retraso real observado del commit (sin redondear). No se oculta un retraso por estar dentro de tolerancia y no se amplía el snapshot público de 23 métricas. Para contrastar un cierre físico con 300.000 ms se usa el retraso observado, no solo `deadlineMisses` ni la eficiencia.
+
+La actualización de GET /estado y el encolado de TURN_UPDATE siguen al commit. El broadcast WebSocket usa setImmediate; `emittedAt` es una fecha UTC de codificación del mensaje, no un reloj monotónico ni un acuse de recepción. La entrega WS/red se mide por separado y no determina el cumplimiento del cierre lógico. No se exige igualdad exacta del temporizador del sistema con la frontera nominal.
 
 ## 6. Frontend
 
@@ -1025,7 +1045,7 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 
 1. **Extracción y grafo:** 250–350 nodos, cuatro zonas, cuatro refugios con capacidad positiva, IDs únicos, arcos dirigidos/factores/referencias válidos, atribución, graphVersion y hash compartido.
 2. **Estado/sincronización:** carga y validación antes de readiness; instalar versión atómica en workers; sync idéntico idempotente, versión obsoleta/conflicto 409; estado parcial nunca público.
-3. **POST /paso y plan Base:** una búsqueda Dijkstra inversa por worldVersion, tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: jamás devuelve edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
+3. **POST /paso y plan Base:** precomputar por worldVersion el Dijkstra inverso del plan general y los planes por refugio con reservas (reservedPlans), conforme a §4.2; no ejecutar Dijkstra por sobreviviente. Tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: respetar la disponibilidad general descontando reservas y mantener rutas para sus titulares; jamás devolver edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
 4. **API/OpenAPI/controles:** rutas y contratos alineados; x-api-key exigida en motor/controles; dos inicios concurrentes no aceptados; pausar cierra turno; cierre afecta ambos sentidos del segmento.
 5. **AWS/persistencia/telemetría:** ECS/ALB, DynamoDB On-Demand, Secrets Manager y CloudWatch en la región seleccionada mediante AWS_REGION. Aceptación: región confirmada antes del despliegue; una tarea autoritativa; snapshot por turno asíncrono; reinicio restaura pausado; alertas p95/timeout/cola/health; secretos fuera del frontend/logs.
 6. **Costos/operación:** documentar sizing medido, retención, alarmas y rollback; estimación vía AWS Pricing Calculator antes del evento.

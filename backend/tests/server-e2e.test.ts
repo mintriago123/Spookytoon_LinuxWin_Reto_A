@@ -31,7 +31,7 @@ test("CORS permite HTTP autenticado local/producción y rechaza orígenes no con
 
 for (const roundId of [1, 2, 3] as const) {
   test(`R${roundId}: startBackendServer mueve entidades y publica métricas iguales por HTTP/WS con reloj real`, { timeout: 20_000 }, async t => {
-    const { app, engine, graph } = await startBackendServer({ apiKey, port: 0, logger: false,
+    const { app, engine, graph, simulator } = await startBackendServer({ apiKey, port: 0, logger: false,
       frontendOrigin: "https://demo.example.test" });
     const address = app.server.address();
     assert(address && typeof address !== "string");
@@ -44,15 +44,23 @@ for (const roundId of [1, 2, 3] as const) {
       const message = JSON.parse(data.toString()) as TurnUpdate;
       if (message.event === "TURN_UPDATE") {
         worlds.push(message.world);
+        if (message.world.status === "paused" && message.world.metrics.deadlineMisses > 0) {
+          t.diagnostic(JSON.stringify({ roundId, timing: simulator.getLastTurnTiming() }));
+        }
         for (const observer of observers) observer(message.world);
       }
     });
     function waitFor(turnId: number, status = "running"): Promise<WorldSnapshot> {
+      const deadlineFailure = (world: WorldSnapshot) => world.turnId === turnId && status === "running" &&
+        world.status === "paused" && world.metrics.deadlineMisses > 0;
+      const failure = () => new Error(`El turno ${turnId} pausó por incumplimiento: ${JSON.stringify(simulator.getLastTurnTiming())}`);
+      if (worlds.some(deadlineFailure)) return Promise.reject(failure());
       const existing = worlds.find(world => world.turnId === turnId && world.status === status);
       if (existing) return Promise.resolve(existing);
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => { observers.delete(observer); reject(new Error(`No llegó WS turno ${turnId} ${status}`)); }, 8_000);
         const observer = (world: WorldSnapshot) => {
+          if (deadlineFailure(world)) { clearTimeout(timer); observers.delete(observer); reject(failure()); return; }
           if (world.turnId !== turnId || world.status !== status) return;
           clearTimeout(timer); observers.delete(observer); resolve(world);
         };
@@ -105,15 +113,20 @@ for (const roundId of [1, 2, 3] as const) {
         assert.equal(world.metrics.turnEfficiencyPercent, 100);
         assert(world.metrics.turnDurationMs! > 0 && world.metrics.turnDurationMs! < 2_000);
         assert(world.shelters.every(shelter => shelter.capacidad === 60 && shelter.ocupantes.length + shelter.reservados.length <= 60));
-        assert.equal(engine.getStatus(gameId).installed?.turnId, turn);
+        const installed = engine.getStatus(gameId).installed!;
+        // WS es posterior al commit: el cálculo siguiente puede haber sincronizado.
+        assert(installed.turnId === turn || installed.turnId === turn + 1);
+        assert.equal(installed.worldVersion, installed.turnId);
+        assert.equal(installed.graphVersion, world.graphVersion);
         assert(world.survivors.some(survivor => survivor.targetShelterId !== null));
         if (turn >= 2) assert.equal(world.blockedEdges.filter(block => block.desbloqueadaEnTurno === null).length, events.length);
         previous = world;
       }
       assert(movementCount > 0, "Los sobrevivientes deben cambiar de nodo");
-      await control("/simulador/pausar", { reason: "Fin de prueba de humo" });
-      const paused = await waitFor(3, "paused");
-      assert.equal(paused.worldVersion, previous.worldVersion);
+      const pausing = await control("/simulador/pausar", { reason: "Fin de prueba de humo" });
+      assert(pausing.afterTurnId === 3 || pausing.afterTurnId === 4);
+      const paused = await waitFor(pausing.afterTurnId, "paused");
+      assert.equal(paused.worldVersion, previous.worldVersion + pausing.afterTurnId - 3);
       t.diagnostic(JSON.stringify({ roundId, survivors: initial.survivors.length, turns: 3, movements: movementCount,
         p95Ms: previous.metrics.routeLatencyP95Ms, availability: previous.metrics.routeAvailabilityPercent,
         evacuated: previous.metrics.evacuatedSurvivors, bitten: previous.metrics.bittenSurvivors,

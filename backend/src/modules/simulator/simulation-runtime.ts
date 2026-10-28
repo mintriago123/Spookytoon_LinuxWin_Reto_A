@@ -16,6 +16,8 @@ export interface ScenarioOptions {
   initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
   /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
   clock?: SimulationClock;
+  /** Tolerancia de cierre explícita; por defecto 10 ms. No se aplica al cálculo. */
+  commitJitterToleranceMs?: number;
 }
 interface RuntimeOptions extends ScenarioOptions {
   graph: Immutable<MantaGraph>;
@@ -44,6 +46,7 @@ export class SimulationRuntime {
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
+  getLastTurnTiming() { return this.coordinator?.getLastTurnTiming() ?? null; }
   setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
@@ -79,6 +82,7 @@ export class SimulationRuntime {
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
         getWsClientCount: () => this.realtimeClientCount,
+        commitJitterToleranceMs: this.options.commitJitterToleranceMs,
         onCommitted: world => this.publishCommitted(world) });
       coordinator.resume();
       this.routingClient?.close?.();

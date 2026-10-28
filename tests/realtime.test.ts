@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import Fastify from "fastify";
 import WebSocket from "ws";
@@ -102,6 +103,16 @@ class Peer implements RealtimePeer {
   terminate() { this.terminated = true; this.readyState = 3; }
 }
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
+
+test("el ejemplo TURN_UPDATE del SPEC incluye las mismas 23 métricas públicas", async () => {
+  const spec = await readFile(new URL("../SPEC.md", import.meta.url), "utf8");
+  const examples = [...spec.matchAll(/```json\r?\n([\s\S]*?)```/g)].flatMap(match => {
+    try { return [JSON.parse(match[1])]; } catch { return []; }
+  });
+  const update = examples.find(example => example.event === "TURN_UPDATE");
+  assert(update, "El SPEC debe conservar un ejemplo JSON de TURN_UPDATE");
+  assert.deepEqual(Object.keys(update.world.metrics).sort(), [...publicMetricKeys].sort());
+});
 
 test("proyección pública es cerrada, independiente e inmutable y no filtra datos internos", () => {
   const world = fixture().initial();

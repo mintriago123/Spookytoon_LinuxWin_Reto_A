@@ -42,7 +42,7 @@ function deferred<T>() {
 }
 
 // Fixture mínima de pruebas; no es una configuración oficial ni una medición de aceptación.
-function fixture(clock: SimulationClock = new AutoClock()) {
+function fixture(clock: SimulationClock = new AutoClock(), commitJitterToleranceMs = 10) {
   const graph: MantaGraph = { schemaVersion: "1.0.0", metadata: { ciudad: "Manta", graphVersion: "clock-fixture-v1",
     generatedAt: isoNow(), source: "OpenStreetMap", osmAttribution: "fixture" },
     nodos: ["A", "B", "R", "Z"].map(id => ({ id, lat: 0, lng: 0, zona: "Tarqui" })),
@@ -72,7 +72,7 @@ function fixture(clock: SimulationClock = new AutoClock()) {
   };
   const failures: unknown[] = [];
   const options = { graph, rounds: { 1: config }, initialMetrics: () => metrics, clientFactory: () => client,
-    syncTimeoutMs: 500, emitAlert: () => {}, onFailure: (event: unknown) => { failures.push(event); }, clock, isoNow };
+    syncTimeoutMs: 500, emitAlert: () => {}, onFailure: (event: unknown) => { failures.push(event); }, clock, isoNow, commitJitterToleranceMs };
   const runtime = new SimulationRuntime(options);
   const initial = () => createWorldState({ gameId: start.gameId, graph, roundConfig: config,
     initialMetrics: metrics, randomState: { seed: start.seed, algorithm: "sha256-counter", algorithmVersion: "1", strategy: "per-zombie-turn-draw" }, updatedAt: isoNow() });
@@ -133,18 +133,81 @@ for (const finalCost of [1_900, 2_001]) test(`turno 150 con ${finalCost} ms de t
   assert.deepEqual(env.failures, []);
 });
 
-for (const delayedTurn of [1, 150]) test(`despertar tarde para publicar turno ${delayedTurn} registra incumplimiento sin inflar trabajo`, async () => {
+for (const delayedTurn of [1, 150]) test(`despertar fuera de tolerancia para publicar turno ${delayedTurn} registra incumplimiento sin inflar trabajo`, async () => {
   const clock = new AutoClock(); const env = fixture(clock); const sync = env.client.sync;
   env.client.sync = async (request, signal) => { clock.time += 100; return sync(request, signal); };
   const wait = clock.waitUntil.bind(clock);
-  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); if (tick === delayedTurn * 2_000) clock.time += 5; };
+  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); if (tick === delayedTurn * 2_000) clock.time += 11; };
   env.runtime.start(start); await env.runtime.whenStopped();
   const world = env.runtime.getCommittedWorld()!;
   assert.equal(world.turnId, delayedTurn); assert.equal(world.metrics.deadlineMisses, 1);
   assert.equal(world.status, delayedTurn === 150 ? "completed" : "paused");
   assert.equal(world.metrics.turnDurationMs, 100); assert.equal(world.metrics.turnBudgetUsedPercent, 5);
   assert.equal(world.metrics.turnEfficiencyPercent, delayedTurn === 150 ? 99.3 : 0);
-  assert.equal(clock.time, delayedTurn * 2_000 + 5);
+  assert.equal(clock.time, delayedTurn * 2_000 + 11);
+  assert.equal(env.runtime.getLastTurnTiming()!.timerWakeDelayMs, 11);
+  assert.equal(env.runtime.getLastTurnTiming()!.commitDelayMs, 11);
+  assert.equal(env.runtime.getLastTurnTiming()!.commitJitterToleranceMs, 10);
+});
+
+for (const jitter of [0, 5, 10]) test(`jitter de ${jitter} ms queda registrado sin ampliar ventanas ni contar como trabajo`, async () => {
+  const clock = new AutoClock(); const env = fixture(clock); const sync = env.client.sync;
+  const starts: number[] = [];
+  env.client.sync = async (request, signal) => { starts.push(clock.time); clock.time += 100; return sync(request, signal); };
+  const wait = clock.waitUntil.bind(clock);
+  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); if (tick === 300_000) clock.time += jitter; };
+  env.runtime.start(start); await env.runtime.whenStopped();
+  const world = env.runtime.getCommittedSnapshot()!;
+  assert.equal(world.status, "completed"); assert.equal(world.metrics.deadlineMisses, 0);
+  assert.equal(world.metrics.turnDurationMs, 100); assert.equal(world.metrics.turnEfficiencyPercent, 100);
+  assert.deepEqual(starts, Array.from({ length: 150 }, (_, i) => i * 2_000));
+  const timing = env.runtime.getLastTurnTiming()!;
+  assert(Object.isFrozen(timing)); assert.equal(timing.commitDelayMs, jitter); assert.equal(timing.deadlineMiss, false);
+  assert.equal(timing.commitReadyAtMonotonicMs, 300_000 + jitter);
+  assert.equal(timing.committedAtMonotonicMs, 300_000 + jitter);
+  assert(!JSON.stringify(world).includes("commitDelayMs"));
+});
+
+test("el jitter de cierre no acumula deriva a lo largo de 150 ventanas", async () => {
+  const clock = new AutoClock(); const env = fixture(clock); const wait = clock.waitUntil.bind(clock);
+  const starts: number[] = []; const sync = env.client.sync;
+  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); clock.time += 5; };
+  env.client.sync = async (request, signal) => { starts.push(clock.time); clock.time += 100; return sync(request, signal); };
+  env.runtime.start(start); await env.runtime.whenStopped();
+  assert.deepEqual(clock.ticks, Array.from({ length: 150 }, (_, i) => (i + 1) * 2_000));
+  assert.equal(starts[0], 0); assert.equal(starts[149], 298_005); assert.equal(clock.time, 300_005);
+  assert.equal(env.runtime.getCommittedWorld()!.metrics.deadlineMisses, 0);
+});
+
+test("tolerancia cero conserva el criterio estricto para cierre tardío", async () => {
+  const clock = new AutoClock(); const env = fixture(clock, 0); const wait = clock.waitUntil.bind(clock);
+  clock.waitUntil = async (tick, signal) => { await wait(tick, signal); clock.time++; };
+  env.runtime.start(start); await env.runtime.whenStopped();
+  assert.equal(env.runtime.getCommittedWorld()!.metrics.deadlineMisses, 1);
+  assert.equal(env.runtime.getLastTurnTiming()!.commitJitterToleranceMs, 0);
+});
+
+test("la preparación final se mide antes del cierre, y los observadores después", async () => {
+  for (const preparationCost of [0, 11]) {
+    const clock = new AutoClock(); const env = fixture(clock); const state = env.initial(); state.status = "running";
+    const coordinator = new TurnCoordinator(state, { client: env.client, syncTimeoutMs: 500,
+      now: () => clock.now(), isoNow: () => { clock.time += preparationCost; return isoNow(); }, emitAlert: () => {},
+      onCommitted: () => { clock.time += 100; } });
+    const result = await coordinator.runTurn(2_000, async () => { clock.time = 2_000; });
+    const timing = coordinator.getLastTurnTiming()!;
+    assert.equal(timing.timerWakeDelayMs, 0); assert.equal(timing.commitDelayMs, preparationCost);
+    assert.equal(result.world.metrics.turnDurationMs, preparationCost);
+    assert.equal(result.world.metrics.deadlineMisses, preparationCost > 10 ? 1 : 0);
+    assert.equal(timing.committedAtMonotonicMs, 2_000 + preparationCost);
+    assert.equal(clock.time, timing.committedAtMonotonicMs + 100, "El observador no altera el cierre medido");
+  }
+});
+
+test("rechaza tolerancias de cierre inválidas", () => {
+  const env = fixture();
+  for (const tolerance of [-1, NaN, Infinity, 2_000]) assert.throws(() => new TurnCoordinator(env.initial(), {
+    client: env.client, syncTimeoutMs: 500, isoNow, emitAlert: () => {}, commitJitterToleranceMs: tolerance,
+  }), /tolerancia de cierre/);
 });
 
 test("trabajo de 100 ms queda privado hasta los 2000 ms sin inflar su duración", async () => {
