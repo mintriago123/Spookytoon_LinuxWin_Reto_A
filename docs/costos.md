@@ -22,7 +22,7 @@ El equipo reportó **US$0,00 de costo observado bajo Free Tier**. La [captura or
 
 El catálogo EC2 para Ohio identifica t3.micro como 2 vCPU y 1 GiB, no 2 GiB. Fuentes: [precio EC2 Linux Ohio](https://b0.p.awsstatic.com/pricing/2.0/meteredUnitMaps/ec2/USD/current/ec2-ondemand-without-sec-sel/US%20East%20%28Ohio%29/Linux/index.json), [DynamoDB Ohio](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonDynamoDB/current/us-east-2/index.json), [CloudWatch Ohio](https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonCloudWatch/current/us-east-2/index.json), [IPv4](https://aws.amazon.com/vpc/pricing/), [EBS](https://aws.amazon.com/ebs/pricing/). El dominio del catálogo `pricing.us-east-1.amazonaws.com` aloja la lista pública; los datos consultados corresponden a `us-east-2`, no despliegan recursos en Virginia.
 
-EBS usa la tarifa base publicada de gp3; confirmar el volumen y la tarifa seleccionada en Calculator. No hay evidencia aquí del tamaño real del volumen EC2, así que no se presenta un total medido de EBS. Transferencia saliente, snapshots EBS, SNS, créditos CPU excedentes T3 Unlimited y consultas CloudWatch se agregan según uso; no se incluyen como si fueran cero. Caddy y PM2 no generan un servicio AWS separado. ECS, ALB, ECR, S3 y CloudFront no son componentes obligatorios de este despliegue.
+EBS usa la tarifa base publicada de gp3; confirmar el volumen y la tarifa seleccionada en Calculator. El 28 de octubre se consultó el volumen real `vol-0cbf8239394874c91`: 8 GiB gp3, 3.000 IOPS y 125 MiB/s. Su almacenamiento base estimado es US$0,64/mes antes de créditos; no es un importe facturado. Transferencia saliente, snapshots EBS, SNS, créditos CPU excedentes T3 Unlimited y consultas CloudWatch se agregan según uso; no se incluyen como si fueran cero. Caddy y PM2 no generan un servicio AWS separado. ECS, ALB, ECR, S3 y CloudFront no son componentes obligatorios de este despliegue.
 
 ## Costo de nuestros snapshots
 
@@ -39,6 +39,46 @@ Si hay fragmentos, `S` es el manifiesto pequeño y cada fragmento se cobra como 
 
 ## Ejemplo presupuestario, no factura
 
-Con 730 h de EC2, una IPv4 y **8 GB gp3 hipotéticos**, el subtotal mensual es `730×0,0104 + 730×0,005 + 8×0,08 = US$11,882`, antes de DynamoDB, CloudWatch, transferencia y créditos. No sustituye el dato observado de US$0,00: muestra la exposición sin beneficios. El volumen de 8 GB es un supuesto explícito, no una medición de la instancia.
+Con 730 h de EC2, una IPv4 y **8 GiB gp3 medidos**, el subtotal mensual es `730×0,0104 + 730×0,005 + 8×0,08 = US$11,882`, antes de DynamoDB, CloudWatch, transferencia y créditos. No sustituye el dato observado de US$0,00: muestra la exposición sin beneficios. El tamaño de EBS sí está medido; las 730 horas y el uso durante un mes completo son supuestos de estimación.
 
 Antes del evento, cargar la configuración y horas reales en [AWS Pricing Calculator](https://calculator.aws/), registrar enlace/exportación y conciliar con Bills. Detener EC2 no elimina cargos de EBS, snapshots ni una Elastic IP retenida. El Budget alerta; no impone un límite duro. Ver [operación y rollback](operacion-rollback.md).
+
+## Cierre de costos del 28 de octubre
+
+Con cuatro alarmas estándar y dos métricas personalizadas activas, añadir
+`4×0,10 + 2×0,30 = US$1,00/mes` al subtotal EC2/IPv4/EBS. La base mensual
+estimada resulta **US$12,882**, antes de DynamoDB, logs, SNS, transferencia,
+snapshots, excedentes CPU e impuestos, y antes de aplicar créditos/descuentos.
+No equivale a la factura ni a una garantía de Free Tier.
+La [estimación CSV](evidence/cierre-prueba-2026-10-28/estimacion-base-mensual.csv)
+conserva cantidades, tarifas y supuestos; no es una exportación de Calculator.
+
+La consulta real del role EC2 confirmó EBS, pero AWS denegó `ec2:DescribeInstances`,
+`budgets:ViewBudget` y `ce:GetCostAndUsage`. Por tanto, **Billing y destinatarios
+del Budget no quedaron conciliados**. La captura histórica de US$0 no sustituye
+esta consulta. No se amplió el role de ejecución para acceder a facturación.
+Una identidad de operador puede usar `infra/iam-policy-cost-reader.json` como
+referencia de permisos de lectura, sujetos a la SCP y políticas de la cuenta.
+
+Desde la identidad de facturación, ejecutar y conservar la salida (redactar
+los correos antes de publicarla):
+
+```bash
+aws budgets describe-budgets --account-id 901454175123 --region us-east-2
+aws budgets describe-notifications-for-budget --account-id 901454175123 \
+  --budget-name 'My Zero-Spend Budget' --region us-east-2
+aws budgets describe-subscribers-for-notification --account-id 901454175123 \
+  --budget-name 'My Zero-Spend Budget' --region us-east-2 \
+  --notification '{"NotificationType":"ACTUAL","ComparisonOperator":"GREATER_THAN","Threshold":100,"ThresholdType":"PERCENTAGE"}'
+aws ce get-cost-and-usage --region us-east-1 \
+  --time-period Start=2026-10-01,End=2026-10-29 --granularity MONTHLY \
+  --metrics UnblendedCost --group-by Type=DIMENSION,Key=SERVICE
+```
+
+El nombre del Budget procede de la captura; usar el resultado de DescribeBudgets
+para confirmar el nombre y la notificación exacta antes de consultar suscriptores.
+Cost Explorer usa el endpoint global `ce.us-east-1.amazonaws.com`; esta consulta
+no despliega recursos fuera de Ohio y debe estar autorizada por la organización.
+Fuente: [API Cost Explorer](https://docs.aws.amazon.com/cost-management/latest/userguide/ce-api.html).
+Cargar la misma configuración en AWS Pricing Calculator y adjuntar su enlace
+o exportación cuando se disponga del acceso del operador.

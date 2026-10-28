@@ -1,0 +1,31 @@
+{
+  "date": "2026-10-28",
+  "region": "us-east-2",
+  "volume": {
+    "id": "vol-0cbf8239394874c91",
+    "sizeGiB": 8,
+    "type": "gp3",
+    "iops": 3000,
+    "throughputMiBps": 125
+  },
+  "billingVerified": false,
+  "budgetRecipientsVerified": false,
+  "deniedActions": [
+    "ec2:DescribeInstances",
+    "budgets:ViewBudget",
+    "ce:GetCostAndUsage"
+  ],
+  "monthlyBaseEstimateUsd": "12.882",
+  "assumedHoursPerMonth": 730,
+  "excludes": [
+    "DynamoDB",
+    "CloudWatch Logs",
+    "SNS",
+    "transferencia",
+    "snapshots EBS",
+    "cr\u00e9ditos CPU excedentes",
+    "impuestos",
+    "descuentos y cr\u00e9ditos Free Tier"
+  ],
+  "note": "Estimaci\u00f3n antes de cr\u00e9ditos; no es factura ni exportaci\u00f3n de AWS Pricing Calculator."
+}

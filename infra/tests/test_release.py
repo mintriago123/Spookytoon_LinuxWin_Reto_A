@@ -86,7 +86,7 @@ class ReleaseTests(unittest.TestCase):
         env_file = self.root / 'backend.env'; env_file.write_text('fixture')
         bin_dir = self.root / 'bin'; bin_dir.mkdir()
         commands = {
-            'node': 'exit 0',
+            'node': 'test "${FAIL_NODE:-}" != 1',
             'npm': 'echo "npm $*" >> "$FIX_LOG"; test "${FAIL_PREP:-}" != 1',
             'sleep': 'exit 0',
             'sudo': 'exec "$@"',
@@ -107,6 +107,7 @@ if [[ " $* " == *" reload "* && "${FAIL_RELOAD:-}" == 1 && ! -f "$FIX_TRIPPED" ]
             'curl': '''out=''; url=''
 while (( $# )); do case "$1" in -o) out=$2; shift 2;; http*) url=$1; shift;; *) shift;; esac; done
 if [[ "$url" == */health/ready ]]; then [[ "$(cat "$FIX_BAD_READY" 2>/dev/null || echo 0)" == 0 ]]; exit $?; fi
+if [[ "${FAIL_PUBLIC:-}" == 1 && ! -f "$FIX_TRIPPED" ]]; then touch "$FIX_TRIPPED"; echo 'invalid-html' > "$out"; exit 0; fi
 if [[ "$url" == */data/grafo_manta.json ]]; then cp "$APP_ROOT/current/backend/data/grafo_manta.json" "$out"; else cp "$APP_ROOT/web/current/index.html" "$out"; fi''',
         }
         for name, body in commands.items():
@@ -159,6 +160,24 @@ if [[ "$url" == */data/grafo_manta.json ]]; then cp "$APP_ROOT/current/backend/d
         self.assert_old()
         self.assertIn('Entrega anterior restaurada', result.stderr)
 
+    def test_invalid_public_frontend_restores_pair(self):
+        self.fixture()
+        result = self.deploy(FAIL_PUBLIC='1')
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_old()
+        self.assertIn('Entrega anterior restaurada', result.stderr)
+
+    def test_failed_rollback_restores_current_pair(self):
+        self.fixture()
+        result = self.deploy(); self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        current = (self.app / 'current').resolve()
+        frontend = (self.app / 'web/current').resolve()
+        result = subprocess.run(['bash', str(INFRA / 'rollback-ec2.sh')],
+                                env={**self.env, 'FAIL_READY': '1'}, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((self.app / 'current').resolve(), current)
+        self.assertEqual((self.app / 'web/current').resolve(), frontend)
+
     def test_repeat_deployment_and_rollback_keep_pair_and_single_writer(self):
         self.fixture()
         result = self.deploy(); self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -178,6 +197,15 @@ if [[ "$url" == */data/grafo_manta.json ]]; then cp "$APP_ROOT/current/backend/d
         with (self.app / 'deploy.lock').open('w') as lock:
             fcntl.flock(lock, fcntl.LOCK_EX)
             result = self.deploy()
+        self.assertNotEqual(result.returncode, 0); self.assert_old()
+        self.assertFalse(Path(self.env['FIX_LOG']).exists())
+
+    def test_wrong_node_never_stops_writer_for_deploy_or_rollback(self):
+        self.fixture()
+        result = self.deploy(FAIL_NODE='1')
+        self.assertNotEqual(result.returncode, 0); self.assert_old()
+        result = subprocess.run(['bash', str(INFRA / 'rollback-ec2.sh')],
+                                env={**self.env, 'FAIL_NODE': '1'}, capture_output=True)
         self.assertNotEqual(result.returncode, 0); self.assert_old()
         self.assertFalse(Path(self.env['FIX_LOG']).exists())
 

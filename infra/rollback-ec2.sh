@@ -2,6 +2,7 @@
 set -euo pipefail
 umask 027
 source "$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/release-common.sh"
+require_node
 exec 9>"$APP_ROOT/deploy.lock"
 flock -n 9 || { echo 'Otro despliegue/rollback está activo' >&2; exit 1; }
 target=$(mktemp "$APP_ROOT/deployments/rollback-target-XXXXXXXX.json")

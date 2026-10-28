@@ -99,3 +99,13 @@ Rutas y disponibilidad aprobaron. R2 tuvo una pausa por deadline en 138,
 registrada y reanudada; no se declara aprobado el criterio de cero misses.
 Los intentos previos, la medición de pools y la recuperación real están en
 [la evidencia de integración](../../docs/evidence/integracion-2026-10-28/README.md).
+
+## Cierre integrado posterior
+
+Fuente de ensayo `ef8cf79`: 38/38 pruebas backend en EC2, 177/177 raíz,
+11/11 frontend y 12/12 infraestructura; typechecks, build y lint aprobados.
+R1/R2/R3 completaron 150 turnos con máximos p95 37,2 / 50,3 / 85 ms,
+disponibilidad 100 %, cero timeouts/errores/respuestas inválidas y cero
+deadline misses. HTTP/WS coincidieron en 453 snapshots y se confirmó cada
+turno 150 en DynamoDB. No se modificaron reglas del simulador ni sus tolerancias.
+Ver [evidencia de cierre](../../docs/evidence/cierre-prueba-2026-10-28/README.md).

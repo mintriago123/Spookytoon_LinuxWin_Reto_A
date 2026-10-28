@@ -5,7 +5,7 @@ script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 source "$script_dir/release-common.sh"
 REPO_DIR=${REPO_DIR:-$(cd -- "$script_dir/.." && pwd)}
 for command in git node npm pm2 curl flock tar python3 sha256sum sudo; do command -v "$command" >/dev/null; done
-node -e 'if (+process.versions.node.split(".")[0] !== 24) process.exit(1)'
+require_node
 [[ $# == 3 ]] || { echo 'Uso: deploy-ec2.sh COMMIT FRONTEND_TGZ SHA256' >&2; exit 1; }
 test -r "$BACKEND_ENV_FILE"
 mkdir -p "$APP_ROOT/releases" "$APP_ROOT/web/releases" "$APP_ROOT/deployments"

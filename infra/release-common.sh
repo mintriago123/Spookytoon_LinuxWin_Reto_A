@@ -6,6 +6,11 @@ PUBLIC_API_URL=${PUBLIC_API_URL:-https://3-128-78-190.sslip.io}
 BACKEND_ENV_FILE=${BACKEND_ENV_FILE:-/etc/spookython/backend.env}
 export BACKEND_ENV_FILE
 docker_cmd() { sudo docker "$@"; }
+require_node() {
+    NODE_BINARY=${NODE_BINARY:-$(command -v node)}
+    export NODE_BINARY
+    "$NODE_BINARY" -e 'if (+process.versions.node.split(".")[0] !== 24) process.exit(1)'
+}
 capture_state() {
     python3 - "$APP_ROOT" "$CADDY_CONFIG" "$1" <<'PY'
 import json,pathlib,sys

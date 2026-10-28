@@ -4,20 +4,19 @@
 
 Instancia `i-010f44e5ec891fc73`, EC2 t3.micro (2 vCPU / 1 GiB), Amazon Linux 2023, zona `us-east-2a`. Servicios regionales en `us-east-2`. Caddy termina TLS para `3-128-78-190.sslip.io` y reenvía HTTP/WS a `localhost:3001`. Un único escritor PM2 en modo fork; no lanzar otra copia, cluster PM2, contenedor o servidor de desarrollo sobre la misma partida. El navegador lee `/estado` y `/ws`; controles requieren `x-api-key` suministrada por un operador, nunca embebida en el build web.
 
-Requisitos de máquina: Git, Node 24.12+ de la serie 24, npm, PM2, curl, util-linux/flock, Caddy, AWS CLI v2 y opcionalmente CloudWatch Agent. Registrar versiones instaladas y fijarlas al preparar la AMI. Los scripts de release no instalan paquetes del sistema ni modifican IAM, DNS o security groups.
+Requisitos de máquina: Git, Node 24.12+ de la serie 24, npm, PM2, curl, util-linux/flock, Docker con Caddy, AWS CLI v2 y CloudWatch Agent para observabilidad. Registrar versiones instaladas y fijarlas al preparar la AMI. Los scripts de release no instalan paquetes del sistema ni modifican IAM, DNS o security groups.
 
 Preparación única por el operador:
 
 ```bash
-sudo install -d -o ec2-user -g ec2-user -m 0750 /opt/spookython /var/log/spookython
+sudo install -d -o ec2-user -g ec2-user -m 0750 /opt/spookython /opt/spookython/releases /opt/spookython/web/releases /var/log/spookython
 sudo install -d -o root -g ec2-user -m 0750 /etc/spookython
-sudo install -o ec2-user -g ec2-user -m 0600 backend/.env.example /etc/spookython/backend.env
+test -e /etc/spookython/backend.env || sudo install -o ec2-user -g ec2-user -m 0600 backend/.env.example /etc/spookython/backend.env
 # Editar backend.env y sustituir ROUTE_API_KEY por un secreto real, sin publicarlo.
-sudo install -d -o caddy -g caddy -m 0750 /var/log/caddy
-sudo install -o root -g caddy -m 0640 infra/Caddyfile /etc/caddy/Caddyfile
-sudo caddy validate --config /etc/caddy/Caddyfile
-sudo systemctl enable --now caddy
-sudo systemctl reload caddy
+# EC2 ya tiene caddy-proxy con los certificados y el montaje web.
+# No iniciar otro Caddy ni reemplazar los volúmenes TLS.
+sudo docker inspect caddy-proxy --format '{{json .Mounts}}'
+sudo docker exec caddy-proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 ```
 
 Ejecutar PM2 y scripts como `ec2-user`, con el mismo PM2_HOME. Configurar `pm2 startup` mediante el comando que PM2 muestre para el usuario y guardar con `pm2 save`; verificar reinicio de la instancia antes del evento. PM2 lee el archivo env externo con `--env-file`, no guarda la API key en el archivo del repositorio. Abrir 80/443 en el security group; restringir SSH o usar SSM; 3001 no se expone a Internet. Caddy deniega `/health/*`, `/motor/*` y `/paso` desde el dominio público: sus pruebas son locales. `localhost:3001` debe resolver hacia el listener local de Fastify.
@@ -52,7 +51,7 @@ Se aplica un lock común a deploy y rollback. Primero se detiene y elimina el
 proceso PM2 anterior y se comprueba que no quede un escritor vivo; después se
 activan los dos enlaces de release, se inicia un solo backend y se verifica
 readiness. Solo entonces se recarga Caddy y se comprueban la web y el grafo
-públicos. Un fallo restaura frontend, backend y configuración anteriores.
+públicos. Un fallo restaura frontend, backend y configuración anteriores. Deploy y rollback validan el binario Node 24 antes de detener el escritor; no dependen del Node 22 del sistema.
 La transición tiene una interrupción breve y los clientes WS reconectan.
 
 Backend: `/opt/spookython/current`. Frontend: `/opt/spookython/web/current`,

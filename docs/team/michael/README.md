@@ -13,7 +13,7 @@ Dueño del grafo de Manta, el contrato del motor de rutas, la infraestructura AW
 | Carga, validación y adyacencia | **backend/src/modules/graph/** |
 | Rutas, amenazas y workers | **backend/src/modules/routing/** |
 | Contratos y validadores runtime | **backend/src/contracts/** |
-| AWS y alarmas | **backend/infra/** |
+| AWS y alarmas | **infra/** |
 | OpenAPI generado | **backend/openapi/** |
 
 ## Entregables
@@ -50,9 +50,9 @@ El módulo `backend/src/modules/routing/` implementa el plan de rutas por
 snapshot, las APIs `POST /motor/sincronizar` y `POST /paso`, autenticación
 `x-api-key`, bloqueos, amenazas y planes para cupos reservados. El composition
 root en `backend/src/server.ts` conecta routing con el game loop del simulador
-por HTTP loopback. Las pruebas de backend cubren el flujo; faltan validar los
-presets con el equipo, correr rondas oficiales completas y medir el despliegue
-final.
+por HTTP loopback. Las pruebas cubren el flujo y el despliegue integrado está en EC2. Los
+escenarios siguen siendo presets versionados de simulación; no se presentan
+como datos censales ni ubicaciones oficiales sin aprobación del equipo.
 
 ## Entrega modular de infraestructura y core
 
@@ -63,3 +63,13 @@ en `infra/`: Caddy, PM2, deploy/rollback, política IAM y CloudWatch. Dockerfile
 `backend/`. Costos con tarifas Ohio y evidencia Budget en `docs/costos.md`.
 La implementación no sustituye desplegarla y medir 150 turnos en EC2. No se
 modifican el algoritmo de reloj ni los fixtures temporales de Maykel.
+
+## Cierre integrado
+
+Frontend y backend publicados en https://3-128-78-190.sslip.io.
+Despliegue conjunto y rollback reproducibles, artefactos por commit/SHA-256,
+CloudWatch Agent y cuatro alarmas SNS operativas. EBS medido: 8 GiB gp3.
+Billing y destinatarios del Budget no son legibles por el role EC2; se
+documentaron las consultas y permisos de operador, sin ampliar el role.
+Resultados y límites de la aceptación en
+[la evidencia de cierre](../../evidence/cierre-prueba-2026-10-28/README.md).

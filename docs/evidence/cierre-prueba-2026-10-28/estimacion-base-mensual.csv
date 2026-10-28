@@ -1,0 +1,6 @@
+recurso,unidad,cantidad,tarifa_USD,subtotal_USD
+EC2 t3.micro Linux,horas,730,0.0104,7.592
+IPv4 pública,horas,730,0.005,3.650
+EBS gp3 medido,GB-mes,8,0.08,0.640
+CloudWatch alarmas estándar,métrica-alarma-mes,4,0.10,0.400
+CloudWatch métricas personalizadas,métrica-mes,2,0.30,0.600
