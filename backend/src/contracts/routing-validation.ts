@@ -1,7 +1,7 @@
 import type { MantaGraph } from "./types.ts";
 import {
   RoutingError, type RouteBlockedEdge, type RouteShelter, type RouteSurvivor,
-  type RouteZombie, type RouteZombieTraversal, type WorldSyncRequest,
+  type CameraObservation, type RouteZombie, type RouteZombieTraversal, type WorldSyncRequest,
 } from "./routing.ts";
 
 type JsonRecord = Record<string, unknown>;
@@ -129,7 +129,7 @@ function validateTraversal(value: unknown, index: number, nodeIds: Set<string>,
 
 export function validateWorldSyncRequest(value: unknown, graph: MantaGraph): WorldSyncRequest {
   const item = record(value, "request");
-  keys(item, ["gameId", "turnId", "baseWorldVersion", "survivors", "zombies", "shelters", "blockedEdges", "zombieTraversals", "dormantUncertaintyNodeIds"], [], "request");
+  keys(item, ["gameId", "turnId", "baseWorldVersion", "survivors", "zombies", "shelters", "blockedEdges", "zombieTraversals", "dormantUncertaintyNodeIds"], ["cameraObservations"], "request");
   const gameId = string(item.gameId, "gameId", 128);
   const turnId = integer(item.turnId, "turnId", 1);
   const baseWorldVersion = integer(item.baseWorldVersion, "baseWorldVersion", 0);
@@ -196,7 +196,28 @@ export function validateWorldSyncRequest(value: unknown, graph: MantaGraph): Wor
   }
   const dormantUncertaintyNodeIds = stringArray(item.dormantUncertaintyNodeIds, "dormantUncertaintyNodeIds");
   if (dormantUncertaintyNodeIds.some(nodeId => !nodeIds.has(nodeId))) invalid("dormantUncertaintyNodeIds contiene nodos desconocidos");
-  return { gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds };
+  let cameraObservations: CameraObservation[] | undefined;
+  if (item.cameraObservations !== undefined) {
+    if (!Array.isArray(item.cameraObservations)) invalid("cameraObservations debe ser una lista");
+    cameraObservations = item.cameraObservations.map((value, index) => {
+      const name = `cameraObservations[${index}]`; const observation = record(value, name);
+      keys(observation, ["cameraId", "zombieId", "nodeId", "detectedTurnId", "expiresAfterTurnId"], [], name);
+      const cameraId = string(observation.cameraId, `${name}.cameraId`);
+      const zombieId = string(observation.zombieId, `${name}.zombieId`);
+      const nodeId = string(observation.nodeId, `${name}.nodeId`);
+      const detectedTurnId = integer(observation.detectedTurnId, `${name}.detectedTurnId`, 1);
+      const expiresAfterTurnId = integer(observation.expiresAfterTurnId, `${name}.expiresAfterTurnId`, 2);
+      if (!nodeIds.has(nodeId) || detectedTurnId > turnId || expiresAfterTurnId <= turnId || expiresAfterTurnId <= detectedTurnId) {
+        invalid(`${name} debe ser una observación vigente de un nodo del grafo`);
+      }
+      if (!zombiesById.has(zombieId)) invalid(`${name}.zombieId no está en la sincronización`);
+      return { cameraId, zombieId, nodeId, detectedTurnId, expiresAfterTurnId };
+    });
+    const observationKeys = cameraObservations.map(value => `${value.cameraId}\0${value.zombieId}`);
+    if (new Set(observationKeys).size !== observationKeys.length) invalid("cameraObservations repite cámara y zombie");
+  }
+  return { gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds,
+    ...(cameraObservations === undefined ? {} : { cameraObservations }) };
 }
 
 export function validatePasoRequest(value: unknown): { gameId: string; turnId: number; worldVersion: number; survivorId: string; currentNodeId: string; targetShelterId?: string | null } {

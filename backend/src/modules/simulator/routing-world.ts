@@ -43,5 +43,6 @@ export function buildWorldSyncRequest(world: Immutable<WorldState>, turnId: numb
     shelters: structuredClone(world.shelters), blockedEdges: structuredClone(world.blockedEdges),
     zombieTraversals: structuredClone(world.lastZombieTraversals),
     dormantUncertaintyNodeIds: dormantUncertaintyNodes(world.graph, world.zombies),
+    cameraObservations: structuredClone(world.cameraObservations.filter(observation => observation.expiresAfterTurnId > turnId)),
   }, world.graph as MantaGraph);
 }

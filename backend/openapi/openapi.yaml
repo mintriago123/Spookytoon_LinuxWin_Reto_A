@@ -675,6 +675,11 @@ components:
           uniqueItems: true
           items:
             type: string
+        cameraObservations:
+          type: array
+          description: Observaciones simuladas vigentes; los nodos observados se evitan temporalmente.
+          items:
+            $ref: '#/components/schemas/CameraObservation'
     Zombie:
       type: object
       additionalProperties: false
@@ -817,6 +822,77 @@ components:
           type: string
         toNodeId:
           type: string
+    CameraObservation:
+      type: object
+      additionalProperties: false
+      required:
+      - cameraId
+      - zombieId
+      - nodeId
+      - detectedTurnId
+      - expiresAfterTurnId
+      properties:
+        cameraId:
+          type: string
+        zombieId:
+          type: string
+        nodeId:
+          type: string
+        detectedTurnId:
+          type: integer
+          minimum: 1
+        expiresAfterTurnId:
+          type: integer
+          minimum: 2
+    SurveillanceCamera:
+      type: object
+      additionalProperties: false
+      required:
+      - id
+      - name
+      - lat
+      - lng
+      - accuracyMeters
+      - nodeId
+      - snapDistanceMeters
+      - coverageRadiusMeters
+      - alertTtlTurns
+      - enabled
+      - status
+      - reportedLocation
+      - networkAffiliation
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        lat:
+          type: number
+        lng:
+          type: number
+        accuracyMeters:
+          type: number
+          minimum: 0
+        nodeId:
+          type: [string, 'null']
+        snapDistanceMeters:
+          type: [number, 'null']
+        coverageRadiusMeters:
+          type: number
+          minimum: 0
+        alertTtlTurns:
+          type: integer
+          minimum: 1
+        enabled:
+          type: boolean
+        status:
+          enum:
+          - simulated
+          - reference-only-outside-current-graph
+        reportedLocation:
+          type: string
+        networkAffiliation:
+          type: string
     WorldSnapshot:
       type: object
       additionalProperties: false
@@ -833,6 +909,8 @@ components:
       - survivors
       - shelters
       - blockedEdges
+      - cameras
+      - cameraObservations
       - metrics
       properties:
         schemaVersion:
@@ -878,6 +956,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BlockedEdge'
+        cameras:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveillanceCamera'
+        cameraObservations:
+          type: array
+          items:
+            $ref: '#/components/schemas/CameraObservation'
         metrics:
           $ref: '#/components/schemas/TelemetryMetrics'
     TurnUpdate:

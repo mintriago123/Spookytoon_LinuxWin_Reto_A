@@ -37,6 +37,7 @@ const ENTITY_LEGEND: Array<{ label: string; markup: string }> = [
   { label: "Horda · nodo + vecinos", markup: zombieBody("horda", ZOMBIE_COLOR.horda, false) },
   { label: "Dormido", markup: zombieBody("dormido", ZOMBIE_COLOR.dormido, true) },
   { label: "Refugio", markup: shelterBody() },
+  { label: "Cámara simulada", markup: `<rect x="3" y="7" width="13" height="10" rx="2" fill="#fbbf24"/><path d="m16 10 5-3v10l-5-3z" fill="#fbbf24"/>` },
 ];
 
 /**
@@ -114,6 +115,9 @@ export function EntityLegend() {
               </li>
             ))}
           </ul>
+          <p className="mt-2 border-t border-white/10 pt-2 text-[11px] leading-relaxed text-slate-400">
+            Cobertura, ubicaciones y alertas de cámara son simuladas.
+          </p>
         </div>
       )}
     </div>

@@ -296,7 +296,8 @@ export interface WorldState {
   turnId: number; activeTurnId: number | null; worldVersion: number;
   graph: MantaGraph; zombies: Zombie[]; survivors: Survivor[]; shelters: Shelter[];
   blockedEdges: BlockedEdge[]; pendingCityEvents: CityEvent[];
-  lastZombieTraversals: ZombieTraversal[]; metrics: TelemetryMetrics;
+  lastZombieTraversals: ZombieTraversal[]; cameras: SurveillanceCamera[];
+  cameraObservations: CameraObservation[]; metrics: TelemetryMetrics;
   rngSeed: string; updatedAt: string;
 }
 export interface WorldSnapshot {
@@ -304,7 +305,19 @@ export interface WorldSnapshot {
   status: GameStatus; turnId: number; worldVersion: number;
   graphVersion: string; updatedAt: string;
   zombies: Zombie[]; survivors: Survivor[]; shelters: Shelter[];
-  blockedEdges: BlockedEdge[]; metrics: TelemetryMetrics;
+  blockedEdges: BlockedEdge[]; cameras: SurveillanceCamera[];
+  cameraObservations: CameraObservation[]; metrics: TelemetryMetrics;
+}
+export interface SurveillanceCamera {
+  id: string; name: string; lat: number; lng: number; accuracyMeters: number;
+  nodeId: string | null; snapDistanceMeters: number | null; coverageRadiusMeters: number;
+  alertTtlTurns: number; enabled: boolean;
+  status: "simulated" | "reference-only-outside-current-graph";
+  reportedLocation: string; networkAffiliation: string;
+}
+export interface CameraObservation {
+  cameraId: string; zombieId: string; nodeId: string;
+  detectedTurnId: number; expiresAfterTurnId: number;
 }
 export interface TurnUpdate {
   event: "TURN_UPDATE"; emittedAt: string; world: WorldSnapshot;
@@ -325,7 +338,7 @@ export interface WorldSyncRequest {
   survivors: Survivor[]; zombies: Zombie[]; // solo entidades visibles a routing
   shelters: Shelter[];
   blockedEdges: BlockedEdge[]; zombieTraversals: ZombieTraversal[];
-  dormantUncertaintyNodeIds: string[];
+  dormantUncertaintyNodeIds: string[]; cameraObservations?: CameraObservation[];
 }
 export interface RoutePlanEntry {
   fromNodeId: string; toNodeId: string; edgeId: string | null;
@@ -416,7 +429,7 @@ POST /paso, sincronización y controles requieren x-api-key; GET /estado y healt
 - POST /simulador/reiniciar: request y respuesta iguales a iniciar. Solo desde paused/completed y con gameId nuevo; rechaza running con 409. Conserva el historial persistido de la partida anterior y crea turno 0 para la nueva.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
-- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. `zombieTraversals` contiene los pasos efectivamente recorridos, ordenados por `zombieId` y `stepIndex`, con `edgeId`; el último paso coincide con `zombies[].nodeId`. Un corredor puede aportar hasta dos pasos contiguos. `baseWorldVersion` debe coincidir con la última versión instalada; `turnId` debe ser mayor que el último instalado, pero puede saltar turnos que cerraron sin un plan confirmado. Repetición idéntica (mismo turno y digest) idempotente; distinta para el mismo turno, versión base incorrecta o turno menor devuelve 409. Responde 200 {turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready:true}. No publica estado parcial.
+- POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds, cameraObservations?}; snapshot post-movimiento zombie para el turno activo. `zombieTraversals` contiene los pasos efectivamente recorridos, ordenados por `zombieId` y `stepIndex`, con `edgeId`; el último paso coincide con `zombies[].nodeId`. `cameraObservations` es opcional para compatibilidad y lleva solo alertas simuladas vigentes; routing evita cada nodo observado hasta `expiresAfterTurnId` exclusivo. Un corredor puede aportar hasta dos pasos contiguos. `baseWorldVersion` debe coincidir con la última versión instalada; `turnId` debe ser mayor que el último instalado, pero puede saltar turnos que cerraron sin un plan confirmado. Repetición idéntica (mismo turno y digest) idempotente; distinta para el mismo turno, versión base incorrecta o turno menor devuelve 409. Responde 200 {turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready:true}. No publica estado parcial.
 - GET /motor/estado/{gameId}: requiere `x-api-key` y devuelve `{gameId, installed}` con la última respuesta de sincronización confirmada, o `installed:null` si no hay snapshot. El simulador usa este estado o reintenta exactamente el mismo payload para resolver un timeout de sincronización; nunca usa una tabla de un turno anterior.
 - GET /health/live y /health/ready: liveness/readiness interna en EC2.
 
@@ -1100,6 +1113,39 @@ components:
           uniqueItems: true
           items:
             type: string
+        cameraObservations:
+          type: array
+          description: Observaciones simuladas vigentes. Cada nodo observado se evita temporalmente al calcular el plan.
+          items:
+            $ref: '#/components/schemas/CameraObservation'
+    CameraObservation:
+      type: object
+      additionalProperties: false
+      required: [cameraId, zombieId, nodeId, detectedTurnId, expiresAfterTurnId]
+      properties:
+        cameraId: { type: string }
+        zombieId: { type: string }
+        nodeId: { type: string }
+        detectedTurnId: { type: integer, minimum: 1 }
+        expiresAfterTurnId: { type: integer, minimum: 2 }
+    SurveillanceCamera:
+      type: object
+      additionalProperties: false
+      required: [id, name, lat, lng, accuracyMeters, nodeId, snapDistanceMeters, coverageRadiusMeters, alertTtlTurns, enabled, status, reportedLocation, networkAffiliation]
+      properties:
+        id: { type: string }
+        name: { type: string }
+        lat: { type: number }
+        lng: { type: number }
+        accuracyMeters: { type: number, minimum: 0 }
+        nodeId: { type: [string, 'null'] }
+        snapDistanceMeters: { type: [number, 'null'] }
+        coverageRadiusMeters: { type: number, minimum: 0 }
+        alertTtlTurns: { type: integer, minimum: 1 }
+        enabled: { type: boolean }
+        status: { enum: [simulated, reference-only-outside-current-graph] }
+        reportedLocation: { type: string }
+        networkAffiliation: { type: string }
     Zombie:
       type: object
       additionalProperties: false
@@ -1258,6 +1304,8 @@ components:
       - survivors
       - shelters
       - blockedEdges
+      - cameras
+      - cameraObservations
       - metrics
       properties:
         schemaVersion:
@@ -1303,6 +1351,14 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/BlockedEdge'
+        cameras:
+          type: array
+          items:
+            $ref: '#/components/schemas/SurveillanceCamera'
+        cameraObservations:
+          type: array
+          items:
+            $ref: '#/components/schemas/CameraObservation'
         metrics:
           $ref: '#/components/schemas/TelemetryMetrics'
     TurnUpdate:
@@ -1489,6 +1545,8 @@ El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la env
     "survivors": [],
     "shelters": [],
     "blockedEdges": [],
+    "cameras": [],
+    "cameraObservations": [],
     "metrics": {
       "routeSamples": 1000,
       "routeLatencyP50Ms": 3.2,
@@ -1528,19 +1586,21 @@ Usar índices enteros, outEdges e inEdges. El grafo es inmutable. Después de mo
 
 El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y reservas, y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
 
+Las observaciones simuladas de cámara se generan después del movimiento zombie cuando un zombie activo cae dentro del radio configurado alrededor del nodo asociado. La ubicación de referencia, el radio y la detección no representan una cámara real ni su campo visual. Cada par cámara-zombie permanece como riesgo hasta `expiresAfterTurnId` (exclusivo); mientras está vigente, routing evita el nodo observado igual que un nodo ocupado. La detección se renueva mientras el zombie siga dentro del radio. Las referencias deshabilitadas o fuera del grafo nunca generan detecciones.
+
 RoutePlanSnapshot tiene exactamente una entrada bestMoveByNode por nodo de grafo y está asociado a gameId, turnId, worldVersion y graphVersion. Los workers rechazan plan con versión distinta. buildLatencyMs mide solo el precompute del plan, no se suma a la latencia de cada /paso.
 
 En cada sync materializar matrices dispersas por edgeId:
 
 ```text
 B(e) = distancia_m(e) / factor_velocidad(e)
-P_t(u,v) = +∞ si edge está cerrada o v ∈ H ∪ Z_t
+P_t(u,v) = +∞ si edge está cerrada o v ∈ H ∪ Z_t ∪ O_t
            Pcor(v) + Pincertidumbre(v), en otro caso
 M_t(u,v) = B(e) + P_t(u,v)
 F_t(u,v) = true si zombie v→u ocurrió en este turno
 ```
 
-H incluye vecinos directos entrantes y salientes de cada horda activa. Z_t son nodos ocupados por zombies visibles, incluyendo su nodo actual. No se permite entrar en H∪Z_t. Para un sobreviviente cuyo origen ya está en H∪Z_t, el plan de ese nodo permite únicamente una salida abierta hacia un nodo fuera de H∪Z_t. F_t impide ese edge solo como primer movimiento. El cruce frontal se basa en la transición real del turno; no se adivina movimiento aleatorio futuro.
+H incluye vecinos directos entrantes y salientes de cada horda activa. Z_t son nodos ocupados por zombies visibles, incluyendo su nodo actual. O_t son los nodeId de observaciones de cámara vigentes; se tratan como riesgo duro para evitar que la ruta vuelva a pasar por una detección reciente. No se permite entrar en H∪Z_t∪O_t. Para un sobreviviente cuyo origen ya está en un nodo de riesgo, el plan de ese nodo permite únicamente una salida abierta hacia un nodo fuera de los riesgos vigentes. F_t impide ese edge solo como primer movimiento. El cruce frontal se basa en la transición real del turno; no se adivina movimiento aleatorio futuro.
 
 ### 4.2 Nivel Base (obligatorio)
 

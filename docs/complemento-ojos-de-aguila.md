@@ -1,6 +1,6 @@
 # Complemento para el hackatón: Ojos de Águila en Manta
 
-**Estado:** propuesta conceptual para el pitch; el proyecto no está conectado a cámaras reales ni incluye todavía una capa de vigilancia simulada.
+**Estado:** rebanada vertical simulada implementada en `design`; no existe conexión a cámaras reales ni acceso a video.
 
 ## Contexto
 
@@ -8,24 +8,24 @@ En Manta, el GAD municipal identifica su red como el **Sistema de Videovigilanci
 
 ## Propuesta para Escape de Manta Zombie
 
-Añadir al mapa una capa de **cámaras simuladas** en puntos estratégicos. Cuando un zombie visible entra en el área de cobertura, la simulación genera una alerta con ubicación y turno; el motor puede usar esa amenaza conocida al calcular la siguiente ruta segura hacia los refugios. La interfaz mostraría cobertura, alertas recientes y cámaras fuera de servicio.
+El mapa publica una capa de **cámaras simuladas** en referencias aproximadas. Después del movimiento de zombies, cuando uno activo queda en el radio simulado de un sensor habilitado, el backend registra una observación temporal con cámara, zombie, nodo, turno de detección y vencimiento. Routing evita el nodo observado durante la vigencia de la alerta; el snapshot muestra radios, estado y detecciones activas.
 
-Para la demo, los puntos de cámara y detecciones serían sintéticos o basados en ubicaciones autorizadas y publicadas. La propuesta no necesita video real: representa el flujo «detección → alerta → actualización del riesgo → ruta de evacuación». Así se conecta el sistema de monitoreo con el mapa y el motor de rutas que ya tiene el proyecto.
+Para la demo, los puntos de cámara y detecciones son sintéticos o basados en referencias públicas aproximadas. La rebanada no necesita video real: representa el flujo «detección → alerta → actualización del riesgo → ruta de evacuación». Así se conecta el sistema de monitoreo con el mapa y el motor de rutas que ya tiene el proyecto.
 
 ## Ubicaciones públicas y límites
 
 Sí hay referencias públicas puntuales, pero no encontré un inventario georreferenciado completo de la red Ojos de Águila con coordenadas, orientación, cobertura y estado operativo actual. En agosto de 2025, el GAD Manta publicó cuatro sitios donde ubicó cámaras para controlar basurales; el boletín describe esa instalación específica y no confirma que esos equipos pertenezcan a Ojos de Águila. Una ficha de transparencia municipal registra el servicio de cámaras y un trámite por solicitud institucional, pero no ofrece un mapa descargable de ubicaciones.
 
-Por eso, un punto publicado puede servir como referencia aproximada para un escenario de prueba, con fuente y fecha visibles. No conviene inferir el campo visual, la cobertura real ni el estado actual de cada cámara a partir de una dirección. La autorización que el ECU 911 reportó para que Manta adquiera sistemas es un paso de adquisición e interoperabilidad; no concede acceso público a imágenes o transmisiones. En este repositorio, el grafo actual contiene calles y refugios, sin capa de cámaras ni integración de video.
+Por eso, un punto publicado sirve únicamente como referencia aproximada para un escenario de prueba, con fuente y fecha visibles. No conviene inferir el campo visual, la cobertura real ni el estado actual de cada cámara a partir de una dirección. La autorización que el ECU 911 reportó para que Manta adquiera sistemas es un paso de adquisición e interoperabilidad; no concede acceso público a imágenes o transmisiones. En este repositorio, la capa local solo muestra radios sintéticos y alertas del juego; no integra video ni infraestructura municipal.
 
-## Cómo llevarlo al prototipo
+## Implementación en esta rebanada
 
-1. Asociar cada sensor simulado a un nodo cercano del grafo de Manta y guardar su fuente, fecha y nivel de precisión. Separar puntos públicos comprobados de ubicaciones inventadas para la demo.
-2. Cuando un zombie pase por una zona de cobertura simulada, emitir una observación temporal con `cameraId`, `nodeId` y `turnId`. No almacenar ni transmitir video.
-3. Incluir esa observación como riesgo conocido en la siguiente sincronización del motor de rutas. El motor recalcula el plan y el mapa muestra la alerta; la observación vence después de unos turnos o cuando se confirma que el peligro ya no está.
-4. En la interfaz, distinguir «observación simulada» de «cámara real». No dibujar conos de visión como si fueran cobertura oficial si no hay datos públicos que la confirmen.
+1. El fixture asocia cada referencia habilitada al nodo más cercano y conserva su precisión estimada y distancia de ajuste.
+2. La detección compara distancia geográfica al nodo asociado con el radio sintético configurado; solo considera zombies activos.
+3. La observación se sincroniza con routing y el nodo detectado es temporalmente inaccesible para nuevas rutas. Se renueva mientras siga la detección y vence al salir del área.
+4. El snapshot y el mapa identifican ubicaciones, radios y alertas como simulados. No dibujan orientación ni campo visual oficial.
 
-El fixture inicial está en [`backend/data/camaras_ojos_de_aguila.manta.json`](../backend/data/camaras_ojos_de_aguila.manta.json). Incluye cuatro referencias publicadas; tres se asocian al nodo más cercano del grafo actual y la referencia de Paquisha queda desactivada porque está fuera de la cobertura geográfica del grafo.
+El fixture inicial está en [`backend/data/camaras_ojos_de_aguila.manta.json`](../backend/data/camaras_ojos_de_aguila.manta.json). Incluye cuatro referencias publicadas; tres se asocian al nodo más cercano del grafo actual y la referencia de Paquisha queda como referencia sin cobertura porque está fuera del grafo peatonal actual. El comportamiento de esta rebanada es implementado localmente; no está desplegado ni verificado con infraestructura municipal.
 
 ## Texto breve para presentar
 

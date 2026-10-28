@@ -8,7 +8,7 @@ El backend es un monolito modular: un proceso Fastify integra módulos con lími
 |---|---|---|---|
 | graph | Michael | Carga y validación del grafo inmutable y su adyacencia | Implementado; grafo publicado |
 | routing | Michael | Contratos del motor, sincronización del mundo, cálculo de planes y respuesta a `/paso` | Implementado con pool de workers |
-| simulator | Maykel | Único escritor de `WorldState`; reloj, eventos, zombies, sobrevivientes, colisiones y admisiones | Rondas R1/R2/R3 integradas |
+| simulator | Maykel | Único escritor de `WorldState`; reloj, eventos, zombies, sobrevivientes, colisiones, admisiones y observaciones simuladas de cámara | Rondas R1/R2/R3 y detecciones Ojos de Águila integradas |
 | telemetry | Michael | Métricas del motor y del turno | Integrado |
 | persistence | Michael | Cola asíncrona, snapshots comprometidos en DynamoDB y recuperación pausada | Implementado localmente; falta validar esta versión en AWS |
 | realtime | Maykel | Proyección y publicación de snapshots comprometidos por `GET /estado` y WebSocket | Integrado |
@@ -29,6 +29,8 @@ Los presets están en `backend/src/config/round-presets.ts` y se validan contra 
 ## Flujo de integración
 
 `city-events → zombie-move → routing sync → survivor-move → resolve → commit → persistence/realtime`
+
+`simulator/camera-surveillance.ts` adapta el fixture aproximado y detecta zombies activos dentro de radios sintéticos. Las observaciones temporales se sincronizan con routing, que evita los nodos observados mientras la alerta está vigente; el snapshot las publica para mostrarlas en el mapa. No existe video ni conexión a infraestructura municipal.
 
 El sincronizador comparte con routing una vista validada del mundo. Si la instalación del turno actual no se confirma, el simulador no usa planes anteriores. Si el resultado de una sincronización queda incierto, `simulator/routing-sync.ts` consulta `GET /motor/estado/:gameId` y reconcilia el payload antes de volver a rutear. El endpoint de estado permite resolver el resultado de una solicitud perdida; repetir un mismo payload es idempotente y `baseWorldVersion` mantiene su validación estricta. Tras el commit, la misma proyección pública alimenta HTTP y WebSocket; la persistencia asíncrona guarda checkpoints.
 

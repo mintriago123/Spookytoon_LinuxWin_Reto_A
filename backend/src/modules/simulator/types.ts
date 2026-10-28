@@ -1,8 +1,24 @@
 import type { MantaGraph } from "../../contracts/types.ts";
 import type {
   PasoRequest, PasoResponse, RouteBlockedEdge, RouteShelter, RouteSurvivor,
-  RouteZombie, RouteZombieTraversal, SyncResponse, WorldSyncRequest, ZombieType,
+  CameraObservation, RouteZombie, RouteZombieTraversal, SyncResponse, WorldSyncRequest, ZombieType,
 } from "../../contracts/routing.ts";
+
+export interface SurveillanceCamera {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  accuracyMeters: number;
+  nodeId: string | null;
+  snapDistanceMeters: number | null;
+  coverageRadiusMeters: number;
+  alertTtlTurns: number;
+  enabled: boolean;
+  status: "simulated" | "reference-only-outside-current-graph";
+  reportedLocation: string;
+  networkAffiliation: string;
+}
 
 /** Solo lectura profunda en TypeScript; no sustituye copia ni freeze en runtime. */
 export type Immutable<T> = T extends object
@@ -142,6 +158,8 @@ export interface WorldState {
   blockedEdges: RouteBlockedEdge[];
   pendingCityEvents: ScheduledCityEvent[];
   lastZombieTraversals: ZombieTraversal[];
+  cameras: SurveillanceCamera[];
+  cameraObservations: CameraObservation[];
   metrics: TelemetryMetrics;
   rngSeed: string;
   randomState: RandomState;
@@ -164,6 +182,8 @@ export interface WorldSnapshot {
   survivors: RouteSurvivor[];
   shelters: RouteShelter[];
   blockedEdges: RouteBlockedEdge[];
+  cameras: SurveillanceCamera[];
+  cameraObservations: CameraObservation[];
   metrics: Required<TelemetryMetrics>;
 }
 
@@ -185,6 +205,8 @@ export interface SimulatorCheckpoint {
   randomState: Immutable<RandomState>;
   pendingCityEvents: Immutable<ScheduledCityEvent[]>;
   lastZombieTraversals: Immutable<ZombieTraversal[]>;
+  cameras: Immutable<SurveillanceCamera[]>;
+  cameraObservations: Immutable<CameraObservation[]>;
   pause: Immutable<PauseState>;
   routing: Immutable<RoutingInstallationState>;
 }

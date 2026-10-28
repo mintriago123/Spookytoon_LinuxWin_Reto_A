@@ -86,6 +86,30 @@ export interface BlockedEdge {
   desbloqueadaEnTurno: number | null;
 }
 
+export interface SurveillanceCamera {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+  accuracyMeters: number;
+  nodeId: string | null;
+  snapDistanceMeters: number | null;
+  coverageRadiusMeters: number;
+  alertTtlTurns: number;
+  enabled: boolean;
+  status: "simulated" | "reference-only-outside-current-graph";
+  reportedLocation: string;
+  networkAffiliation: string;
+}
+
+export interface CameraObservation {
+  cameraId: string;
+  zombieId: string;
+  nodeId: string;
+  detectedTurnId: number;
+  expiresAfterTurnId: number;
+}
+
 export interface TelemetryMetrics {
   routeSamples: number;
   routeLatencyP50Ms: number;
@@ -124,6 +148,8 @@ export interface WorldSnapshot {
   survivors: Survivor[];
   shelters: Shelter[];
   blockedEdges: BlockedEdge[];
+  cameras: SurveillanceCamera[];
+  cameraObservations: CameraObservation[];
   metrics: TelemetryMetrics;
 }
 

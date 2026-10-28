@@ -23,6 +23,9 @@ export function createWorldSnapshot(world: Immutable<WorldState>): CommittedWorl
       ocupantes: [...s.ocupantes], reservados: [...s.reservados] })),
     blockedEdges: world.blockedEdges.map(b => ({ segmentoId: b.segmentoId, edgeIds: [...b.edgeIds], motivo: b.motivo,
       origen: b.origen, bloqueadaDesdeTurno: b.bloqueadaDesdeTurno, desbloqueadaEnTurno: b.desbloqueadaEnTurno })),
+    cameras: world.cameras.map(camera => ({ ...camera })),
+    cameraObservations: world.cameraObservations.filter(observation => observation.expiresAfterTurnId > world.turnId)
+      .map(observation => ({ ...observation })),
     metrics: {
       routeSamples: metrics.routeSamples, routeLatencyP50Ms: metrics.routeLatencyP50Ms,
       routeLatencyP95Ms: metrics.routeLatencyP95Ms, routeLatencyP99Ms: metrics.routeLatencyP99Ms,

@@ -10,6 +10,7 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 | Routing | Calcula planes por `worldVersion`; los workers precalculan durante la sincronización y `/paso` consulta la tabla instalada. |
 | Simulador | Integra rondas R1/R2/R3, movimientos, cierres de segmentos, pausas y reanudación. El simulador es el único escritor del estado de la partida. |
 | Realtime | `GET /estado` y `WSS /ws` publican snapshots comprometidos. |
+| Ojos de Águila | Detecciones simuladas temporales afectan rutas y se muestran en el mapa. Referencias y coberturas aproximadas; sin video ni conexión real. Esta integración local requiere despliegue para verificarse. |
 | Persistencia | Cola asíncrona y recuperación pausada están implementadas localmente. Las escrituras de esta versión integrada requieren despliegue para validarse en AWS. |
 | Frontend | React/Vite/TypeScript/Leaflet: mapa, métricas, refugios, controles de operador y reconexión WebSocket. |
 

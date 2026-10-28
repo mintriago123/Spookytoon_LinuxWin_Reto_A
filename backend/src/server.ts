@@ -18,6 +18,7 @@ import { realtimePlugin } from "./modules/realtime/http-plugin.ts";
 import { createRoundPresets } from "./config/round-presets.ts";
 import { createInitialTelemetryMetrics } from "./modules/simulator/world-state.ts";
 import { validateRoundConfig } from "./modules/simulator/round-validation.ts";
+import { parseCameraFixture } from "./modules/simulator/camera-surveillance.ts";
 
 export interface BackendOptions {
   apiKey?: string;
@@ -47,6 +48,8 @@ export async function createBackendApp(options: BackendOptions = {}) {
     graphVersion: string; sha256: string;
   };
   const { graph } = await loadGraph(new URL("../data/grafo_manta.json", import.meta.url), manifest);
+  const cameraFixture = JSON.parse(await readFile(new URL("../data/camaras_ojos_de_aguila.manta.json", import.meta.url), "utf8")) as unknown;
+  const cameras = options.simulator?.cameras ?? parseCameraFixture(cameraFixture, graph);
   const apiKey = options.apiKey ?? process.env.ROUTE_API_KEY;
   if (!apiKey) throw new Error("ROUTE_API_KEY es obligatoria");
   if (apiKey.length < 16) throw new Error("ROUTE_API_KEY requiere al menos 16 caracteres");
@@ -114,7 +117,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
       return engine.sync(request, computed);
     } });
   const rounds = { ...createRoundPresets(graph), ...options.simulator?.rounds };
-  const simulator = new SimulationRuntime({ ...options.simulator, rounds,
+  const simulator = new SimulationRuntime({ ...options.simulator, cameras, rounds,
     initialMetrics: options.simulator?.initialMetrics ?? (roundId =>
       createInitialTelemetryMetrics(validateRoundConfig(rounds[roundId], graph))),
     graph, syncTimeoutMs: 500,
@@ -143,7 +146,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
       await workers.initialize();
       await persistence.initialize();
       const restored = await persistence.loadLatestPausedGame();
-      if (restored) simulator.restorePaused(recoverWorld(restored, graph));
+      if (restored) simulator.restorePaused(recoverWorld(restored, graph, cameras));
       initialized = true;
       app.log.info({ event: "dependencies-ready", region: process.env.AWS_REGION ?? "us-east-2", workers: workers.size, httpMaxSockets: routingMaxSockets,
         persistence: persistence.constructor.name, recovered: !!restored });

@@ -1,5 +1,5 @@
 import type { MantaGraph } from "../../contracts/types.ts";
-import type { CommittedWorldSnapshot, Immutable, RoundConfig, RoundId, TelemetryMetrics, WorldState } from "./types.ts";
+import type { CommittedWorldSnapshot, Immutable, RoundConfig, RoundId, SurveillanceCamera, TelemetryMetrics, WorldState } from "./types.ts";
 import type { RoutingClient } from "./routing-client.ts";
 import type { RoutingAlert } from "./routing-failure.ts";
 import { SimulatorControlError, type EdgeCommand, type StartCommand } from "./controls.ts";
@@ -13,6 +13,7 @@ import { createWorldSnapshot } from "./world-snapshot.ts";
 export interface ScenarioOptions {
   /** Solo configuración aprobada suministrada por el composition root; no hay escenario de respaldo. */
   rounds?: Partial<Record<RoundId, unknown>>;
+  cameras?: readonly SurveillanceCamera[];
   initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
   /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
   clock?: SimulationClock;
@@ -106,7 +107,7 @@ export class SimulationRuntime {
       const initial = createWorldState({ gameId: command.gameId, graph: this.options.graph, roundConfig: config,
         randomState: { seed: command.seed, algorithm: RANDOM_ALGORITHM, algorithmVersion: RANDOM_ALGORITHM_VERSION,
           strategy: "per-zombie-turn-draw" }, initialMetrics: this.options.initialMetrics(command.roundId),
-        updatedAt: this.isoNow() });
+        updatedAt: this.isoNow(), cameras: this.options.cameras });
       let client: RoutingClient;
       try { client = this.options.clientFactory(); }
       catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
