@@ -12,9 +12,9 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 | Realtime | `GET /estado` y `WSS /ws` publican el mismo snapshot tras cada commit. |
 | Ojos de Águila | Rebanada simulada implementada: detecciones temporales de zombies activos modifican rutas y se muestran en el mapa. Ubicaciones y coberturas son aproximadas; sin video ni conexión real. No desplegada. |
 | Rondas reales (R1/R2/R3) y telemetría | Integradas desde `feat/backend-rounds-metrics`; las pruebas de backend se ejecutan en esta rama combinada. |
-| Persistencia (DynamoDB) | Adaptador, cola asíncrona y recuperación pausada implementados localmente. Las escrituras de esta versión requieren despliegue para verificarse en AWS. |
+| Persistencia (DynamoDB) | Adaptador, cola asíncrona y recuperación pausada implementados. La release `a09f235` fue verificada con persistencia real en EC2; consultar la evidencia para distinguir esa versión de los cambios posteriores de esta rama. |
 | Frontend | Scaffold completo Vite + React + TypeScript + Tailwind + Leaflet: mapa en vivo, métricas, ocupación de refugios, controles de operador, leyenda colapsable, reconexión WS con backoff. 11/11 tests. |
-| AWS | El equipo reporta EC2 en Ohio y tabla DynamoDB activos. Esta integración local no se ha desplegado; la captura de Budget se conserva como evidencia separada. |
+| AWS | El equipo reporta EC2 en Ohio, DynamoDB y CloudWatch/SNS operativos. La release backend `a09f235` tiene evidencia de despliegue; los cambios posteriores de `design`, incluido Ojos de Águila, no se han desplegado. La integración final reporta p95 máximos de 26,4 / 50,1 / 89,3 ms; R2 registró un deadline miss, por lo que el criterio conjunto de cero misses no se cumple. [Evidencia de integración](docs/evidence/integracion-2026-10-28/README.md) y [CloudWatch](docs/evidence/cloudwatch-2026-10-28/README.md). |
 
 ## Despliegue confirmado en EC2
 

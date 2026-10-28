@@ -55,17 +55,31 @@ Retención: este cambio no borra datos. Conservar manifests y todas sus partes m
 
 Readiness local exige grafo validado con manifiesto/checksum, motor inicializado, todos los workers listos, adaptador listo y cola saludable; no requiere partida ni sync previa. Liveness indica que el proceso HTTP responde. Cada 30 s se emite JSON `event=backend-metrics`: gameId, turno, versión, p95 de rutas, timeouts, clientes WS, RSS, salud de workers y profundidad/edad/fallos de cola. Cada turno publica progreso de persistencia en el siguiente snapshot. Los logs de alarma no contienen snapshots ni claves API.
 
-Para enviar logs, instalar CloudWatch Agent, otorgarle permisos de escritura de logs (por ejemplo CloudWatchAgentServerPolicy, revisada para el entorno) y aplicar `infra/cloudwatch-agent.json` desde la instancia:
+Para enviar logs, instalar CloudWatch Agent y otorgarle permisos de escritura sobre el grupo del backend. La política mínima está en `infra/iam-policy-cloudwatch-agent.json` (renderizar la cuenta); la identidad de instalación debe crear previamente el grupo. Aplicar `infra/cloudwatch-agent.json` desde la instancia:
 
 ```bash
+sudo dnf install -y amazon-cloudwatch-agent
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config -m ec2 -s -c file:infra/cloudwatch-agent.json
-# Con los grupos de logs creados por el agente:
+sudo systemctl enable amazon-cloudwatch-agent
+# El script prepara el grupo con retención de 14 días antes de los filtros:
 SNS_TOPIC_ARN=arn:aws:sns:us-east-2:CUENTA:TEMA bash infra/cloudwatch-alarms.sh
 aws logs tail /spookython/backend --follow --region us-east-2
 ```
 
-El script crea CPU >80% (dos periodos de 5 min), StatusCheckFailed ≥1 (dos de 60 s), p95 >150 ms y fallos de persistencia. Sin SNS crea alarmas sin notificación externa y lo indica. Los filtros de p95 son el máximo de percentiles de ventana ya calculados por el backend; no son un percentil CloudWatch sobre todas las peticiones. No se crearon alarmas ni tópicos desde esta sesión. Vigilar además CPUCreditBalance/CPUSurplusCreditsCharged, memoria, disco y logs de PM2/Caddy. Configurar rotación local (PM2 logrotate y política Caddy) para no llenar EBS. Retención CloudWatch: 14 días.
+El script crea CPU >80% (dos periodos de 5 min), StatusCheckFailed ≥1 (dos de 60 s), p95 >150 ms y fallos de persistencia. Sin SNS crea alarmas sin notificación externa y lo indica. Los filtros de p95 son el máximo de percentiles de ventana ya calculados por el backend; no son un percentil CloudWatch sobre todas las peticiones. Vigilar además CPUCreditBalance/CPUSurplusCreditsCharged, memoria, disco y logs de PM2/Caddy. Configurar rotación local (PM2 logrotate y política Caddy) para no llenar EBS. Retención CloudWatch: 14 días.
+
+Para configurar SNS de forma reproducible, usar una identidad con permisos de SNS y filtros de logs. El script conserva la política existente del tema, autoriza publicaciones solo desde las alarmas `spookython-*` de la cuenta/región y evita suscripciones duplicadas:
+
+```bash
+python3 infra/cloudwatch-notifications.py CORREO_DEL_OPERADOR
+```
+
+La suscripción requiere confirmación en el correo de AWS. `infra/iam-policy-cloudwatch-setup.json` contiene los permisos adicionales que faltaron al role real de EC2: `logs:PutMetricFilter`, lectura de filtros y lectura/edición de la política del tema del proyecto. Una identidad administradora debe adjuntarla antes de repetir la configuración; la instancia no puede modificar su propio role. No se requieren access keys.
+
+Activación del 28 de octubre de 2026: CloudWatch Agent `1.300071.0` instalado y habilitado por systemd, con logs del backend enviados a `/spookython/backend`. Se crearon las cuatro alarmas, los filtros p95/persistencia y el tema `spookython-alerts` en Ohio, con suscripción de correo confirmada y política de publicación restringida a las alarmas del proyecto. El administrador agregó los permisos tras el rechazo IAM inicial. Consultar [la evidencia](evidence/cloudwatch-2026-10-28/README.md) para las mediciones y el estado observado. El archivo del agente instalado en EC2 es `/opt/aws/amazon-cloudwatch-agent/etc/spookython.json`.
+
+La configuración activa recoge solo backend y errores de PM2. El access log de Caddy está dentro del contenedor y no tiene un bind mount al host; no se acredita su envío a CloudWatch. Para incorporarlo, preparar un volumen de logs en una ventana de despliegue y ampliar de forma explícita la configuración/permisos del agente.
 
 ## Rollback
 
@@ -90,3 +104,71 @@ docker run -d --name spookython-backend --restart unless-stopped \
 ```
 
 Docker conserva Caddy en el host y ejecuta un único proceso Node como usuario no root. Con red bridge, validar acceso del SDK al IAM Role por IMDSv2 y el hop limit adecuado de EC2; no solucionar acceso copiando llaves al contenedor. El script PM2 de deploy/rollback no administra Docker. El Dockerfile usa Node 24.22.0 y dependencias bloqueadas; las actualizaciones requieren repetir typecheck, pruebas y build. En Podman construir con `--format=docker` para conservar HEALTHCHECK; el formato OCI puede omitirlo.
+
+
+## Instalación observada y validada el 28 de octubre
+
+El primer despliegue válido fue `4ab5e40`; la actualización de transporte se promovió como `a09f235` en `/opt/spookython/current`, mediante
+`infra/deploy-ec2.sh`. Node de la aplicación: versión 24.22.0 instalada sin
+reemplazar Node 22 del sistema en
+`/home/ec2-user/.local/node/node-v24.22.0-linux-x64/bin/node`. Exportar esa ruta
+en PATH y NODE_BINARY al desplegar. PM2 usa `src/start.ts`: PM2 importa su script
+desde un contenedor y por ello la entrada debe arrancar explícitamente sin
+suponer que `process.argv[1]` apunta al módulo importado.
+
+En esta instancia Caddy está en Docker como `caddy-proxy`, red host, no como
+servicio systemd. Conserva volúmenes `caddy_data` y `caddy_config`; el bind mount
+lee `/home/ec2-user/Caddyfile`. Para cambiar su configuración, conservar una
+copia del archivo, escribir sobre su inode existente y validar/recargar:
+
+```bash
+cp /home/ec2-user/Caddyfile /home/ec2-user/Caddyfile.backup
+cat /opt/spookython/current/infra/Caddyfile > /home/ec2-user/Caddyfile
+docker exec caddy-proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+docker exec caddy-proxy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+```
+
+No eliminar los volúmenes TLS. Los logs Caddy de este contenedor se consultan
+dentro de él; para que CloudWatch Agent del host recoja ese archivo hay que
+montar también el directorio de logs del host al crear el contenedor. Los logs
+de backend sí están en `/var/log/spookython/` del host. El Agent y las alarmas
+se activaron después de la aceptación de rondas; ver la sección de monitoreo.
+
+Identidad AWS verificada: IAM Role `spookython-ec2-role`, región Ohio; sin llaves
+AWS en el código o archivo env generado. Se comprobó recuperación real desde
+DynamoDB tras reiniciar PM2, conservando turno 2, versión, sobrevivientes y
+refugios de una partida pausada. El archivo de operador está en
+`/etc/spookython/backend.env`, modo 600; nunca copiarlo a Git ni imprimirlo.
+
+Para verificar las tres rondas completas en el escritor desplegado:
+
+```bash
+BACKEND_COMMIT=$(cat /opt/spookython/current/COMMIT) \
+  /home/ec2-user/.local/node/node-v24.22.0-linux-x64/bin/node \
+  --env-file=/etc/spookython/backend.env scripts/verify-ec2-rounds.mjs
+```
+
+La comprobación usa HTTPS/WSS públicos, registra 151 snapshots por ronda,
+verifica igualdad GET/WS y capacidad, y confirma el puntero DynamoDB al turno
+150. No reemplaza silenciosamente una partida en ejecución. Requiere unos
+15 minutos y escribe evidencia en `/opt/spookython/evidence/rounds.json`.
+
+
+### Continuar una verificación con incidentes
+
+Por defecto el verificador se detiene al observar una pausa. Para continuar
+explícitamente un intento ya registrado, conservar el archivo original y usar
+`ACCEPTANCE_CONTINUE=true ACCEPTANCE_RESUME_ON_DEADLINE=true`. Solo reanuda ante
+un nuevo deadline miss, readiness saludable y la misma identidad/semilla;
+no reanuda una caída de persistencia o una pausa sin nuevo incumplimiento.
+Las pausas se guardan en la evidencia y hacen que el criterio temporal no se
+marque aprobado. `ACCEPTANCE_OUTPUT` permite conservar ciclos independientes.
+No usar la reanudación para borrar fallos o presentar el tiempo pausado como
+trabajo continuo. La t3.micro mostró cierres tardíos aislados aun con créditos
+CPU disponibles; revisar siempre `deadlineMisses` además del p95.
+
+Producción registra controles, errores, lentitud y métricas agregadas.
+`LOG_HTTP_REQUESTS=true` activa trazas por petición para diagnóstico; el valor
+normal es false. `ROUTING_HTTP_MAX_SOCKETS=8` es el ajuste medido en esta EC2;
+la fábrica genérica mantiene su valor independiente. Un cambio de estos valores
+requiere repetir las mediciones frías/calientes y las rondas completas.

@@ -1,0 +1,55 @@
+{
+  "backendCommit": "a09f235a9dd2891471a6b7e4f678eb343024b66e",
+  "functionalVerified": true,
+  "routingSlaPassed": true,
+  "zeroDeadlineMisses": false,
+  "rootTests": {
+    "passed": 172,
+    "failed": 0
+  },
+  "backendTests": {
+    "passed": 32,
+    "failed": 0,
+    "localAndEc2": true
+  },
+  "frontendTests": {
+    "passed": 11,
+    "failed": 0,
+    "typecheckAndBuild": true
+  },
+  "rounds": [
+    {
+      "roundId": 1,
+      "turns": 150,
+      "maxP95Ms": 26.4,
+      "minAvailability": 100,
+      "deadlineMisses": 0,
+      "elapsedMs": 299995,
+      "dynamoDbTurn150": true,
+      "movements": 155,
+      "blockedSegments": 0
+    },
+    {
+      "roundId": 2,
+      "turns": 150,
+      "maxP95Ms": 50.1,
+      "minAvailability": 100,
+      "deadlineMisses": 1,
+      "elapsedMs": 300080,
+      "dynamoDbTurn150": true,
+      "movements": 574,
+      "blockedSegments": 1
+    },
+    {
+      "roundId": 3,
+      "turns": 150,
+      "maxP95Ms": 89.3,
+      "minAvailability": 100,
+      "deadlineMisses": 0,
+      "elapsedMs": 300008,
+      "dynamoDbTurn150": true,
+      "movements": 1207,
+      "blockedSegments": 2
+    }
+  ]
+}
