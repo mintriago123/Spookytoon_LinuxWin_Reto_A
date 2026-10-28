@@ -48,7 +48,10 @@ export const simulatorPlugin: FastifyPluginAsync<{
   // sin ellos el operador nunca podría obtener la cookie de sesión.
   app.post("/operador/sesion", async (request, reply) => {
     const body = request.body as { password?: unknown } | undefined;
-    const password = typeof body?.password === "string" ? body.password : "";
+    // Tope alineado con OperadorSesionRequest.password (maxLength 256 en
+    // openapi.yaml): un valor fuera de rango se trata igual que una
+    // contraseña incorrecta, sin distinguir el motivo en la respuesta.
+    const password = typeof body?.password === "string" && body.password.length <= 256 ? body.password : "";
     const hash = createHash("sha256").update(password).digest();
     if (!password || !timingSafeEqual(hash, expectedPasswordHash)) {
       return reply.code(401).send({ error: { code: "UNAUTHORIZED", message: "Contraseña de operador incorrecta", requestId: request.id } });

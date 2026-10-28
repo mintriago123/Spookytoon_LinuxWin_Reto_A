@@ -25,6 +25,8 @@ export function RoundControls() {
   const setPendingControl = useWorldStore((s) => s.setPendingControl);
   const setLastError = useWorldStore((s) => s.setLastError);
   const status = useWorldStore((s) => s.currentSnapshot?.status ?? "idle");
+  const snapshotGameId = useWorldStore((s) => s.currentSnapshot?.gameId);
+  const snapshotRoundId = useWorldStore((s) => s.currentSnapshot?.roundId);
   const graph = useWorldStore((s) => s.graph);
   const blockedEdges = useWorldStore((s) => s.currentSnapshot?.blockedEdges ?? []);
 
@@ -211,14 +213,17 @@ export function RoundControls() {
       onSubmit={(e) => e.preventDefault()}
     >
       {started ? (
-        // Paso 2 — sesión activa: gameId/ronda/seed ya están fijados en el
+        // Paso 2 — sesión activa: gameId/ronda ya están fijados en el
         // Backend, así que se muestran de solo lectura en una fila compacta
-        // en vez de repetir el formulario de arranque.
+        // en vez de repetir el formulario de arranque. Se leen del snapshot
+        // (no del formulario local): si la página se recarga o abre otra
+        // pestaña con la misma sesión, el formulario local vuelve a sus
+        // valores por defecto pero el snapshot sigue siendo la verdad.
         <div className="flex items-center justify-between gap-2 rounded bg-night-700 px-2 py-1.5">
           <div className="min-w-0 leading-tight">
-            <p className="truncate font-semibold text-slate-100">{gameId}</p>
+            <p className="truncate font-semibold text-slate-100">{snapshotGameId ?? gameId}</p>
             <p className="text-[11px] text-slate-400">
-              Ronda {roundId} · {status === "running" ? "en curso" : "pausada"}
+              Ronda {snapshotRoundId ?? roundId} · {status === "running" ? "en curso" : "pausada"}
             </p>
           </div>
           <div className="flex shrink-0 gap-2">

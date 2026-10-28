@@ -98,8 +98,14 @@ export async function createBackendApp(options: BackendOptions = {}) {
     reply.header("Access-Control-Allow-Origin", origin)
       .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
       .header("Access-Control-Allow-Headers", "Content-Type, x-api-key")
-      .header("Access-Control-Allow-Credentials", "true")
       .header("Access-Control-Max-Age", "600");
+    // Allow-Credentials solo cuando el origen está explícitamente listado:
+    // con FRONTEND_ORIGIN=* cualquier sitio podría disparar un fetch con
+    // credentials:"include" y el navegador adjuntaría la cookie httpOnly de
+    // sesión de operador (CSRF). Sin esta cabecera en el preflight, el
+    // navegador aborta antes de enviar la petición real; x-api-key no se ve
+    // afectado porque nunca depende de credentials/cookies.
+    if (origins.includes(origin)) reply.header("Access-Control-Allow-Credentials", "true");
     if (request.method === "OPTIONS") return reply.code(204).send();
   });
   app.options("/*", async (_request, reply) => reply.code(204).send());
