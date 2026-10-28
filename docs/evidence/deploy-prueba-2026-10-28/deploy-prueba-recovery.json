@@ -1,0 +1,18 @@
+{
+  "gameId": "deploy-prueba-78cff56",
+  "turnId": 4,
+  "worldVersion": 4,
+  "status": "paused",
+  "cameras": 4,
+  "recoveredFromDynamoDb": true,
+  "sameSurvivorsSheltersAndCameraState": true,
+  "processes": [
+    {
+      "name": "spookython-backend",
+      "pid": 43289,
+      "status": "online",
+      "restarts": 1,
+      "rssBytes": 167493632
+    }
+  ]
+}

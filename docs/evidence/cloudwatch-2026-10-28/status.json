@@ -1,0 +1,443 @@
+{
+  "verifiedAt": "2026-10-28T08:00:48.309607+00:00",
+  "region": "us-east-2",
+  "instanceId": "i-010f44e5ec891fc73",
+  "agent": {
+    "status": "running",
+    "starttime": "2026-10-28T07:54:27+00:00",
+    "configstatus": "configured",
+    "version": "1.300071.0"
+  },
+  "alarms": [
+    {
+      "AlarmName": "spookython-ec2-cpu-high",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-cpu-high",
+      "AlarmConfigurationUpdatedTimestamp": "2026-10-28T07:55:36.323000+00:00",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "InsufficientDataActions": [],
+      "StateValue": "OK",
+      "StateReason": "Threshold Crossed: 2 datapoints [4.562484186944374 (28/10/26 07:51:00), 2.708350523850185 (28/10/26 07:46:00)] were not greater than the threshold (80.0).",
+      "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T07:56:27.031+0000\",\"startDate\":\"2026-10-28T07:46:00.000+0000\",\"statistic\":\"Average\",\"period\":300,\"recentDatapoints\":[2.708350523850185,4.562484186944374],\"threshold\":80.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T07:51:00.000+0000\",\"sampleCount\":2.0,\"value\":4.562484186944374}]}",
+      "StateUpdatedTimestamp": "2026-10-28T07:56:27.033000+00:00",
+      "MetricName": "CPUUtilization",
+      "Namespace": "AWS/EC2",
+      "Statistic": "Average",
+      "Dimensions": [
+        {
+          "Name": "InstanceId",
+          "Value": "i-010f44e5ec891fc73"
+        }
+      ],
+      "Period": 300,
+      "EvaluationPeriods": 2,
+      "Threshold": 80.0,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "missing",
+      "StateTransitionedTimestamp": "2026-10-28T07:56:27.033000+00:00"
+    },
+    {
+      "AlarmName": "spookython-ec2-status-failed",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-status-failed",
+      "AlarmConfigurationUpdatedTimestamp": "2026-10-28T07:55:36.906000+00:00",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "InsufficientDataActions": [],
+      "StateValue": "OK",
+      "StateReason": "Threshold Crossed: 2 datapoints [0.0 (28/10/26 07:55:00), 0.0 (28/10/26 07:54:00)] were not greater than or equal to the threshold (1.0).",
+      "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T07:56:20.960+0000\",\"startDate\":\"2026-10-28T07:54:00.000+0000\",\"statistic\":\"Maximum\",\"period\":60,\"recentDatapoints\":[0.0,0.0],\"threshold\":1.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T07:55:00.000+0000\",\"sampleCount\":1.0,\"value\":0.0}]}",
+      "StateUpdatedTimestamp": "2026-10-28T07:56:20.963000+00:00",
+      "MetricName": "StatusCheckFailed",
+      "Namespace": "AWS/EC2",
+      "Statistic": "Maximum",
+      "Dimensions": [
+        {
+          "Name": "InstanceId",
+          "Value": "i-010f44e5ec891fc73"
+        }
+      ],
+      "Period": 60,
+      "EvaluationPeriods": 2,
+      "Threshold": 1.0,
+      "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+      "TreatMissingData": "missing",
+      "StateTransitionedTimestamp": "2026-10-28T07:56:20.963000+00:00"
+    },
+    {
+      "AlarmName": "spookython-persistence-failed",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-persistence-failed",
+      "AlarmConfigurationUpdatedTimestamp": "2026-10-28T07:59:04.078000+00:00",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "InsufficientDataActions": [],
+      "StateValue": "OK",
+      "StateReason": "Threshold Crossed: 1 datapoint [0.0 (28/10/26 07:59:00)] was not greater than or equal to the threshold (1.0).",
+      "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T08:00:46.917+0000\",\"startDate\":\"2026-10-28T07:59:00.000+0000\",\"statistic\":\"Sum\",\"period\":60,\"recentDatapoints\":[0.0],\"threshold\":1.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T07:59:00.000+0000\",\"sampleCount\":2.0,\"value\":0.0}]}",
+      "StateUpdatedTimestamp": "2026-10-28T08:00:46.922000+00:00",
+      "MetricName": "PersistenceFailures",
+      "Namespace": "Spookython",
+      "Statistic": "Sum",
+      "Dimensions": [],
+      "Period": 60,
+      "EvaluationPeriods": 1,
+      "Threshold": 1.0,
+      "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+      "TreatMissingData": "notBreaching",
+      "StateTransitionedTimestamp": "2026-10-28T08:00:46.922000+00:00"
+    },
+    {
+      "AlarmName": "spookython-route-p95-high",
+      "AlarmArn": "arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-route-p95-high",
+      "AlarmConfigurationUpdatedTimestamp": "2026-10-28T07:59:03.480000+00:00",
+      "ActionsEnabled": true,
+      "OKActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "AlarmActions": [
+        "arn:aws:sns:us-east-2:901454175123:spookython-alerts"
+      ],
+      "InsufficientDataActions": [],
+      "StateValue": "OK",
+      "StateReason": "Threshold Crossed: 1 datapoint [72.0 (28/10/26 07:59:00)] was not greater than the threshold (150.0).",
+      "StateReasonData": "{\"version\":\"1.0\",\"queryDate\":\"2026-10-28T08:00:09.551+0000\",\"startDate\":\"2026-10-28T07:59:00.000+0000\",\"statistic\":\"Maximum\",\"period\":60,\"recentDatapoints\":[72.0],\"threshold\":150.0,\"evaluatedDatapoints\":[{\"timestamp\":\"2026-10-28T07:59:00.000+0000\",\"sampleCount\":2.0,\"value\":72.0}]}",
+      "StateUpdatedTimestamp": "2026-10-28T08:00:09.553000+00:00",
+      "MetricName": "RouteP95Ms",
+      "Namespace": "Spookython",
+      "Statistic": "Maximum",
+      "Dimensions": [],
+      "Period": 60,
+      "EvaluationPeriods": 1,
+      "Threshold": 150.0,
+      "ComparisonOperator": "GreaterThanThreshold",
+      "TreatMissingData": "missing",
+      "StateTransitionedTimestamp": "2026-10-28T08:00:09.553000+00:00"
+    }
+  ],
+  "metrics": {
+    "CPUUtilization": {
+      "Label": "CPUUtilization",
+      "Datapoints": [
+        {
+          "Timestamp": "2026-10-28T07:30:00+00:00",
+          "Average": 2.175920831738602,
+          "Sum": 10.879604158693011,
+          "Maximum": 2.591666666666667,
+          "Unit": "Percent"
+        },
+        {
+          "Timestamp": "2026-10-28T07:40:00+00:00",
+          "Average": 0.5264725647726458,
+          "Sum": 2.6323628238632293,
+          "Maximum": 0.5741961254244058,
+          "Unit": "Percent"
+        },
+        {
+          "Timestamp": "2026-10-28T07:35:00+00:00",
+          "Average": 1.1070998954021634,
+          "Sum": 5.535499477010817,
+          "Maximum": 1.95162635529608,
+          "Unit": "Percent"
+        },
+        {
+          "Timestamp": "2026-10-28T07:50:00+00:00",
+          "Average": 2.708350523850185,
+          "Sum": 13.541752619250925,
+          "Maximum": 7.765860148000333,
+          "Unit": "Percent"
+        },
+        {
+          "Timestamp": "2026-10-28T07:45:00+00:00",
+          "Average": 0.5050549064282795,
+          "Sum": 2.5252745321413976,
+          "Maximum": 0.5745882117815565,
+          "Unit": "Percent"
+        },
+        {
+          "Timestamp": "2026-10-28T07:55:00+00:00",
+          "Average": 4.686282607262577,
+          "Sum": 23.431413036312886,
+          "Maximum": 7.940339253907745,
+          "Unit": "Percent"
+        }
+      ]
+    },
+    "StatusCheckFailed": {
+      "Label": "StatusCheckFailed",
+      "Datapoints": [
+        {
+          "Timestamp": "2026-10-28T07:55:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:30:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:35:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:40:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:45:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:50:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      ]
+    },
+    "RouteP95Ms": {
+      "Label": "RouteP95Ms",
+      "Datapoints": [
+        {
+          "Timestamp": "2026-10-28T07:59:00+00:00",
+          "Average": 72.0,
+          "Sum": 144.0,
+          "Maximum": 72.0,
+          "Unit": "Milliseconds"
+        }
+      ]
+    },
+    "PersistenceFailures": {
+      "Label": "PersistenceFailures",
+      "Datapoints": [
+        {
+          "Timestamp": "2026-10-28T07:59:00+00:00",
+          "Average": 0.0,
+          "Sum": 0.0,
+          "Maximum": 0.0,
+          "Unit": "Count"
+        }
+      ]
+    },
+    "NumberOfNotificationsDelivered": {
+      "Label": "NumberOfNotificationsDelivered",
+      "Datapoints": [
+        {
+          "Timestamp": "2026-10-28T07:55:00+00:00",
+          "Average": 1.0,
+          "Sum": 1.0,
+          "Maximum": 1.0,
+          "Unit": "Count"
+        },
+        {
+          "Timestamp": "2026-10-28T07:56:00+00:00",
+          "Average": 1.0,
+          "Sum": 2.0,
+          "Maximum": 1.0,
+          "Unit": "Count"
+        }
+      ]
+    }
+  },
+  "actionHistory": {
+    "spookython-ec2-cpu-high": {
+      "AlarmHistoryItems": [
+        {
+          "AlarmName": "spookython-ec2-cpu-high",
+          "AlarmType": "MetricAlarm",
+          "Timestamp": "2026-10-28T07:56:27.062000+00:00",
+          "HistoryItemType": "Action",
+          "HistorySummary": "Successfully executed action arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "HistoryData": "{\"actionState\":\"Succeeded\",\"stateUpdateTimestamp\":1793174187033,\"notificationResource\":\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\",\"publishedMessage\":\"{\\\"default\\\":\\\"{\\\\\\\"AlarmName\\\\\\\":\\\\\\\"spookython-ec2-cpu-high\\\\\\\",\\\\\\\"AlarmDescription\\\\\\\":null,\\\\\\\"AWSAccountId\\\\\\\":\\\\\\\"901454175123\\\\\\\",\\\\\\\"AlarmConfigurationUpdatedTimestamp\\\\\\\":\\\\\\\"2026-10-28T07:55:36.323+0000\\\\\\\",\\\\\\\"NewStateValue\\\\\\\":\\\\\\\"OK\\\\\\\",\\\\\\\"NewStateReason\\\\\\\":\\\\\\\"Threshold Crossed: 2 datapoints [4.562484186944374 (28/10/26 07:51:00), 2.708350523850185 (28/10/26 07:46:00)] were not greater than the threshold (80.0).\\\\\\\",\\\\\\\"StateChangeTime\\\\\\\":\\\\\\\"2026-10-28T07:56:27.033+0000\\\\\\\",\\\\\\\"Region\\\\\\\":\\\\\\\"US East (Ohio)\\\\\\\",\\\\\\\"AlarmArn\\\\\\\":\\\\\\\"arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-cpu-high\\\\\\\",\\\\\\\"OldStateValue\\\\\\\":\\\\\\\"INSUFFICIENT_DATA\\\\\\\",\\\\\\\"ActionExecutedAfterMuteWindow\\\\\\\":false,\\\\\\\"OKActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"AlarmActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"InsufficientDataActions\\\\\\\":[],\\\\\\\"Trigger\\\\\\\":{\\\\\\\"MetricName\\\\\\\":\\\\\\\"CPUUtilization\\\\\\\",\\\\\\\"Namespace\\\\\\\":\\\\\\\"AWS/EC2\\\\\\\",\\\\\\\"StatisticType\\\\\\\":\\\\\\\"Statistic\\\\\\\",\\\\\\\"Statistic\\\\\\\":\\\\\\\"AVERAGE\\\\\\\",\\\\\\\"Unit\\\\\\\":null,\\\\\\\"Dimensions\\\\\\\":[{\\\\\\\"value\\\\\\\":\\\\\\\"i-010f44e5ec891fc73\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"InstanceId\\\\\\\"}],\\\\\\\"Period\\\\\\\":300,\\\\\\\"EvaluationPeriods\\\\\\\":2,\\\\\\\"ComparisonOperator\\\\\\\":\\\\\\\"GreaterThanThreshold\\\\\\\",\\\\\\\"Threshold\\\\\\\":80.0,\\\\\\\"TreatMissingData\\\\\\\":\\\\\\\"missing\\\\\\\",\\\\\\\"EvaluateLowSampleCountPercentile\\\\\\\":\\\\\\\"\\\\\\\"}}\\\",\\\"sms\\\":\\\"OK: \\\\\\\"spookython-ec2-cpu-high\\\\\\\" in US East (Ohio)\\\",\\\"email\\\":\\\"You are receiving this email because your Amazon CloudWatch Alarm \\\\\\\"spookython-ec2-cpu-high\\\\\\\" in the US East (Ohio) region has entered the OK state, because \\\\\\\"Threshold Crossed: 2 datapoints [4.562484186944374 (28/10/26 07:51:00), 2.708350523850185 (28/10/26 07:46:00)] were not greater than the threshold (80.0).\\\\\\\" at \\\\\\\"Wednesday 28 October, 2026 07:56:27 UTC\\\\\\\".\\\\n\\\\nView this alarm in the AWS Management Console:\\\\nhttps://us-east-2.console.aws.amazon.com/cloudwatch/deeplink.js?region=us-east-2#alarmsV2:alarm/spookython-ec2-cpu-high\\\\n\\\\nAlarm Details:\\\\n- Name:                       spookython-ec2-cpu-high\\\\n- Description:                \\\\n- State Change:               INSUFFICIENT_DATA -> OK\\\\n- Reason for State Change:    Threshold Crossed: 2 datapoints [4.562484186944374 (28/10/26 07:51:00), 2.708350523850185 (28/10/26 07:46:00)] were not greater than the threshold (80.0).\\\\n- Timestamp:                  Wednesday 28 October, 2026 07:56:27 UTC\\\\n- AWS Account:                901454175123\\\\n- Alarm Arn:                  arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-cpu-high\\\\n\\\\nThreshold:\\\\n- The alarm is in the ALARM state when the metric is GreaterThanThreshold 80.0 for at least 2 of the last 2 period(s) of 300 seconds. \\\\n\\\\nMonitored Metric:\\\\n- MetricNamespace:                     AWS/EC2\\\\n- MetricName:                          CPUUtilization\\\\n- Dimensions:                          [InstanceId = i-010f44e5ec891fc73]\\\\n- Period:                              300 seconds\\\\n- Statistic:                           Average\\\\n- Unit:                                not specified\\\\n- TreatMissingData:                    missing\\\\n\\\\n\\\\nState Change Actions:\\\\n- OK: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- ALARM: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- INSUFFICIENT_DATA: \\\\n\\\"}\",\"error\":null,\"muteWindowEndTimestamp\":null}"
+        }
+      ]
+    },
+    "spookython-ec2-status-failed": {
+      "AlarmHistoryItems": [
+        {
+          "AlarmName": "spookython-ec2-status-failed",
+          "AlarmType": "MetricAlarm",
+          "Timestamp": "2026-10-28T07:56:20.998000+00:00",
+          "HistoryItemType": "Action",
+          "HistorySummary": "Successfully executed action arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "HistoryData": "{\"actionState\":\"Succeeded\",\"stateUpdateTimestamp\":1793174180963,\"notificationResource\":\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\",\"publishedMessage\":\"{\\\"default\\\":\\\"{\\\\\\\"AlarmName\\\\\\\":\\\\\\\"spookython-ec2-status-failed\\\\\\\",\\\\\\\"AlarmDescription\\\\\\\":null,\\\\\\\"AWSAccountId\\\\\\\":\\\\\\\"901454175123\\\\\\\",\\\\\\\"AlarmConfigurationUpdatedTimestamp\\\\\\\":\\\\\\\"2026-10-28T07:55:36.906+0000\\\\\\\",\\\\\\\"NewStateValue\\\\\\\":\\\\\\\"OK\\\\\\\",\\\\\\\"NewStateReason\\\\\\\":\\\\\\\"Threshold Crossed: 2 datapoints [0.0 (28/10/26 07:55:00), 0.0 (28/10/26 07:54:00)] were not greater than or equal to the threshold (1.0).\\\\\\\",\\\\\\\"StateChangeTime\\\\\\\":\\\\\\\"2026-10-28T07:56:20.963+0000\\\\\\\",\\\\\\\"Region\\\\\\\":\\\\\\\"US East (Ohio)\\\\\\\",\\\\\\\"AlarmArn\\\\\\\":\\\\\\\"arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-status-failed\\\\\\\",\\\\\\\"OldStateValue\\\\\\\":\\\\\\\"INSUFFICIENT_DATA\\\\\\\",\\\\\\\"ActionExecutedAfterMuteWindow\\\\\\\":false,\\\\\\\"OKActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"AlarmActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"InsufficientDataActions\\\\\\\":[],\\\\\\\"Trigger\\\\\\\":{\\\\\\\"MetricName\\\\\\\":\\\\\\\"StatusCheckFailed\\\\\\\",\\\\\\\"Namespace\\\\\\\":\\\\\\\"AWS/EC2\\\\\\\",\\\\\\\"StatisticType\\\\\\\":\\\\\\\"Statistic\\\\\\\",\\\\\\\"Statistic\\\\\\\":\\\\\\\"MAXIMUM\\\\\\\",\\\\\\\"Unit\\\\\\\":null,\\\\\\\"Dimensions\\\\\\\":[{\\\\\\\"value\\\\\\\":\\\\\\\"i-010f44e5ec891fc73\\\\\\\",\\\\\\\"name\\\\\\\":\\\\\\\"InstanceId\\\\\\\"}],\\\\\\\"Period\\\\\\\":60,\\\\\\\"EvaluationPeriods\\\\\\\":2,\\\\\\\"ComparisonOperator\\\\\\\":\\\\\\\"GreaterThanOrEqualToThreshold\\\\\\\",\\\\\\\"Threshold\\\\\\\":1.0,\\\\\\\"TreatMissingData\\\\\\\":\\\\\\\"missing\\\\\\\",\\\\\\\"EvaluateLowSampleCountPercentile\\\\\\\":\\\\\\\"\\\\\\\"}}\\\",\\\"sms\\\":\\\"OK: \\\\\\\"spookython-ec2-status-failed\\\\\\\" in US East (Ohio)\\\",\\\"email\\\":\\\"You are receiving this email because your Amazon CloudWatch Alarm \\\\\\\"spookython-ec2-status-failed\\\\\\\" in the US East (Ohio) region has entered the OK state, because \\\\\\\"Threshold Crossed: 2 datapoints [0.0 (28/10/26 07:55:00), 0.0 (28/10/26 07:54:00)] were not greater than or equal to the threshold (1.0).\\\\\\\" at \\\\\\\"Wednesday 28 October, 2026 07:56:20 UTC\\\\\\\".\\\\n\\\\nView this alarm in the AWS Management Console:\\\\nhttps://us-east-2.console.aws.amazon.com/cloudwatch/deeplink.js?region=us-east-2#alarmsV2:alarm/spookython-ec2-status-failed\\\\n\\\\nAlarm Details:\\\\n- Name:                       spookython-ec2-status-failed\\\\n- Description:                \\\\n- State Change:               INSUFFICIENT_DATA -> OK\\\\n- Reason for State Change:    Threshold Crossed: 2 datapoints [0.0 (28/10/26 07:55:00), 0.0 (28/10/26 07:54:00)] were not greater than or equal to the threshold (1.0).\\\\n- Timestamp:                  Wednesday 28 October, 2026 07:56:20 UTC\\\\n- AWS Account:                901454175123\\\\n- Alarm Arn:                  arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-ec2-status-failed\\\\n\\\\nThreshold:\\\\n- The alarm is in the ALARM state when the metric is GreaterThanOrEqualToThreshold 1.0 for at least 2 of the last 2 period(s) of 60 seconds. \\\\n\\\\nMonitored Metric:\\\\n- MetricNamespace:                     AWS/EC2\\\\n- MetricName:                          StatusCheckFailed\\\\n- Dimensions:                          [InstanceId = i-010f44e5ec891fc73]\\\\n- Period:                              60 seconds\\\\n- Statistic:                           Maximum\\\\n- Unit:                                not specified\\\\n- TreatMissingData:                    missing\\\\n\\\\n\\\\nState Change Actions:\\\\n- OK: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- ALARM: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- INSUFFICIENT_DATA: \\\\n\\\"}\",\"error\":null,\"muteWindowEndTimestamp\":null}"
+        }
+      ]
+    },
+    "spookython-route-p95-high": {
+      "AlarmHistoryItems": [
+        {
+          "AlarmName": "spookython-route-p95-high",
+          "AlarmType": "MetricAlarm",
+          "Timestamp": "2026-10-28T08:00:09.586000+00:00",
+          "HistoryItemType": "Action",
+          "HistorySummary": "Successfully executed action arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "HistoryData": "{\"actionState\":\"Succeeded\",\"stateUpdateTimestamp\":1793174409553,\"notificationResource\":\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\",\"publishedMessage\":\"{\\\"default\\\":\\\"{\\\\\\\"AlarmName\\\\\\\":\\\\\\\"spookython-route-p95-high\\\\\\\",\\\\\\\"AlarmDescription\\\\\\\":null,\\\\\\\"AWSAccountId\\\\\\\":\\\\\\\"901454175123\\\\\\\",\\\\\\\"AlarmConfigurationUpdatedTimestamp\\\\\\\":\\\\\\\"2026-10-28T07:59:03.480+0000\\\\\\\",\\\\\\\"NewStateValue\\\\\\\":\\\\\\\"OK\\\\\\\",\\\\\\\"NewStateReason\\\\\\\":\\\\\\\"Threshold Crossed: 1 datapoint [72.0 (28/10/26 07:59:00)] was not greater than the threshold (150.0).\\\\\\\",\\\\\\\"StateChangeTime\\\\\\\":\\\\\\\"2026-10-28T08:00:09.553+0000\\\\\\\",\\\\\\\"Region\\\\\\\":\\\\\\\"US East (Ohio)\\\\\\\",\\\\\\\"AlarmArn\\\\\\\":\\\\\\\"arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-route-p95-high\\\\\\\",\\\\\\\"OldStateValue\\\\\\\":\\\\\\\"INSUFFICIENT_DATA\\\\\\\",\\\\\\\"ActionExecutedAfterMuteWindow\\\\\\\":false,\\\\\\\"OKActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"AlarmActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"InsufficientDataActions\\\\\\\":[],\\\\\\\"Trigger\\\\\\\":{\\\\\\\"MetricName\\\\\\\":\\\\\\\"RouteP95Ms\\\\\\\",\\\\\\\"Namespace\\\\\\\":\\\\\\\"Spookython\\\\\\\",\\\\\\\"StatisticType\\\\\\\":\\\\\\\"Statistic\\\\\\\",\\\\\\\"Statistic\\\\\\\":\\\\\\\"MAXIMUM\\\\\\\",\\\\\\\"Unit\\\\\\\":null,\\\\\\\"Dimensions\\\\\\\":[],\\\\\\\"Period\\\\\\\":60,\\\\\\\"EvaluationPeriods\\\\\\\":1,\\\\\\\"ComparisonOperator\\\\\\\":\\\\\\\"GreaterThanThreshold\\\\\\\",\\\\\\\"Threshold\\\\\\\":150.0,\\\\\\\"TreatMissingData\\\\\\\":\\\\\\\"missing\\\\\\\",\\\\\\\"EvaluateLowSampleCountPercentile\\\\\\\":\\\\\\\"\\\\\\\"}}\\\",\\\"sms\\\":\\\"OK: \\\\\\\"spookython-route-p95-high\\\\\\\" in US East (Ohio)\\\",\\\"email\\\":\\\"You are receiving this email because your Amazon CloudWatch Alarm \\\\\\\"spookython-route-p95-high\\\\\\\" in the US East (Ohio) region has entered the OK state, because \\\\\\\"Threshold Crossed: 1 datapoint [72.0 (28/10/26 07:59:00)] was not greater than the threshold (150.0).\\\\\\\" at \\\\\\\"Wednesday 28 October, 2026 08:00:09 UTC\\\\\\\".\\\\n\\\\nView this alarm in the AWS Management Console:\\\\nhttps://us-east-2.console.aws.amazon.com/cloudwatch/deeplink.js?region=us-east-2#alarmsV2:alarm/spookython-route-p95-high\\\\n\\\\nAlarm Details:\\\\n- Name:                       spookython-route-p95-high\\\\n- Description:                \\\\n- State Change:               INSUFFICIENT_DATA -> OK\\\\n- Reason for State Change:    Threshold Crossed: 1 datapoint [72.0 (28/10/26 07:59:00)] was not greater than the threshold (150.0).\\\\n- Timestamp:                  Wednesday 28 October, 2026 08:00:09 UTC\\\\n- AWS Account:                901454175123\\\\n- Alarm Arn:                  arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-route-p95-high\\\\n\\\\nThreshold:\\\\n- The alarm is in the ALARM state when the metric is GreaterThanThreshold 150.0 for at least 1 of the last 1 period(s) of 60 seconds. \\\\n\\\\nMonitored Metric:\\\\n- MetricNamespace:                     Spookython\\\\n- MetricName:                          RouteP95Ms\\\\n- Dimensions:                          \\\\n- Period:                              60 seconds\\\\n- Statistic:                           Maximum\\\\n- Unit:                                not specified\\\\n- TreatMissingData:                    missing\\\\n\\\\n\\\\nState Change Actions:\\\\n- OK: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- ALARM: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- INSUFFICIENT_DATA: \\\\n\\\"}\",\"error\":null,\"muteWindowEndTimestamp\":null}"
+        }
+      ]
+    },
+    "spookython-persistence-failed": {
+      "AlarmHistoryItems": [
+        {
+          "AlarmName": "spookython-persistence-failed",
+          "AlarmType": "MetricAlarm",
+          "Timestamp": "2026-10-28T08:00:46.953000+00:00",
+          "HistoryItemType": "Action",
+          "HistorySummary": "Successfully executed action arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "HistoryData": "{\"actionState\":\"Succeeded\",\"stateUpdateTimestamp\":1793174446922,\"notificationResource\":\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\",\"publishedMessage\":\"{\\\"default\\\":\\\"{\\\\\\\"AlarmName\\\\\\\":\\\\\\\"spookython-persistence-failed\\\\\\\",\\\\\\\"AlarmDescription\\\\\\\":null,\\\\\\\"AWSAccountId\\\\\\\":\\\\\\\"901454175123\\\\\\\",\\\\\\\"AlarmConfigurationUpdatedTimestamp\\\\\\\":\\\\\\\"2026-10-28T07:59:04.078+0000\\\\\\\",\\\\\\\"NewStateValue\\\\\\\":\\\\\\\"OK\\\\\\\",\\\\\\\"NewStateReason\\\\\\\":\\\\\\\"Threshold Crossed: 1 datapoint [0.0 (28/10/26 07:59:00)] was not greater than or equal to the threshold (1.0).\\\\\\\",\\\\\\\"StateChangeTime\\\\\\\":\\\\\\\"2026-10-28T08:00:46.922+0000\\\\\\\",\\\\\\\"Region\\\\\\\":\\\\\\\"US East (Ohio)\\\\\\\",\\\\\\\"AlarmArn\\\\\\\":\\\\\\\"arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-persistence-failed\\\\\\\",\\\\\\\"OldStateValue\\\\\\\":\\\\\\\"INSUFFICIENT_DATA\\\\\\\",\\\\\\\"ActionExecutedAfterMuteWindow\\\\\\\":false,\\\\\\\"OKActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"AlarmActions\\\\\\\":[\\\\\\\"arn:aws:sns:us-east-2:901454175123:spookython-alerts\\\\\\\"],\\\\\\\"InsufficientDataActions\\\\\\\":[],\\\\\\\"Trigger\\\\\\\":{\\\\\\\"MetricName\\\\\\\":\\\\\\\"PersistenceFailures\\\\\\\",\\\\\\\"Namespace\\\\\\\":\\\\\\\"Spookython\\\\\\\",\\\\\\\"StatisticType\\\\\\\":\\\\\\\"Statistic\\\\\\\",\\\\\\\"Statistic\\\\\\\":\\\\\\\"SUM\\\\\\\",\\\\\\\"Unit\\\\\\\":null,\\\\\\\"Dimensions\\\\\\\":[],\\\\\\\"Period\\\\\\\":60,\\\\\\\"EvaluationPeriods\\\\\\\":1,\\\\\\\"ComparisonOperator\\\\\\\":\\\\\\\"GreaterThanOrEqualToThreshold\\\\\\\",\\\\\\\"Threshold\\\\\\\":1.0,\\\\\\\"TreatMissingData\\\\\\\":\\\\\\\"notBreaching\\\\\\\",\\\\\\\"EvaluateLowSampleCountPercentile\\\\\\\":\\\\\\\"\\\\\\\"}}\\\",\\\"sms\\\":\\\"OK: \\\\\\\"spookython-persistence-failed\\\\\\\" in US East (Ohio)\\\",\\\"email\\\":\\\"You are receiving this email because your Amazon CloudWatch Alarm \\\\\\\"spookython-persistence-failed\\\\\\\" in the US East (Ohio) region has entered the OK state, because \\\\\\\"Threshold Crossed: 1 datapoint [0.0 (28/10/26 07:59:00)] was not greater than or equal to the threshold (1.0).\\\\\\\" at \\\\\\\"Wednesday 28 October, 2026 08:00:46 UTC\\\\\\\".\\\\n\\\\nView this alarm in the AWS Management Console:\\\\nhttps://us-east-2.console.aws.amazon.com/cloudwatch/deeplink.js?region=us-east-2#alarmsV2:alarm/spookython-persistence-failed\\\\n\\\\nAlarm Details:\\\\n- Name:                       spookython-persistence-failed\\\\n- Description:                \\\\n- State Change:               INSUFFICIENT_DATA -> OK\\\\n- Reason for State Change:    Threshold Crossed: 1 datapoint [0.0 (28/10/26 07:59:00)] was not greater than or equal to the threshold (1.0).\\\\n- Timestamp:                  Wednesday 28 October, 2026 08:00:46 UTC\\\\n- AWS Account:                901454175123\\\\n- Alarm Arn:                  arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-persistence-failed\\\\n\\\\nThreshold:\\\\n- The alarm is in the ALARM state when the metric is GreaterThanOrEqualToThreshold 1.0 for at least 1 of the last 1 period(s) of 60 seconds. \\\\n\\\\nMonitored Metric:\\\\n- MetricNamespace:                     Spookython\\\\n- MetricName:                          PersistenceFailures\\\\n- Dimensions:                          \\\\n- Period:                              60 seconds\\\\n- Statistic:                           Sum\\\\n- Unit:                                not specified\\\\n- TreatMissingData:                    notBreaching\\\\n\\\\n\\\\nState Change Actions:\\\\n- OK: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- ALARM: [arn:aws:sns:us-east-2:901454175123:spookython-alerts]\\\\n- INSUFFICIENT_DATA: \\\\n\\\"}\",\"error\":null,\"muteWindowEndTimestamp\":null}"
+        }
+      ]
+    }
+  },
+  "filters": {
+    "metricFilters": [
+      {
+        "filterName": "spookython-persistence-failure",
+        "filterPattern": "{ $.event = \"persistence-alarm\" }",
+        "metricTransformations": [
+          {
+            "metricName": "PersistenceFailures",
+            "metricNamespace": "Spookython",
+            "metricValue": "1",
+            "defaultValue": 0.0,
+            "unit": "Count"
+          }
+        ],
+        "creationTime": 1793174342904,
+        "logGroupName": "/spookython/backend",
+        "applyOnTransformedLogs": false
+      },
+      {
+        "filterName": "spookython-route-p95",
+        "filterPattern": "{ $.event = \"backend-metrics\" }",
+        "metricTransformations": [
+          {
+            "metricName": "RouteP95Ms",
+            "metricNamespace": "Spookython",
+            "metricValue": "$.routeP95Ms",
+            "unit": "Milliseconds"
+          }
+        ],
+        "creationTime": 1793174342279,
+        "logGroupName": "/spookython/backend",
+        "applyOnTransformedLogs": false
+      }
+    ]
+  },
+  "logGroups": {
+    "logGroups": [
+      {
+        "logGroupName": "/spookython/backend",
+        "creationTime": 1793173991408,
+        "retentionInDays": 14,
+        "metricFilterCount": 2,
+        "arn": "arn:aws:logs:us-east-2:901454175123:log-group:/spookython/backend:*",
+        "storedBytes": 0,
+        "logGroupClass": "STANDARD",
+        "logGroupArn": "arn:aws:logs:us-east-2:901454175123:log-group:/spookython/backend",
+        "deletionProtectionEnabled": false,
+        "bearerTokenAuthenticationEnabled": false
+      }
+    ]
+  },
+  "logStreams": {
+    "logStreams": [
+      {
+        "logStreamName": "i-010f44e5ec891fc73/backend",
+        "creationTime": 1793174069615,
+        "firstEventTimestamp": 1793174069385,
+        "lastEventTimestamp": 1793174069395,
+        "lastIngestionTime": 1793174069790,
+        "uploadSequenceToken": "49039859691245618347909669811239526945956083451785603617",
+        "arn": "arn:aws:logs:us-east-2:901454175123:log-group:/spookython/backend:log-stream:i-010f44e5ec891fc73/backend",
+        "storedBytes": 0
+      }
+    ]
+  },
+  "topic": {
+    "arn": "arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+    "policy": {
+      "Version": "2008-10-17",
+      "Id": "__default_policy_ID",
+      "Statement": [
+        {
+          "Sid": "__default_statement_ID",
+          "Effect": "Allow",
+          "Principal": {
+            "AWS": "*"
+          },
+          "Action": [
+            "SNS:GetTopicAttributes",
+            "SNS:SetTopicAttributes",
+            "SNS:AddPermission",
+            "SNS:RemovePermission",
+            "SNS:DeleteTopic",
+            "SNS:Subscribe",
+            "SNS:ListSubscriptionsByTopic",
+            "SNS:Publish"
+          ],
+          "Resource": "arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "Condition": {
+            "StringEquals": {
+              "AWS:SourceOwner": "901454175123"
+            }
+          }
+        },
+        {
+          "Sid": "SpookythonCloudWatchAlarms",
+          "Effect": "Allow",
+          "Principal": {
+            "Service": "cloudwatch.amazonaws.com"
+          },
+          "Action": "SNS:Publish",
+          "Resource": "arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+          "Condition": {
+            "StringEquals": {
+              "aws:SourceAccount": "901454175123"
+            },
+            "ArnLike": {
+              "aws:SourceArn": "arn:aws:cloudwatch:us-east-2:901454175123:alarm:spookython-*"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "subscriptions": [
+    {
+      "protocol": "email",
+      "confirmed": true
+    }
+  ],
+  "readiness": {
+    "status": "ready"
+  }
+}

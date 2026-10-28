@@ -1,0 +1,9 @@
+{
+  "agent": {"region": "us-east-2", "metrics_collection_interval": 60},
+  "logs": {
+    "logs_collected": {"files": {"collect_list": [
+      {"file_path": "/var/log/spookython/backend.jsonl", "log_group_name": "/spookython/backend", "log_stream_name": "{instance_id}/backend", "retention_in_days": 14},
+      {"file_path": "/var/log/spookython/backend-error.jsonl", "log_group_name": "/spookython/backend", "log_stream_name": "{instance_id}/error", "retention_in_days": 14}
+    ]}}
+  }
+}

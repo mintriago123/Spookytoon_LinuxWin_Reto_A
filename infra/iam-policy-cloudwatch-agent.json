@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "BackendLogDeliveryOhio",
+    "Effect": "Allow",
+    "Action": ["logs:CreateLogStream", "logs:DescribeLogStreams", "logs:PutLogEvents", "logs:PutRetentionPolicy"],
+    "Resource": ["arn:aws:logs:us-east-2:REPLACE_WITH_ACCOUNT_ID:log-group:/spookython/backend", "arn:aws:logs:us-east-2:REPLACE_WITH_ACCOUNT_ID:log-group:/spookython/backend:*"],
+    "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-2"}}
+  }]
+}

@@ -1,0 +1,69 @@
+{
+  "commit": "5452411806496a97f76cc97d6ee1ce033ef926e2",
+  "verifiedAt": "2026-10-28T09:17:21.615Z",
+  "command": {
+    "gameId": "demo-cierre-5452411",
+    "roundId": 1,
+    "seed": "demo-manta-2026"
+  },
+  "turnId": 6,
+  "status": "paused",
+  "metrics": {
+    "routeSamples": 30,
+    "routeLatencyP50Ms": 9.3,
+    "routeLatencyP95Ms": 22.3,
+    "routeLatencyP99Ms": 22.9,
+    "routeTimeouts": 0,
+    "invalidRouteResponses": 0,
+    "deadlineMisses": 0,
+    "activeSurvivors": 13,
+    "bittenSurvivors": 2,
+    "evacuatedSurvivors": 5,
+    "activeZombies": 8,
+    "wsClients": 2,
+    "snapshotQueueDepth": 0,
+    "lastSnapshotTurnId": 5,
+    "routeErrors": 0,
+    "routeAvailabilityPercent": 100,
+    "survivalRatePercent": 90,
+    "activeSurvivorsPercent": 65,
+    "bittenSurvivorsPercent": 10,
+    "evacuatedSurvivorsPercent": 25,
+    "turnDurationMs": 28.2,
+    "turnBudgetUsedPercent": 1.4,
+    "turnEfficiencyPercent": 100
+  },
+  "httpWsEqual": true,
+  "restoredFromDynamoDb": true,
+  "recoveredTurn": 4,
+  "resumedAfterRecovery": true,
+  "sameEntitiesSheltersCameras": true,
+  "reconnectSnapshotVerified": true,
+  "processes": [
+    {
+      "name": "spookython-backend",
+      "pid": 46387,
+      "status": "online",
+      "restarts": 1,
+      "rssBytes": 174399488
+    }
+  ],
+  "alarms": [
+    {
+      "name": "spookython-ec2-cpu-high",
+      "state": "OK"
+    },
+    {
+      "name": "spookython-ec2-status-failed",
+      "state": "OK"
+    },
+    {
+      "name": "spookython-persistence-failed",
+      "state": "OK"
+    },
+    {
+      "name": "spookython-route-p95-high",
+      "state": "OK"
+    }
+  ]
+}

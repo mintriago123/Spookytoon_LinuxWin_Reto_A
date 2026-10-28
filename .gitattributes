@@ -1,0 +1,18 @@
+# Política de línea por defecto para el resto del repo (código, docs):
+# normalizar a LF en el repositorio, sin forzar el EOL del working tree de
+# cada desarrollador. No se renormalizan archivos ya trackeados por esto
+# solo; afecta a próximos commits.
+* text=auto eol=lf
+
+# backend/src/modules/graph/load-graph.ts valida el SHA-256 de estos
+# artefactos contra graph-manifest.json. Con core.autocrlf=true (default de
+# Git en Windows) y sin esta regla, el checkout reescribe su LF original a
+# CRLF y el hash deja de coincidir: createBackendApp() falla con "El grafo
+# no coincide con el manifiesto de build" en cualquier máquina Windows,
+# incluida la que construya la imagen de despliegue. -text los trata como
+# binarios: el checkout entrega siempre los bytes exactos del commit, sin
+# conversión de fin de línea en ninguna plataforma.
+backend/data/grafo_manta.json -text
+backend/data/graph-manifest.json -text
+frontend/public/data/grafo_manta.json -text
+frontend/public/data/graph-manifest.json -text

@@ -1,0 +1,10 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [{
+    "Sid": "SnapshotsOnlyOhio",
+    "Effect": "Allow",
+    "Action": ["dynamodb:DescribeTable", "dynamodb:GetItem", "dynamodb:PutItem"],
+    "Resource": "arn:aws:dynamodb:us-east-2:REPLACE_WITH_ACCOUNT_ID:table/spookython-manta-state",
+    "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-2"}}
+  }]
+}

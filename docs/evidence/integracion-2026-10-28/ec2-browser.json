@@ -1,0 +1,13 @@
+{
+  "backend": "EC2 https://3-128-78-190.sslip.io",
+  "frontendCommit": "6afb9a1",
+  "staticAssets": "temporary production build served by Playwright; not deployed to EC2",
+  "apiAndWebSocket": "real HTTPS/WSS EC2",
+  "roundId": 1,
+  "turnId": 63,
+  "gameId": "ec2-accept-mvrr3dol-r1",
+  "graphVersion": "manta-osm-2026-10-13-d70af9643354ddac",
+  "p95Ms": 39.5,
+  "availability": 100,
+  "browserErrors": []
+}

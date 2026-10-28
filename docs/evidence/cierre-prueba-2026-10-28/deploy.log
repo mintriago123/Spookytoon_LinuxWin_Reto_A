@@ -1,0 +1,140 @@
+
+added 264 packages in 2s
+npm warn install-scripts 1 package has install scripts not yet covered by allowScripts:
+npm warn install-scripts   esbuild@0.21.5 (postinstall: node install.js)
+npm warn install-scripts
+npm warn install-scripts Run `npm install-scripts ls` to review, or `npm install-scripts approve <pkg>` to allow.
+
+> @spookython/frontend@0.1.0 typecheck
+> tsc -b --noEmit
+
+
+> @spookython/frontend@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /tmp/tmp.m7ogz3xdcI/frontend
+
+ ✓ src/state/world-store.test.ts (11 tests) 5ms
+
+ Test Files  1 passed (1)
+      Tests  11 passed (11)
+   Start at  03:55:43
+   Duration  416ms (transform 36ms, setup 0ms, collect 40ms, tests 5ms, environment 0ms, prepare 210ms)
+
+
+> @spookython/frontend@0.1.0 lint
+> eslint .
+
+
+> @spookython/frontend@0.1.0 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 96 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   1.04 kB │ gzip:   0.60 kB
+dist/assets/index-b4ZBpUPM.css   13.52 kB │ gzip:   3.68 kB
+dist/assets/index-DFPuzLwe.js   326.79 kB │ gzip: 100.79 kB
+✓ built in 1.44s
+{"commit": "ef8cf79dab18f782d00329cd52611986608b343b", "files": 6, "graphSha256": "7c010a06aef690403e9578cdbfc7cddafcac2102e9dc88a2dc28a03f33ce3b73"}
+From https://github.com/mintriago123/Spookytoon_LinuxWin_Reto_A
+   a09f235..0592b70  feat/backend-rounds-metrics -> origin/feat/backend-rounds-metrics
+   1e918a5..4ab5e40  EZMayk     -> origin/EZMayk
+   6afb9a1..b8e1c41  design     -> origin/design
+   78cff56..ef8cf79  prueba     -> origin/prueba
+{"commit": "ef8cf79dab18f782d00329cd52611986608b343b", "files": 6, "graphSha256": "7c010a06aef690403e9578cdbfc7cddafcac2102e9dc88a2dc28a03f33ce3b73"}
+{"level":"info","ts":1793177757.147337,"msg":"using config from file","file":"/tmp/spookython-candidate-Caddyfile"}
+{"level":"info","ts":1793177757.1517925,"msg":"adapted config to JSON","adapter":"caddyfile"}
+{"level":"info","ts":1793177757.1526852,"logger":"http.auto_https","msg":"server is listening only on the HTTPS port but has no TLS connection policies; adding one to enable TLS","server_name":"srv0","https_port":443}
+{"level":"info","ts":1793177757.1527119,"logger":"http.auto_https","msg":"enabling automatic HTTP->HTTPS redirects","server_name":"srv0"}
+{"level":"info","ts":1793177757.1529877,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0x2611d5a7ed00"}
+Valid configuration
+{"level":"info","ts":1793177757.1534705,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0x2611d5a7ed00"}
+{"level":"info","ts":1793177757.1534884,"logger":"http","msg":"servers shutting down with eternal grace period"}
+
+added 96 packages in 3s
+
+> typecheck
+> tsc --noEmit
+
+
+> test
+> node --test tests/*.test.ts
+
+✔ fixture conserva referencias aproximadas, habilita tres sensores y excluye Paquisha (1.021649ms)
+✔ snapshot publica metadatos simulados y solo observaciones aún vigentes (9.484577ms)
+✔ composition root incorpora el fixture en el snapshot inicial del simulador (319.028743ms)
+✔ detección simulada se limita a zombies activos y vence con TTL exclusivo (4.04204ms)
+✔ una observación vigente se instala en routing y cambia el plan del nodo señalado (37.47143ms)
+✔ OpenAPI 3.1 válido, referencias resueltas y endpoints reales con seguridad correcta (566.188572ms)
+✔ factory sin tabla o sin red de tests usa memoria; DynamoDB conserva defaults Ohio (6.664905ms)
+✔ DynamoDB roundtrip y recuperación pausada; fragmento 262144 (81.100168ms)
+✔ DynamoDB roundtrip y recuperación pausada; fragmento 100 (55.463599ms)
+✔ fragmentación incompleta nunca mueve el puntero al nuevo turno (65.916243ms)
+✔ cola no bloquea, respeta límite, hace 3 reintentos y alarma sin rechazos huérfanos (40.630643ms)
+✔ cola conserva orden de commits y drena al cerrar (32.900113ms)
+✔ agotamiento de persistencia pausa la partida y readiness responde 503 (2209.672391ms)
+✔ servidor restaura checkpoint pausado antes de GET y admite reanudar/reiniciar sin tocar el reloj (2214.047977ms)
+✔ tabla EC2 gameId/turnId conserva checkpoints y fragmentos (262144) (47.142926ms)
+✔ tabla EC2 gameId/turnId conserva checkpoints y fragmentos (100) (38.488025ms)
+✔ logs acotados conservan controles y errores sin API key, seed ni payload completo (321.416268ms)
+✔ presets reproducibles de Manta cumplen población, zonas, amenazas y eventos de cada ronda (44.779266ms)
+✔ métricas cuentan respuestas válidas hasta 500 ms, errores, bajas y porcentajes del mundo (5.263134ms)
+✔ admisión consume reservas, libera mordidos y nunca supera las 60 plazas (4.590967ms)
+✔ un cupo reservado permite rutear y validar movimientos aun con el refugio totalmente reservado (32.550275ms)
+✔ una respuesta 401 pausa a todos sin convertir otras respuestas válidas en inválidas (13.686363ms)
+✔ reloj con trabajo no nulo y turno 150 de 1900 ms (1045.904197ms)
+✔ reloj con trabajo no nulo y turno 150 de 2001 ms (888.247631ms)
+✔ un turno que supera el presupuesto publica deadlineMisses, eficiencia y pausa (14.58589ms)
+✔ transporte HTTP cancela solicitudes, conserva errores y no sigue redirecciones (117.109376ms)
+✔ el diagnóstico distingue una cancelación en cola sin socket de una respuesta HTTP (8.677944ms)
+✔ el pool predeterminado acota conexiones y registra la cola de un lote de 200 (111.088667ms)
+✔ CORS permite HTTP autenticado local/producción y rechaza orígenes no configurados (385.582796ms)
+✔ R1: startBackendServer mueve entidades y publica métricas iguales por HTTP/WS con reloj real (8198.953585ms)
+ℹ {"roundId":1,"survivors":20,"turns":3,"movements":49,"p95Ms":36.1,"availability":100,"evacuated":2,"bitten":2,"deadlineMisses":0}
+ℹ {"event":"turn-diagnostics","roundId":1,"turnId":1,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":30.2,"rollingP95Ms":36.4,"turnDurationMs":143,"timing":{"deadlineMonotonicMs":3085.86371,"workFinishedAtMonotonicMs":1230.377411,"commitReadyAtMonotonicMs":3086.086076,"committedAtMonotonicMs":3086.135109,"timerWakeDelayMs":0.16919000000007145,"commitDelayMs":0.2713989999997466,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.2519440000000941,"afterCommitMs":0.4614200000000892,"transport":{"samples":20,"totalP95Ms":29.8,"beforeSocketP95Ms":22.8,"queuedForSocket":12,"socketQueueP95Ms":22.7,"connectP95Ms":4,"responseWaitP95Ms":21,"bodyP95Ms":0.3,"engineP95Ms":0,"aborted":0,"reused":1,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":1,"totalMs":88.58789000000002,"beforeSocketMs":2.251019000000042,"queuedForSocket":false,"socketQueueMs":0,"connectMs":10.90972899999997,"responseWaitMs":74.95235200000002,"bodyMs":0.4747899999999845,"engineMs":56.26360999999997,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":false}],"eventLoopMaxMs":47.3}
+ℹ {"event":"turn-diagnostics","roundId":1,"turnId":2,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":15.2,"rollingP95Ms":36.1,"turnDurationMs":39.9,"timing":{"deadlineMonotonicMs":5085.86371,"workFinishedAtMonotonicMs":3126.728483,"commitReadyAtMonotonicMs":5085.980976,"committedAtMonotonicMs":5086.000636,"timerWakeDelayMs":0.07106900000053429,"commitDelayMs":0.13692600000013044,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.07157100000040373,"afterCommitMs":0.15614199999981793,"transport":{"samples":20,"totalP95Ms":12.9,"beforeSocketP95Ms":10.3,"queuedForSocket":12,"socketQueueP95Ms":10.1,"connectP95Ms":0,"responseWaitP95Ms":5.6,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":2,"totalMs":15.715989000000263,"beforeSocketMs":0.46760900000026595,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":15.13480699999991,"bodyMs":0.11357300000008763,"engineMs":4.235751000000164,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":11.5}
+ℹ {"event":"turn-diagnostics","roundId":1,"turnId":3,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":12.9,"rollingP95Ms":36.1,"turnDurationMs":28.5,"timing":{"deadlineMonotonicMs":7085.86371,"workFinishedAtMonotonicMs":5114.749962,"commitReadyAtMonotonicMs":7085.955056,"committedAtMonotonicMs":7085.975045,"timerWakeDelayMs":0.04539500000009866,"commitDelayMs":0.11133500000050844,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.0679309999995894,"afterCommitMs":0.1156940000000759,"transport":{"samples":17,"totalP95Ms":9.3,"beforeSocketP95Ms":7.5,"queuedForSocket":9,"socketQueueP95Ms":7.4,"connectP95Ms":0,"responseWaitP95Ms":4.2,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":3,"totalMs":10.804949999999735,"beforeSocketMs":0.4542089999995369,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":10.216277999999875,"bodyMs":0.13446300000032352,"engineMs":4.684852999999748,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":10.4}
+ℹ {"event":"turn-diagnostics","roundId":1,"turnId":4,"status":"paused","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":10.6,"rollingP95Ms":35.7,"turnDurationMs":28.4,"timing":{"deadlineMonotonicMs":9085.86371,"workFinishedAtMonotonicMs":7114.407679,"commitReadyAtMonotonicMs":9086.068811,"committedAtMonotonicMs":9086.086222,"timerWakeDelayMs":0.05557299999964016,"commitDelayMs":0.22251200000027893,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.0935460000000603,"afterCommitMs":0.15809599999920465,"transport":{"samples":16,"totalP95Ms":8.6,"beforeSocketP95Ms":5.3,"queuedForSocket":8,"socketQueueP95Ms":5.2,"connectP95Ms":0,"responseWaitP95Ms":4.7,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":4,"totalMs":11.713130999999521,"beforeSocketMs":0.3194449999991775,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":11.30885600000056,"bodyMs":0.08482999999978347,"engineMs":6.176319999999578,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":12.4}
+✔ R2: startBackendServer mueve entidades y publica métricas iguales por HTTP/WS con reloj real (8185.386453ms)
+ℹ {"roundId":2,"survivors":80,"turns":3,"movements":210,"p95Ms":47.8,"availability":100,"evacuated":14,"bitten":5,"deadlineMisses":0}
+ℹ {"event":"turn-diagnostics","roundId":2,"turnId":1,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":33.5,"rollingP95Ms":51.6,"turnDurationMs":106.3,"timing":{"deadlineMonotonicMs":11274.37324,"workFinishedAtMonotonicMs":9380.779479,"commitReadyAtMonotonicMs":11274.650381,"committedAtMonotonicMs":11274.696919,"timerWakeDelayMs":0.05151099999966391,"commitDelayMs":0.32367899999917427,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.10102399999959744,"afterCommitMs":0.3473520000006829,"transport":{"samples":80,"totalP95Ms":43.5,"beforeSocketP95Ms":39.4,"queuedForSocket":72,"socketQueueP95Ms":39.4,"connectP95Ms":2.1,"responseWaitP95Ms":4.5,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":1,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":1,"totalMs":44.33711399999993,"beforeSocketMs":0.8745159999998577,"queuedForSocket":false,"socketQueueMs":0,"connectMs":2.6271410000008473,"responseWaitMs":40.731463000000076,"bodyMs":0.10399399999914749,"engineMs":9.159394000000248,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":false}],"eventLoopMaxMs":38.8}
+ℹ {"event":"turn-diagnostics","roundId":2,"turnId":2,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":28.7,"rollingP95Ms":50.4,"turnDurationMs":64.1,"timing":{"deadlineMonotonicMs":13274.37324,"workFinishedAtMonotonicMs":11339.255121,"commitReadyAtMonotonicMs":13274.480693,"committedAtMonotonicMs":13274.510256,"timerWakeDelayMs":0.04684099999940372,"commitDelayMs":0.13701599999876635,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.07042600000022503,"afterCommitMs":0.25557900000058,"transport":{"samples":74,"totalP95Ms":33.3,"beforeSocketP95Ms":29.8,"queuedForSocket":66,"socketQueueP95Ms":29.7,"connectP95Ms":0,"responseWaitP95Ms":3.9,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":2,"totalMs":13.787529999999606,"beforeSocketMs":0.34666099999958533,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":13.349906999999803,"bodyMs":0.09096200000021781,"engineMs":3.2467539999997825,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":11.1}
+ℹ {"event":"turn-diagnostics","roundId":2,"turnId":3,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":27.9,"rollingP95Ms":47.8,"turnDurationMs":57.9,"timing":{"deadlineMonotonicMs":15274.37324,"workFinishedAtMonotonicMs":13332.733317,"commitReadyAtMonotonicMs":15274.48684,"committedAtMonotonicMs":15274.513253,"timerWakeDelayMs":0.04924299999947834,"commitDelayMs":0.14001299999836192,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.07977799999935087,"afterCommitMs":0.2815450000016426,"transport":{"samples":68,"totalP95Ms":30.7,"beforeSocketP95Ms":28.1,"queuedForSocket":60,"socketQueueP95Ms":28.1,"connectP95Ms":0,"responseWaitP95Ms":4,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":3,"totalMs":12.348077999999077,"beforeSocketMs":0.41930300000058196,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":11.841903999998976,"bodyMs":0.08687099999951897,"engineMs":2.9958129999995435,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":11.7}
+ℹ {"event":"turn-diagnostics","roundId":2,"turnId":4,"status":"paused","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":27.9,"rollingP95Ms":46.7,"turnDurationMs":61.1,"timing":{"deadlineMonotonicMs":17274.37324,"workFinishedAtMonotonicMs":15335.932735,"commitReadyAtMonotonicMs":17274.504998,"committedAtMonotonicMs":17274.522681,"timerWakeDelayMs":0.049307999997836305,"commitDelayMs":0.14944099999775062,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.09209099999861792,"afterCommitMs":0.20390300000144634,"transport":{"samples":61,"totalP95Ms":30.3,"beforeSocketP95Ms":28.3,"queuedForSocket":53,"socketQueueP95Ms":28.2,"connectP95Ms":0,"responseWaitP95Ms":5.4,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":4,"totalMs":14.807034000001295,"beforeSocketMs":0.364305000000968,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":14.359844000000521,"bodyMs":0.08288499999980559,"engineMs":6.032315000000381,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":11}
+✔ R3: startBackendServer mueve entidades y publica métricas iguales por HTTP/WS con reloj real (8142.055112ms)
+ℹ {"roundId":3,"survivors":200,"turns":3,"movements":548,"p95Ms":138.8,"availability":100,"evacuated":29,"bitten":10,"deadlineMisses":0}
+ℹ {"event":"turn-diagnostics","roundId":3,"turnId":1,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":108.7,"rollingP95Ms":145.5,"turnDurationMs":213,"timing":{"deadlineMonotonicMs":19415.131711,"workFinishedAtMonotonicMs":17628.427588,"commitReadyAtMonotonicMs":19415.318085,"committedAtMonotonicMs":19415.357503,"timerWakeDelayMs":0.050771999998687534,"commitDelayMs":0.2257919999974547,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.1371980000003532,"afterCommitMs":0.403519999999844,"transport":{"samples":200,"totalP95Ms":116.5,"beforeSocketP95Ms":113.2,"queuedForSocket":192,"socketQueueP95Ms":112.9,"connectP95Ms":0,"responseWaitP95Ms":13.1,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":1,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":1,"totalMs":45.45841599999767,"beforeSocketMs":0.6377429999993183,"queuedForSocket":false,"socketQueueMs":0,"connectMs":2.555771999999706,"responseWaitMs":42.14831799999956,"bodyMs":0.11658299999908195,"engineMs":9.073989000000438,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":false}],"eventLoopMaxMs":43.7}
+ℹ {"event":"turn-diagnostics","roundId":3,"turnId":2,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":82.4,"rollingP95Ms":141.8,"turnDurationMs":139.8,"timing":{"deadlineMonotonicMs":21415.131711,"workFinishedAtMonotonicMs":19555.749316,"commitReadyAtMonotonicMs":21415.204313,"committedAtMonotonicMs":21415.220997,"timerWakeDelayMs":0.04666299999735202,"commitDelayMs":0.08928599999853759,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.08435699999972712,"afterCommitMs":0.15982200000144076,"transport":{"samples":190,"totalP95Ms":77.4,"beforeSocketP95Ms":73.4,"queuedForSocket":182,"socketQueueP95Ms":73.4,"connectP95Ms":0,"responseWaitP95Ms":4.6,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":2,"totalMs":25.691360999997414,"beforeSocketMs":0.46499299999777577,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":25.13401100000192,"bodyMs":0.09235699999771896,"engineMs":6.548747000000731,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":19.4}
+ℹ {"event":"turn-diagnostics","roundId":3,"turnId":3,"status":"running","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":61.5,"rollingP95Ms":138.8,"turnDurationMs":96,"timing":{"deadlineMonotonicMs":23415.131711,"workFinishedAtMonotonicMs":21511.484187,"commitReadyAtMonotonicMs":23415.197473,"committedAtMonotonicMs":23415.216956,"timerWakeDelayMs":0.03781699999672128,"commitDelayMs":0.08524499999839463,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.06934499999988475,"afterCommitMs":0.2210610000001907,"transport":{"samples":181,"totalP95Ms":59.9,"beforeSocketP95Ms":58,"queuedForSocket":173,"socketQueueP95Ms":58,"connectP95Ms":0,"responseWaitP95Ms":3.6,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":3,"totalMs":15.549103999997897,"beforeSocketMs":0.49794099999780883,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":14.977731999999378,"bodyMs":0.0734310000007099,"engineMs":3.372116000002279,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":15.6}
+ℹ {"event":"turn-diagnostics","roundId":3,"turnId":4,"status":"paused","counters":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"cumulative":{"routeTimeouts":0,"invalidRouteResponses":0,"routeErrors":0},"availability":100,"rollingP50Ms":54.2,"rollingP95Ms":136,"turnDurationMs":97,"timing":{"deadlineMonotonicMs":25415.131711,"workFinishedAtMonotonicMs":23512.477631,"commitReadyAtMonotonicMs":25415.223822,"committedAtMonotonicMs":25415.239744,"timerWakeDelayMs":0.032574999997450504,"commitDelayMs":0.10803299999679439,"commitJitterToleranceMs":10,"deadlineMiss":false},"observerCostMs":0.06611800000246149,"afterCommitMs":0.1450619999995979,"transport":{"samples":161,"totalP95Ms":50.5,"beforeSocketP95Ms":48.2,"queuedForSocket":153,"socketQueueP95Ms":48.1,"connectP95Ms":0,"responseWaitP95Ms":3.4,"bodyP95Ms":0.1,"engineP95Ms":0,"aborted":0,"reused":8,"errors":[],"httpErrors":[]},"sync":[{"operation":"sync","turnId":4,"totalMs":23.309417000000394,"beforeSocketMs":0.40429199999925913,"queuedForSocket":false,"socketQueueMs":0,"connectMs":0,"responseWaitMs":22.792160000000877,"bodyMs":0.11296500000025844,"engineMs":4.888559999999416,"httpStatus":200,"aborted":false,"errorCode":null,"reusedSocket":true}],"eventLoopMaxMs":14.5}
+✔ manejador SIGTERM cierra HTTP y workers cooperativamente mediante IPC de prueba (884.565001ms)
+✔ supervisor entrega SIGTERM real y el servidor termina naturalmente (793.366644ms)
+✔ readiness 200 antes de sincronizar; pierde readiness si el pool deja de operar (258.997883ms)
+✔ fallo de inicialización de persistencia no produce falso ready (162.71468ms)
+✔ dos workers calculan plan equivalente, lookup queda local y cola responde 429 (288.653015ms)
+✔ configuración inválida del pool HTTP falla antes de readiness (10.058996ms)
+ℹ tests 38
+ℹ suites 0
+ℹ pass 38
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 40201.121207
+[PM2][WARN] Applications spookython-backend not running, starting...
+[PM2] App [spookython-backend] launched (1 instances)
+┌────┬───────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+│ id │ name                  │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+├────┼───────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+│ 0  │ spookython-backend    │ default     │ N/A     │ fork    │ 44609    │ 0s     │ 0    │ online    │ 0%       │ 25.8mb   │ ec2-user │ disabled │
+└────┴───────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+host metrics | cpu: 47% | ram usage: 68.3% | ens5: ⇓ 44kb/s ⇑ 1kb/s | disk: ⇓ 2.2mb/s ⇑ 3.1mb/s / 67.56%
+{"level":"info","ts":1793177811.803411,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+{"level":"info","ts":1793177811.8080115,"msg":"adapted config to JSON","adapter":"caddyfile"}
+[PM2] Saving current process list...
+[PM2] Successfully saved in /home/ec2-user/.pm2/dump.pm2
+Desplegado ef8cf79dab18f782d00329cd52611986608b343b: frontend + backend + Caddy; readiness y web OK.

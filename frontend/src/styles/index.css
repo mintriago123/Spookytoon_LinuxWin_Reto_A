@@ -1,0 +1,113 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: #06100a;
+  color: #e8edf7;
+}
+
+/* Panel flotante estilo "glass" del boceto de diseño: fondo nocturno
+   translúcido + blur, sin depender de un plugin de Tailwind. */
+.glass {
+  background-color: rgb(17 24 38 / 0.72);
+  backdrop-filter: blur(10px);
+  border: 1px solid rgb(255 255 255 / 0.12);
+}
+
+:focus-visible {
+  outline: 2px solid #22d3ee;
+  outline-offset: 2px;
+}
+
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.panel-in {
+  animation: panel-in 220ms ease-out;
+}
+
+/* Marca de "Centro de mando" en el header: barrido de radar lento. */
+@keyframes radar-sweep {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.radar-mark {
+  animation: radar-sweep 6s linear infinite;
+  transform-origin: center;
+}
+
+/* Pulso de amenaza activa: solo corredor/horda (las entidades que más
+   urgen la atención del operador), nunca más de dos a la vez en pantalla
+   para no diluir la señal. Transform-only, no dispara layout. */
+@keyframes threat-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.18);
+  }
+}
+.threat-marker {
+  /* display obligatorio: transform no aplica a un <span> inline no
+     reemplazado (spec CSS); inline-block lo hace efectivo sin alterar el
+     layout del div que Leaflet posiciona por fuera. */
+  display: inline-block;
+  animation: threat-pulse 1.4s ease-in-out infinite;
+  transform-origin: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .panel-in,
+  .radar-mark,
+  .threat-marker {
+    animation: none;
+  }
+}
+
+/* Tiles de OSM estándar (gratis, sin key) invertidos a oscuro solo en el
+   pane de tiles: las vías/entidades/popups de Leaflet viven en otros panes
+   y no se ven afectados por este filtro. */
+.leaflet-tile-pane {
+  filter: invert(1) hue-rotate(200deg) brightness(0.85) contrast(1.05) saturate(0.35);
+}
+
+/* Los detalles de mapa (incluidas alertas Ojos de Águila) deben quedar
+   sobre la leyenda flotante para que el operador pueda leer el popup completo. */
+.leaflet-popup-pane {
+  z-index: 1200;
+}
+
+/* Rótulo de zona en LiveMap: solo texto, sin el globo/flecha por defecto
+   del Tooltip de Leaflet. */
+.zone-label-tooltip {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: rgb(203 213 225 / 0.8);
+  pointer-events: none;
+}
+.zone-label-tooltip::before {
+  display: none !important;
+}

@@ -1,0 +1,138 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-28T05:30:00Z",
+  "title": "Design System: Escape de Manta Zombie — Centro de Mando",
+  "extensions": {
+    "colorMeta": {
+      "night-base": { "role": "neutral", "displayName": "Base de App", "canonical": "#0a0e16", "tonalRamp": ["#1d2330", "#303a50", "#495979", "#60759f", "#8696b6", "#acb7cd", "#d2d8e4", "#eff1f5"] },
+      "accent-cyan": { "role": "secondary", "displayName": "Cian Señal", "canonical": "#22d3ee", "tonalRamp": ["#143438", "#22565e", "#33828f", "#43acbc", "#70c0cc", "#9dd4dc", "#cae8ec", "#ecf7f8"] },
+      "accent-amber": { "role": "primary", "displayName": "Ámbar Precaución", "canonical": "#fbbf24", "tonalRamp": ["#3b2f12", "#624f1e", "#94782e", "#c39d3c", "#d1b56b", "#e0cc9a", "#eee4c8", "#f9f5eb"] },
+      "accent-green": { "role": "primary", "displayName": "Verde Evacuación", "canonical": "#34d399", "tonalRamp": ["#19342a", "#295646", "#3f836a", "#52ad8c", "#7cc0a7", "#a5d4c3", "#cfe8df", "#eef7f3"] },
+      "accent-rose": { "role": "primary", "displayName": "Rosa Peligro", "canonical": "#ff5a5a", "tonalRamp": ["#3b1111", "#631d1d", "#962c2c", "#c63939", "#d36969", "#e19898", "#efc8c8", "#f9ebeb"] },
+      "threat-horda": { "role": "tertiary", "displayName": "Púrpura Horda", "canonical": "#7e22ce", "tonalRamp": ["#271735", "#422759", "#643b87", "#834db2", "#a178c4", "#bfa3d7", "#dccde9", "#f3edf7"] },
+      "threat-caminante": { "role": "tertiary", "displayName": "Oliva Caminante", "canonical": "#4d7c0f", "tonalRamp": ["#293716", "#445b24", "#678b37", "#87b649", "#a4c874", "#c1d9a0", "#ddebcc", "#f3f8ed"] },
+      "entity-shelter": { "role": "tertiary", "displayName": "Azul Refugio", "canonical": "#2563eb", "tonalRamp": ["#152038", "#23355d", "#35508d", "#456aba", "#728eca", "#9eb1db", "#cbd5ec", "#ecf0f8"] }
+    },
+    "typographyMeta": {
+      "title": { "displayName": "Title", "purpose": "Título de la app y valores de métrica en vivo (tabular-nums)." },
+      "body": { "displayName": "Body", "purpose": "Texto base de paneles, formularios y popups del mapa." },
+      "label": { "displayName": "Label", "purpose": "Encabezados de sección y etiquetas de métrica, siempre en mayúsculas." }
+    },
+    "shadows": [],
+    "motion": [
+      { "name": "panel-in", "value": "opacity 0→1, translateY(-4px→0) 220ms ease-out", "purpose": "Entrada del primer panel de métricas al llegar el primer snapshot." },
+      { "name": "radar-sweep", "value": "rotate(0→360deg) 6s linear infinite", "purpose": "Barrido del ícono de radar en el header; vigilancia constante." },
+      { "name": "threat-pulse", "value": "scale(1→1.18→1) 1.4s ease-in-out infinite", "purpose": "Pulso de los glifos de zombie corredor/horda activos (amenaza que exige reacción)." },
+      { "name": "control-transition", "value": "all/colors 150ms", "purpose": "Transición por defecto de hover/focus en botones e inputs." },
+      { "name": "chevron-rotate", "value": "rotate(0→180deg) 150ms", "purpose": "Chevron de la leyenda colapsable al expandir/contraer." }
+    ],
+    "breakpoints": [
+      { "name": "md", "value": "768px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button (Iniciar)",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Acción principal de ronda; inicia o reanuda la simulación.",
+      "html": "<button class=\"ds-btn ds-btn-primary\">Iniciar</button>",
+      "css": ".ds-btn { border-radius: 4px; padding: 6px 12px; font-weight: 600; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; border: none; cursor: pointer; transition: background-color 150ms, opacity 150ms; } .ds-btn-primary { background-color: rgb(52 211 153 / 0.9); color: #0a0e16; } .ds-btn-primary:hover { background-color: #34d399; } .ds-btn-primary:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Caution Button (Pausar)",
+      "kind": "button",
+      "refersTo": "button-caution",
+      "description": "Pausa la ronda activa.",
+      "html": "<button class=\"ds-btn ds-btn-caution\">Pausar</button>",
+      "css": ".ds-btn-caution { background-color: rgb(251 191 36 / 0.9); color: #0a0e16; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; border: none; cursor: pointer; transition: background-color 150ms; } .ds-btn-caution:hover { background-color: #fbbf24; } .ds-btn-caution:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Danger Button (Cerrar segmento)",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Bloquea un segmento de vía en ambos sentidos.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Cerrar segmento</button>",
+      "css": ".ds-btn-danger { background-color: rgb(255 90 90 / 0.9); color: #0a0e16; border-radius: 4px; padding: 6px 12px; font-weight: 600; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; border: none; cursor: pointer; transition: background-color 150ms; } .ds-btn-danger:hover { background-color: #ff5a5a; } .ds-btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }"
+    },
+    {
+      "name": "Ghost Button (Desbloquear)",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Acción secundaria dentro de una lista de cierres vigentes.",
+      "html": "<button class=\"ds-btn ds-btn-ghost\">Desbloquear</button>",
+      "css": ".ds-btn-ghost { background-color: #1e2a40; color: #e8edf7; border-radius: 4px; padding: 2px 8px; font-weight: 600; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; border: none; cursor: pointer; transition: background-color 150ms; } .ds-btn-ghost:hover { background-color: #2a3a58; }"
+    },
+    {
+      "name": "Glass Panel",
+      "kind": "card",
+      "refersTo": "panel-glass",
+      "description": "Contenedor flotante translúcido con blur; única fuente de profundidad del sistema (sin sombras).",
+      "html": "<div class=\"ds-panel-glass\"><span class=\"ds-panel-label\">Refugios · ocupación</span><p>R-BARBASQUILLO 53/60</p></div>",
+      "css": ".ds-panel-glass { background-color: rgb(17 24 38 / 0.72); backdrop-filter: blur(10px); border: 1px solid rgb(255 255 255 / 0.12); border-radius: 8px; padding: 12px; color: #e8edf7; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; } .ds-panel-label { font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: #94a3b8; }"
+    },
+    {
+      "name": "Text Input (API key)",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "Campo de texto base; solo en memoria, sin persistencia (ej. x-api-key del operador).",
+      "html": "<label class=\"ds-field\"><span>API key de operador (solo en memoria)</span><input type=\"password\" autocomplete=\"off\" /></label>",
+      "css": ".ds-field { display: flex; flex-direction: column; gap: 4px; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; color: #e8edf7; } .ds-field input { border-radius: 4px; border: 1px solid rgb(255 255 255 / 0.1); background-color: #17213a; color: #e8edf7; padding: 4px 8px; transition: border-color 150ms; } .ds-field input::placeholder { color: #64748b; } .ds-field input:hover { border-color: rgb(255 255 255 / 0.25); } .ds-field input:focus-visible { outline: 2px solid #22d3ee; outline-offset: 2px; }"
+    },
+    {
+      "name": "Shelter Occupancy Bar",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Barra de progreso de ocupación por refugio; cambia a rosa al llegar a capacidad.",
+      "html": "<div class=\"ds-occ\"><div class=\"ds-occ-fill\" style=\"width: 88%\"></div></div>",
+      "css": ".ds-occ { height: 6px; width: 100%; overflow: hidden; border-radius: 9999px; background-color: #1e2a40; } .ds-occ-fill { height: 100%; border-radius: 9999px; background-color: #22d3ee; } .ds-occ-fill.full { background-color: #ff5a5a; }"
+    },
+    {
+      "name": "Connection Status Badge",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Punto de estado + etiqueta de texto; anunciado por aria-live, nunca solo color.",
+      "html": "<div class=\"ds-status\" role=\"status\"><span class=\"ds-status-dot\"></span><span>Conectado</span></div>",
+      "css": ".ds-status { display: flex; align-items: center; gap: 8px; font-family: Manrope, system-ui, sans-serif; font-size: 0.75rem; color: #e8edf7; } .ds-status-dot { width: 10px; height: 10px; border-radius: 9999px; background-color: #10b981; }"
+    },
+    {
+      "name": "Entity Glyph (sobreviviente/zombie)",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "SVG inline con forma Y color distintos por tipo/estado; nunca depende solo de color (accesibilidad).",
+      "html": "<svg width=\"18\" height=\"18\" viewBox=\"0 0 24 24\"><circle cx=\"12\" cy=\"12\" r=\"7\" fill=\"#34d399\" stroke=\"#0a0e16\" stroke-width=\"1.5\"/><circle cx=\"12\" cy=\"12\" r=\"2\" fill=\"#0a0e16\" fill-opacity=\"0.6\"/></svg>",
+      "css": ""
+    }
+  ],
+  "narrative": {
+    "northStar": "El Centro de Mando",
+    "overview": "Este es el panel de un operador que vigila una crisis real en curso, no un dashboard de analítica para hojear con calma. Todo el lenguaje visual viene del propio boceto del equipo y de la copy ya embebida en la app (\"Centro de mando · motor de rutas en tiempo real\"): una sala de operaciones nocturna, oscura por defecto porque se opera de noche y bajo presión, con paneles de cristal translúcido flotando sobre un mapa real que nunca deja de moverse. El ícono de radar del header, con su barrido lento y constante, es el resumen físico de todo el sistema: vigilancia activa, no un retrato estático.\n\nLa densidad de información es alta a propósito — vivos, mordidos, evacuados, turno, p95, disponibilidad, ocupación por refugio, cierres vigentes — porque el operador necesita todo el panorama sin cambiar de pantalla en medio de una ronda. Nada es decorativo: cada color, cada glifo, cada animación existe porque codifica un estado real del Backend. El sistema rechaza explícitamente la fantasía de \"app zombie\" (nada de sangre, texturas grunge ni tipografía de terror) — es una herramienta táctica seria, no una pieza de marketing de Halloween.",
+    "keyCharacteristics": [
+      "Base nocturna casi negra, paneles de cristal translúcido con blur, cero sombras duras.",
+      "Un acento de color por rol semántico (ir, pausar/precaución, peligro, info), reutilizado de forma idéntica en UI y en el estado de los sobrevivientes en el mapa.",
+      "Las amenazas (zombies) viven en su propia paleta cruda, deliberadamente separada de los acentos de UI.",
+      "Tipografía Manrope, sin tipo display: la jerarquía más alta es un título de 14px — esto es una herramienta, no una portada.",
+      "Cada entidad del mapa codifica su estado con forma Y color a la vez, nunca solo color."
+    ],
+    "rules": [
+      { "name": "La Regla de las Dos Familias", "body": "Los acentos de UI (verde/ámbar/rosa/cian) nunca se usan para pintar una entidad del mapa que no sea un sobreviviente, y la paleta de amenazas nunca se usa en un botón, input o estado de conexión.", "section": "colors" },
+      { "name": "La Regla del Rojo Único", "body": "Solo existe un rojo (#ff5a5a) para todo lo que es grave: mordida, cierre, error. No se introduce un segundo tono de rojo para distinguir severidad.", "section": "colors" },
+      { "name": "La Regla del Número Estable", "body": "Cualquier cifra que cambie turno a turno usa tabular-nums sin excepción, para que el layout no tiemble mientras el operador lee en vivo.", "section": "typography" },
+      { "name": "La Regla del Cristal, No la Sombra", "body": "Ningún componente nuevo introduce box-shadow para separarse del fondo; la elevación es translucidez + blur (.glass), nunca una sombra.", "section": "elevation" }
+    ],
+    "dos": [
+      "Do usar .glass para cualquier panel nuevo que flote sobre el mapa; es la única fuente de profundidad del sistema.",
+      "Do aplicar tabular-nums a toda cifra que cambie turno a turno.",
+      "Do dar a cada estado de entidad una forma distinta además de un color distinto — nunca solo color.",
+      "Do mantener la paleta de amenazas (zombies/refugio/vías) completamente separada de los acentos de UI.",
+      "Do animar con transform/opacity únicamente, y respetar prefers-reduced-motion en toda animación nueva."
+    ],
+    "donts": [
+      "Don't introducir box-shadow en ningún componente — la elevación es translucidez, no sombra.",
+      "Don't usar un acento de UI (verde/ámbar/rosa/cian) para pintar un zombie, una vía o un refugio — ni al revés.",
+      "Don't subir la escala tipográfica por encima de 14px/700 en ningún componente — este sistema no tiene un rol display.",
+      "Don't wirear accent-purple/accent-purplelight a un componente sin confirmar antes su rol — están reservados, no asignados.",
+      "Don't dejar un estado de error o desconexión sin anuncio accesible (role=\"alert\"/aria-live)."
+    ]
+  }
+}

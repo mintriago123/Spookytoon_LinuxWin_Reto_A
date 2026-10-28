@@ -1,0 +1,39 @@
+{
+  "bbox": null,
+  "directionMode": "pedestrian",
+  "targetGraphNodes": 300,
+  "compactIntersections": true,
+  "shelterSnapLimitM": 750,
+  "zones": [
+    { "name": "Tarqui", "polygon": [] },
+    { "name": "Los Esteros", "polygon": [] },
+    { "name": "Barbasquillo", "polygon": [] },
+    { "name": "Jocay", "polygon": [] }
+  ],
+  "refugios": [
+    {
+      "id": "R-TARQUI",
+      "zona": "Tarqui",
+      "acceso": { "lat": null, "lng": null, "descripcion": "Entrada principal" },
+      "capacidad": 60
+    },
+    {
+      "id": "R-ESTEROS",
+      "zona": "Los Esteros",
+      "acceso": { "lat": null, "lng": null, "descripcion": "Entrada principal" },
+      "capacidad": 60
+    },
+    {
+      "id": "R-BARBASQUILLO",
+      "zona": "Barbasquillo",
+      "acceso": { "lat": null, "lng": null, "descripcion": "Entrada principal" },
+      "capacidad": 60
+    },
+    {
+      "id": "R-JOCAY",
+      "zona": "Jocay",
+      "acceso": { "lat": null, "lng": null, "descripcion": "Entrada principal" },
+      "capacidad": 60
+    }
+  ]
+}

@@ -1,0 +1,6 @@
+{
+  "test": "browser during controlled restart",
+  "issue": "Playwright page.goto networkidle exceeded 30000 ms",
+  "resolution": "Recheck actual map readiness and real client WebSocket reconnection without waiting for all external map/font requests to become idle.",
+  "serverSmokeFailed": false
+}

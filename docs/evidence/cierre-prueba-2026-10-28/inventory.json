@@ -1,0 +1,26 @@
+{
+  "verifiedAt": "2026-10-28T09:19:35.233731+00:00",
+  "instance": {
+    "instanceId": "i-010f44e5ec891fc73",
+    "instanceType": "t3.micro",
+    "region": "us-east-2",
+    "availabilityZone": "us-east-2a",
+    "pendingTime": "2026-10-28T04:36:43Z",
+    "architecture": "x86_64"
+  },
+  "table": {
+    "Name": "spookython-manta-state",
+    "Status": "ACTIVE",
+    "Bytes": 3515257,
+    "Items": 915,
+    "Billing": "PAY_PER_REQUEST"
+  },
+  "logs": [
+    {
+      "Name": "/spookython/backend",
+      "Retention": 14,
+      "StoredBytes": 0
+    }
+  ],
+  "note": "Inventario t\u00e9cnico observado; los tama\u00f1os agregados pueden tener retraso y no sustituyen Billing."
+}

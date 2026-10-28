@@ -1,0 +1,69 @@
+{
+  "acceptanceSourceCommit": "ef8cf79dab18f782d00329cd52611986608b343b",
+  "complete": true,
+  "functionalVerified": true,
+  "routingSlaPassed": true,
+  "zeroDeadlineMisses": true,
+  "tests": {
+    "root": 177,
+    "backendOnEc2": 38,
+    "frontend": 11,
+    "infra": 12
+  },
+  "rounds": [
+    {
+      "roundId": 1,
+      "survivors": 20,
+      "turns": 150,
+      "elapsedMs": 299999,
+      "maxP95Ms": 37.2,
+      "minAvailability": 100,
+      "deadlineMisses": 0,
+      "routeTimeouts": 0,
+      "invalidRouteResponses": 0,
+      "routeErrors": 0,
+      "movements": 155,
+      "blockedSegments": 0,
+      "httpWsEqual": 151,
+      "dynamoDbTurn150": true
+    },
+    {
+      "roundId": 2,
+      "survivors": 80,
+      "turns": 150,
+      "elapsedMs": 300005,
+      "maxP95Ms": 50.3,
+      "minAvailability": 100,
+      "deadlineMisses": 0,
+      "routeTimeouts": 0,
+      "invalidRouteResponses": 0,
+      "routeErrors": 0,
+      "movements": 574,
+      "blockedSegments": 1,
+      "httpWsEqual": 151,
+      "dynamoDbTurn150": true
+    },
+    {
+      "roundId": 3,
+      "survivors": 200,
+      "turns": 150,
+      "elapsedMs": 300008,
+      "maxP95Ms": 85,
+      "minAvailability": 100,
+      "deadlineMisses": 0,
+      "routeTimeouts": 0,
+      "invalidRouteResponses": 0,
+      "routeErrors": 0,
+      "movements": 1207,
+      "blockedSegments": 2,
+      "httpWsEqual": 151,
+      "dynamoDbTurn150": true
+    }
+  ],
+  "billingVerified": false,
+  "deployedCommit": "5452411806496a97f76cc97d6ee1ce033ef926e2",
+  "recoveryVerified": true,
+  "resumeAfterRecoveryVerified": true,
+  "browserReconnectionVerified": true,
+  "runtimeEquivalentToAcceptance": true
+}

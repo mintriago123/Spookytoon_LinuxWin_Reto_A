@@ -1,0 +1,144 @@
+{
+  "schemaVersion": "1.0.0",
+  "metadata": {
+    "ciudad": "Manta",
+    "datasetType": "simulation-fixture",
+    "coordinateSystem": "WGS84",
+    "generatedAt": "2026-10-27",
+    "graphVersion": "manta-osm-2026-10-13-d70af9643354ddac",
+    "disclaimer": "Los puntos representan referencias públicas aproximadas, no coordenadas confirmadas de cámaras. Las coberturas y alertas son simuladas.",
+    "primarySource": "https://manta.gob.ec/habla-serio-y-mira-la-camara-que-te-estamos-vigilando/",
+    "primarySourceDate": "2025-08-12"
+  },
+  "cameras": [
+    {
+      "id": "manta-oae-sim-inepaca-001",
+      "name": "Paso elevado de Inepaca",
+      "networkAffiliation": "Ojos de Águila; no confirmado por la fuente",
+      "reportedLocation": "Parte baja del paso vehicular elevado de Inepaca",
+      "publicReference": {
+        "type": "municipal-camera-location-reference",
+        "sourceUrl": "https://manta.gob.ec/habla-serio-y-mira-la-camara-que-te-estamos-vigilando/",
+        "sourceDate": "2025-08-12"
+      },
+      "location": {
+        "lat": -0.9515642,
+        "lng": -80.720434,
+        "accuracyMeters": 250,
+        "basis": "Punto aproximado del paso elevado de Inepaca; no es la coordenada oficial de una cámara",
+        "coordinateSourceUrl": "https://wymvallas.com.ec/ubicaciones/"
+      },
+      "graphBinding": {
+        "nodeId": "osm-node-480446337",
+        "snapDistanceMeters": 85,
+        "method": "nearest-node-to-approximate-location"
+      },
+      "simulation": {
+        "enabled": true,
+        "status": "simulated",
+        "coverageModel": "radius-around-graph-node",
+        "coverageRadiusMeters": 250,
+        "alertTtlTurns": 2
+      }
+    },
+    {
+      "id": "manta-oae-sim-c113-a108-002",
+      "name": "Calle 113 y avenida 108",
+      "networkAffiliation": "Ojos de Águila; no confirmado por la fuente",
+      "reportedLocation": "Intersección de la calle 113 y avenida 108",
+      "publicReference": {
+        "type": "municipal-camera-location-reference",
+        "sourceUrl": "https://manta.gob.ec/habla-serio-y-mira-la-camara-que-te-estamos-vigilando/",
+        "sourceDate": "2025-08-12"
+      },
+      "location": {
+        "lat": -0.9547401,
+        "lng": -80.7080182,
+        "accuracyMeters": 400,
+        "basis": "Intersección aproximada a partir de una referencia cartográfica de la vía; no es la coordenada oficial de una cámara",
+        "coordinateSourceUrl": "https://www.arcotel.gob.ec/wp-content/uploads/2018/07/Procedimiento-Intervenci%C2%B6n-Ordenamiento-Cant%C2%B6n-Manta.pdf",
+        "sourceUtm17s": [532485.92, 9894471.05]
+      },
+      "graphBinding": {
+        "nodeId": "osm-node-363667609",
+        "snapDistanceMeters": 358,
+        "method": "nearest-node-to-approximate-location"
+      },
+      "simulation": {
+        "enabled": true,
+        "status": "simulated",
+        "coverageModel": "radius-around-graph-node",
+        "coverageRadiusMeters": 250,
+        "alertTtlTurns": 2
+      }
+    },
+    {
+      "id": "manta-oae-sim-j16-j11-003",
+      "name": "Calle J16 y calle J11, Jocay",
+      "networkAffiliation": "Ojos de Águila; no confirmado por la fuente",
+      "reportedLocation": "Intersección de las calles J16 y J11",
+      "publicReference": {
+        "type": "municipal-camera-location-reference",
+        "sourceUrl": "https://manta.gob.ec/habla-serio-y-mira-la-camara-que-te-estamos-vigilando/",
+        "sourceDate": "2025-08-12"
+      },
+      "location": {
+        "lat": -0.96192,
+        "lng": -80.71304,
+        "accuracyMeters": 300,
+        "basis": "Referencia aproximada del sector Jocay cerca de calle J16; no es la coordenada oficial de una cámara",
+        "coordinateSourceUrl": "https://mapcarta.com/es/N4694108590"
+      },
+      "graphBinding": {
+        "nodeId": "osm-node-363647535",
+        "snapDistanceMeters": 34,
+        "method": "nearest-node-to-approximate-location"
+      },
+      "simulation": {
+        "enabled": true,
+        "status": "simulated",
+        "coverageModel": "radius-around-graph-node",
+        "coverageRadiusMeters": 250,
+        "alertTtlTurns": 2
+      }
+    },
+    {
+      "id": "manta-oae-sim-calle325-paquisha-004",
+      "name": "Calle 325, cerca de la Unidad Educativa Paquisha",
+      "networkAffiliation": "Ojos de Águila; no confirmado por la fuente",
+      "reportedLocation": "Calle 325, en las inmediaciones del colegio Paquisha",
+      "publicReference": {
+        "type": "municipal-camera-location-reference",
+        "sourceUrl": "https://manta.gob.ec/habla-serio-y-mira-la-camara-que-te-estamos-vigilando/",
+        "sourceDate": "2025-08-12"
+      },
+      "location": {
+        "lat": -0.98971,
+        "lng": -80.70633,
+        "accuracyMeters": 350,
+        "basis": "Coordenada aproximada de la escuela citada como referencia; no es la coordenada oficial de una cámara",
+        "coordinateSourceUrl": "https://mapcarta.com/es/W607111048"
+      },
+      "graphBinding": {
+        "nodeId": null,
+        "nearestGraphNodeDistanceMeters": 2810,
+        "method": "outside-current-graph-coverage"
+      },
+      "simulation": {
+        "enabled": false,
+        "status": "reference-only-outside-current-graph",
+        "coverageModel": "radius-around-graph-node",
+        "coverageRadiusMeters": 250,
+        "alertTtlTurns": 2,
+        "disabledReason": "La ubicación queda fuera del grafo peatonal actual de Manta."
+      }
+    }
+  ],
+  "alertEventExample": {
+    "cameraId": "manta-oae-sim-inepaca-001",
+    "nodeId": "osm-node-480446337",
+    "turnId": 12,
+    "eventType": "simulated-threat-observation",
+    "expiresAfterTurns": 2
+  }
+}

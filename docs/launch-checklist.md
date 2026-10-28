@@ -1,28 +1,31 @@
-# Checklist de lanzamiento y demo
+# Checklist de lanzamiento y cierre
 
-Orden operativo tomado de las prioridades del Track. Marcar completado solo con evidencia real.
+Estado vigente: cierre integrado del 28 de octubre de 2026. Rama final de
+integración: `prueba`; destino aprobado: `main`.
 
-| Prioridad | Responsable | Trabajo | Evidencia | Estado |
-|---|---|---|---|---|
-| Hoy | Michael | Extraer, normalizar y validar grafo de Manta; fijar refugios/capacidades | Grafo versionado, atribución y resultado de validación | Pendiente |
-| Hoy | Michael | Elegir región, crear AWS Budget y alertas | Captura real en docs/evidence/aws-budget.png | Pendiente |
-| Hoy / mañana | Michael + Maykel | Integrar motor precomputado, simulador, x-api-key y fallback al nodo actual | API desplegable y flujo de turno integrado | Pendiente |
-| Mañana | Michael + Maykel | Ejecutar carga con 20, 80 y 200 sobrevivientes | p50/p95/p99, buildLatencyMs del plan, timeouts, deadline misses y configuración usada | Pendiente |
-| Miércoles temprano | Equipo | README/diagrama listos; completar costos reales, commits incrementales y URL pública estable | README/diagrama disponibles; docs/costos.md conciliado, historial real y URL verificada aún pendientes | Parcial |
-| Hasta el viernes | Kristhian + equipo | Preparar pitch de 5 min y video de respaldo | Video reproducible sin red y guion de demo | Pendiente |
+| Área | Evidencia | Estado |
+|---|---|---|
+| Grafo y routing | 300 nodos, 736 aristas, cuatro refugios; SHA-256 compartido; lookup local y precompute en workers | Verificado |
+| Backend, contratos y readiness | 38 pruebas en EC2, typechecks y OpenAPI | Aprobado |
+| Frontend | Web HTTPS publicada, 11 tests, typecheck/build/lint y Chromium escritorio/móvil | Aprobado |
+| Rondas | R1/R2/R3 de 150 turnos; p95 máximo 37,2 / 50,3 / 85 ms; disponibilidad 100 %; cero deadline misses | Aprobado |
+| HTTP y WS | 453 snapshots coincidentes, controles y reconexión | Verificado |
+| Eventos y cámaras | Un puente en R2, dos calles en R3; tres sensores simulados habilitados de cuatro referencias | Verificado |
+| Persistencia | Turno 150 de las tres rondas confirmado en DynamoDB; recuperación pausada | Verificado |
+| Despliegue y rollback | Artefactos por commit/checksum, validación previa al corte y restauración conjunta; 12 pruebas de fallos | Implementado y probado |
+| Observabilidad | CloudWatch Agent, cuatro alarmas y SNS con suscripción confirmada | Operativo |
+| Costos | EBS real medido y estimación reproducible; Billing/Budget denegados por IAM | Conciliación financiera pendiente |
 
-## Puertas de salida
+Ver [evidencia completa](evidence/cierre-prueba-2026-10-28/README.md).
 
-1. No iniciar rondas hasta que el grafo y las posiciones/cantidades de entidades estén configurados y validados.
-2. No declarar SLA hasta medir p95 con 20/80/200 sobrevivientes en la configuración final. El objetivo contractual es p95 ≤150 ms y timeout de 500 ms.
-3. No dejar ECS/ALB encendidos sin Budget y alarma configurados. Confirmar AWS_REGION antes de estimar y desplegar.
-4. La demo debe mostrar movimiento real, eventos de ciudad, refugios, métricas y recuperación de WebSocket.
-5. Mantener commits pequeños y reales durante el trabajo. No fabricar historial ni aplazar todos los cambios a un único commit final.
-6. Mantener una URL pública estable y probarla desde una conexión externa. El video de respaldo debe reproducir la ruta crítica de la demo.
+Los presets son escenarios versionados de simulación: no equivalen a datos
+censales oficiales. Las ubicaciones/coberturas de cámaras son aproximadas y
+no representan una conexión a video real. La aprobación de esas fuentes como
+datos oficiales no se infiere de las pruebas técnicas.
 
-## Bloqueos de datos
+El video, presentación, formulario y publicación pública de `/paso` quedaron
+fuera de este cierre. `/paso` permanece autenticado y accesible por loopback;
+no debe entregarse como endpoint público sin configurar su exposición.
 
-- Región AWS final, límite del Budget y contacto de alertas.
-- Grafo OSM revisado: ubicaciones/capacidades de cuatro refugios y asignación de zonas.
-- Roster de zombies y posiciones iniciales por ronda.
-- URL/dominio disponible para API y Frontend.
+Las evidencias históricas de integración y despliegue se conservan por separado.
+El cierre no borra sus fallos: documenta una aceptación posterior del código integrado.

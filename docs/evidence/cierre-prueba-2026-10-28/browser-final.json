@@ -1,0 +1,15 @@
+{
+  "url": "https://3-128-78-190.sslip.io/",
+  "httpStatus": 200,
+  "errors": [],
+  "failedRequests": [],
+  "wsConnections": 2,
+  "wsFrames": 2,
+  "reconnected": true,
+  "instrumentation": "Closed the real client WebSocket to trigger production reconnection logic",
+  "gameId": "demo-cierre-5452411",
+  "turnId": 6,
+  "status": "paused",
+  "mobileMapHeight": 422,
+  "verifiedAt": "2026-10-28T09:18:34.316Z"
+}

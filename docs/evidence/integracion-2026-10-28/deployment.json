@@ -1,0 +1,19 @@
+{
+  "backendCommit": "a09f235a9dd2891471a6b7e4f678eb343024b66e",
+  "ready": {
+    "status": "ready"
+  },
+  "status": "completed",
+  "roundId": 3,
+  "turnId": 150,
+  "apps": [
+    {
+      "name": "spookython-backend",
+      "status": "online",
+      "pid": 37522,
+      "restarts": 0,
+      "rssMiB": 161.7,
+      "node": "/home/ec2-user/.local/node/node-v24.22.0-linux-x64/bin/node"
+    }
+  ]
+}

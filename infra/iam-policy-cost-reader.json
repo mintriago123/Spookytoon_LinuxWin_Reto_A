@@ -1,0 +1,24 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ReadOhioInfrastructure",
+      "Effect": "Allow",
+      "Action": ["ec2:DescribeInstances", "ec2:DescribeVolumes"],
+      "Resource": "*",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-2"}}
+    },
+    {
+      "Sid": "ReadAccountBudgets",
+      "Effect": "Allow",
+      "Action": "budgets:ViewBudget",
+      "Resource": "arn:aws:budgets::901454175123:budget/*"
+    },
+    {
+      "Sid": "ReadCostExplorer",
+      "Effect": "Allow",
+      "Action": "ce:GetCostAndUsage",
+      "Resource": "*"
+    }
+  ]
+}
