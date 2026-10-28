@@ -223,7 +223,7 @@ export function LiveMap() {
               </Fragment>
             )}
             <Marker position={[camera.lat, camera.lng]} icon={cameraIcon(alerting)}>
-              <Popup>
+              <Popup autoPanPaddingTopLeft={window.innerWidth >= 1135 ? [440, 24] : [12, 24]}>
                 <strong>{camera.name}</strong><br />
                 Referencia aproximada · {camera.accuracyMeters} m de precisión estimada<br />
                 {camera.enabled ? `Cobertura simulada: ${camera.coverageRadiusMeters} m desde el nodo asociado` : "Solo referencia; fuera del grafo actual"}<br />
