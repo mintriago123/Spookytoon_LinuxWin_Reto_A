@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useWorldStore } from "../state/world-store";
+import type { SegmentSelection } from "./SelectedSegment";
 import type {
   ApiErrorBody,
   BloquearAristaRequest,
@@ -19,7 +20,9 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "";
  * POST /operador/sesion obtiene la cookie httpOnly utilizada por los
  * controles con `credentials: "include"`.
  */
-export function RoundControls() {
+export function RoundControls({ onSegmentSelection }: {
+  onSegmentSelection: (selection: SegmentSelection | null) => void;
+}) {
   const pendingControl = useWorldStore((s) => s.pendingControl);
   const setPendingControl = useWorldStore((s) => s.setPendingControl);
   const setLastError = useWorldStore((s) => s.setLastError);
@@ -145,6 +148,13 @@ export function RoundControls() {
   }, [graph, activeBlockedEdges, segmentLabels]);
 
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
+  const selectedSegment = blockableSegments.find(segment => segment.edgeId === selectedEdgeId);
+  const previewEnabled = authState === "in" && (status === "running" || status === "paused");
+  const previewId = previewEnabled ? selectedSegment?.segmentoId : undefined;
+  const previewLabel = previewEnabled ? selectedSegment?.label : undefined;
+  useEffect(() => {
+    onSegmentSelection(previewId && previewLabel ? { segmentoId: previewId, label: previewLabel } : null);
+  }, [onSegmentSelection, previewId, previewLabel]);
 
   const callControl = async <TReq, TRes>(
     path: string,
@@ -358,7 +368,7 @@ export function RoundControls() {
           <label className="flex flex-col gap-1">
             <span>Segmento a cerrar</span>
             <select
-              value={selectedEdgeId}
+              value={selectedSegment?.edgeId ?? ""}
               onChange={(e) => setSelectedEdgeId(e.target.value)}
               className={inputClass}
             >
@@ -370,6 +380,12 @@ export function RoundControls() {
               ))}
             </select>
           </label>
+          {selectedSegment && (
+            <p role="status" className="rounded border border-accent-cyan/30 bg-accent-cyan/10 px-2 py-1.5 text-accent-cyan">
+              <span className="font-semibold">Marcado en el mapa:</span> {selectedSegment.label}.
+              {" "}Revisa el tramo resaltado en cian antes de cerrarlo.
+            </p>
+          )}
           <label className="flex flex-col gap-1">
             <span>Motivo</span>
             <input
@@ -382,7 +398,7 @@ export function RoundControls() {
           <button
             type="button"
             onClick={() => bloquearSegmento(selectedEdgeId, true, blockMotivo || "Bloqueo manual del operador")}
-            disabled={busy || !selectedEdgeId || !blockMotivo}
+            disabled={busy || !selectedSegment || !blockMotivo}
             className={ACTION_BUTTON_CLASS.rose}
           >
             {pendingControl === "bloquear-arista" ? "Cerrando…" : "Cerrar segmento"}

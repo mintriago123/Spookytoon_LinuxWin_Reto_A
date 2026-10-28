@@ -1,4 +1,5 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import type { SegmentSelection } from "../components/SelectedSegment";
 import { LiveMap } from "../components/LiveMap";
 import { RoundControls } from "../components/RoundControls";
 import { MetricsPanel } from "../components/MetricsPanel";
@@ -15,6 +16,7 @@ import type { MantaGraph } from "../types/contracts";
  * métricas. El Frontend nunca decide rutas, mordidas ni evacuaciones.
  */
 export function App() {
+  const [segmentSelection, setSegmentSelection] = useState<SegmentSelection | null>(null);
   const setGraph = useWorldStore((s) => s.setGraph);
   const setLastError = useWorldStore((s) => s.setLastError);
   useTurnSocket();
@@ -72,7 +74,7 @@ export function App() {
         {/* El mapa ocupa casi toda la primera pantalla móvil; los controles
             continúan debajo con scroll. En escritorio toma el espacio restante. */}
         <main className="relative h-[74svh] min-h-[420px] max-h-[760px] w-full flex-none md:h-auto md:min-h-0 md:max-h-none md:flex-1">
-          <LiveMap />
+          <LiveMap selection={segmentSelection} />
           {/* z-[1100]: por encima de los controles de Leaflet (z-index 1000
               en leaflet.css), si no quedan tapados aunque estén en el DOM. */}
           <div className="absolute left-3 top-3 z-[1100] flex flex-col gap-2">
@@ -89,7 +91,7 @@ export function App() {
       <aside className="flex w-full flex-col gap-3 border-t border-white/10 bg-night-800 p-3 md:w-80 md:overflow-y-auto md:border-l md:border-t-0">
         <MetricsPanel />
         <ShelterOccupancy />
-        <RoundControls />
+        <RoundControls onSegmentSelection={setSegmentSelection} />
       </aside>
     </div>
   );

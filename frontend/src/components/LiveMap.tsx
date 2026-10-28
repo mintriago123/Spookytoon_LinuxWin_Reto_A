@@ -14,6 +14,7 @@ import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld";
 import { ZOMBIE_COLOR, cameraIcon, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
 import type { GraphEdge, GraphNode, RoadType, Zone } from "../types/contracts";
+import { SelectedSegment, type SegmentSelection } from "./SelectedSegment";
 
 const ROAD_COLOR: Record<RoadType, string> = {
   avenida: "#9aa8c0",
@@ -115,7 +116,7 @@ function findPreviousNodeId(
  * refugios con ocupación, sobrevivientes, zombies, hordas, radio de
  * corredor y dormidos atenuados. No decide nada: solo pinta el snapshot.
  */
-export function LiveMap() {
+export function LiveMap({ selection = null }: { selection?: SegmentSelection | null }) {
   const graph = useWorldStore((s) => s.graph);
   const snapshot = useWorldStore((s) => s.currentSnapshot);
   const previousSnapshot = useWorldStore((s) => s.previousSnapshot);
@@ -183,6 +184,7 @@ export function LiveMap() {
         attribution={graph.metadata.osmAttribution}
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      <SelectedSegment graph={graph} selection={selection} />
 
       {/* Rótulos de zona, solo orientación visual */}
       {zoneLabels.map(({ zona, center: zoneCenter }) => (
