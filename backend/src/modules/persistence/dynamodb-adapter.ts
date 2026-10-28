@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { gzip, gunzipSync } from "node:zlib";
 import { promisify } from "node:util";
-import { DynamoDBClient, DescribeTableCommand } from "@aws-sdk/client-dynamodb";
+import { DynamoDBClient, DescribeTableCommand, type DescribeTableCommandOutput } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, GetCommand, PutCommand, TransactWriteCommand } from "@aws-sdk/lib-dynamodb";
 import { DEFAULT_AWS_REGION, DEFAULT_DYNAMODB_TABLE, pausedGame, toStoredGame,
   type PersistenceAdapter, type StoredGame } from "./adapter.ts";
@@ -10,7 +10,7 @@ import type { Immutable, WorldState } from "../simulator/types.ts";
 export interface DocumentTransport { send(command: GetCommand | PutCommand | TransactWriteCommand): Promise<any> }
 interface DynamoOptions {
     region?: string; tableName?: string; document?: DocumentTransport;
-    describe?: () => Promise<void>; chunkBytes?: number;
+    describe?: () => Promise<DescribeTableCommandOutput | void>; chunkBytes?: number;
 }
 
 const latestKey = { PK: "META#LATEST", SK: "SNAPSHOT" };
@@ -20,6 +20,7 @@ export class DynamoDbPersistenceAdapter implements PersistenceAdapter {
   readonly region: string;
   readonly tableName: string;
   private ready = false;
+  private legacyKeys = false;
   private readonly raw: DynamoDBClient;
   private readonly document: DocumentTransport;
   private readonly options: DynamoOptions;
@@ -34,18 +35,28 @@ export class DynamoDbPersistenceAdapter implements PersistenceAdapter {
     this.document = options.document ?? DynamoDBDocumentClient.from(this.raw, { marshallOptions: { removeUndefinedValues: true } });
   }
   async initialize(): Promise<void> {
-    if (this.options.describe) await this.options.describe();
-    else {
-      const { Table } = await this.raw.send(new DescribeTableCommand({ TableName: this.tableName }));
-      if (Table?.TableStatus !== "ACTIVE" || !Table.KeySchema?.some(k => k.AttributeName === "PK" && k.KeyType === "HASH") ||
-          !Table.KeySchema?.some(k => k.AttributeName === "SK" && k.KeyType === "RANGE") ||
-          !["PK", "SK"].every(name => Table.AttributeDefinitions?.some(a => a.AttributeName === name && a.AttributeType === "S"))) {
-        throw new Error("DynamoDB requiere tabla ACTIVE y claves PK (HASH), SK (RANGE)");
-      }
+    const description = this.options.describe ? await this.options.describe()
+      : await this.raw.send(new DescribeTableCommand({ TableName: this.tableName }));
+    if (description) {
+      const table = description.Table;
+      const keysMatch = (hash: string, range: string, rangeType: string) =>
+        table?.TableStatus === "ACTIVE" && table.KeySchema?.some(k => k.AttributeName === hash && k.KeyType === "HASH") &&
+        table.KeySchema?.some(k => k.AttributeName === range && k.KeyType === "RANGE") &&
+        table.AttributeDefinitions?.some(a => a.AttributeName === hash && a.AttributeType === "S") &&
+        table.AttributeDefinitions?.some(a => a.AttributeName === range && a.AttributeType === rangeType);
+      this.legacyKeys = !!keysMatch("gameId", "turnId", "N");
+      if (!this.legacyKeys && !keysMatch("PK", "SK", "S")) throw new Error("Esquema DynamoDB incompatible: PK/SK o gameId/turnId");
     }
     this.ready = true;
   }
   isReady() { return this.ready; }
+  /** Compatibilidad con la tabla EC2 existente; no cambia su esquema ni sus ítems previos. */
+  private physicalKey(key: { PK: string; SK: string }) {
+    if (!this.legacyKeys) return key;
+    const turn = /^TURN#(\d+)$/.exec(key.SK);
+    return turn ? { gameId: key.PK, turnId: Number(turn[1]) }
+      : { gameId: key.SK === "SNAPSHOT" ? key.PK : `${key.PK}#${key.SK}`, turnId: -1 };
+  }
   async save(world: Immutable<WorldState>): Promise<void> {
     if (!this.ready) throw new Error("DynamoDB no inicializado");
     const state = toStoredGame(world);
@@ -61,21 +72,21 @@ export class DynamoDbPersistenceAdapter implements PersistenceAdapter {
     if (bytes.length > limit) for (let offset = 0; offset < bytes.length; offset += limit) {
       const SK = `${key.SK}#${revision}#PART#${String(parts.length).padStart(6, "0")}`;
       await this.document.send(new PutCommand({ TableName: this.tableName,
-        Item: { PK: key.PK, SK, payload: bytes.subarray(offset, offset + limit) } }));
+        Item: { PK: key.PK, SK, ...this.physicalKey({ PK: key.PK, SK }), payload: bytes.subarray(offset, offset + limit) } }));
       parts.push(SK);
     }
     const manifest = { ...key, schemaVersion: 1, encoding: "gzip", checksum, parts,
       ...(parts.length ? {} : { payload: bytes }), updatedAt: world.updatedAt };
     if (Buffer.byteLength(JSON.stringify({ ...manifest, payload: undefined })) > 350 * 1024) throw new Error("Manifiesto demasiado grande");
     await this.document.send(new TransactWriteCommand({ TransactItems: [
-      { Put: { TableName: this.tableName, Item: manifest } },
-      { Put: { TableName: this.tableName, Item: { ...latestKey, gamePK: key.PK, turnSK: key.SK } } },
+      { Put: { TableName: this.tableName, Item: { ...manifest, ...this.physicalKey(key) } } },
+      { Put: { TableName: this.tableName, Item: { ...latestKey, ...this.physicalKey(latestKey), gamePK: key.PK, turnSK: key.SK } } },
     ] }));
   }
   async loadLatestPausedGame(): Promise<StoredGame | null> {
     if (!this.ready) throw new Error("DynamoDB no inicializado");
     const get = async (Key: { PK: string; SK: string }) => (await this.document.send(new GetCommand({
-      TableName: this.tableName, Key, ConsistentRead: true,
+      TableName: this.tableName, Key: this.physicalKey(Key), ConsistentRead: true,
     }))).Item;
     const pointer = await get(latestKey);
     if (!pointer) return null;

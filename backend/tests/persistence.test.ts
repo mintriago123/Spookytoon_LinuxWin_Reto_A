@@ -17,9 +17,9 @@ async function fixture() {
     initialMetrics: createInitialTelemetryMetrics(config), updatedAt: "2026-10-28T00:00:00.000Z" });
 }
 
-function fakeDynamo() {
+function fakeDynamo(legacy = false) {
   const items = new Map<string, any>();
-  const key = (item: any) => `${item.PK}|${item.SK}`;
+  const key = (item: any) => legacy ? `${item.gameId}|${item.turnId}` : `${item.PK}|${item.SK}`;
   let failParts = false;
   return { items, set failParts(value: boolean) { failParts = value; },
     async send(command: GetCommand | PutCommand | TransactWriteCommand) {
@@ -151,4 +151,20 @@ test("servidor restaura checkpoint pausado antes de GET y admite reanudar/reinic
     assert.equal(simulator.getCommittedSnapshot()!.turnId, 0);
     assert.equal(simulator.getCommittedSnapshot()!.gameId, "next");
   } finally { await app.close(); }
+});
+
+
+for (const chunkBytes of [262144, 100]) test(`tabla EC2 gameId/turnId conserva checkpoints y fragmentos (${chunkBytes})`, async () => {
+  const transport = fakeDynamo(true);
+  const adapter = new DynamoDbPersistenceAdapter({ document: transport, chunkBytes, describe: async () => ({
+    $metadata: {}, Table: { TableStatus: "ACTIVE", KeySchema: [{ AttributeName: "gameId", KeyType: "HASH" }, { AttributeName: "turnId", KeyType: "RANGE" }],
+      AttributeDefinitions: [{ AttributeName: "gameId", AttributeType: "S" }, { AttributeName: "turnId", AttributeType: "N" }] },
+  }) });
+  try {
+    await adapter.initialize(); const world = await fixture(); world.turnId = 7; world.worldVersion = 7;
+    await adapter.save(world);
+    assert(transport.items.has("GAME#recover-fixture|7")); assert(transport.items.has("META#LATEST|-1"));
+    assert.equal((await adapter.loadLatestPausedGame())!.turnId, 7);
+    assert.equal((await adapter.loadLatestPausedGame())!.status, "paused");
+  } finally { await adapter.close(); }
 });

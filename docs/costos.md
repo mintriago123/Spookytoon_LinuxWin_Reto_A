@@ -26,7 +26,7 @@ EBS usa la tarifa base publicada de gp3; confirmar el volumen y la tarifa selecc
 
 ## Costo de nuestros snapshots
 
-Tabla `spookython-manta-state`, claves de texto `PK`/`SK`, región Ohio. Se persiste gzip binario de estado dinámico, sin repetir el grafo. Cada commit escribe el manifiesto y `META#LATEST/SNAPSHOT` mediante transacción: una escritura transaccional cuesta el doble de WRU ordinarias. Para un checkpoint sin fragmentación, siendo `S` el tamaño del ítem y `P` el del puntero, en bytes:
+Tabla `spookython-manta-state`, región Ohio. Claves físicas verificadas: `gameId` (S) / `turnId` (N); PK/SK se conserva como identidad lógica del adaptador. Se persiste gzip binario de estado dinámico, sin repetir el grafo. Cada commit escribe el manifiesto y `META#LATEST/SNAPSHOT` mediante transacción: una escritura transaccional cuesta el doble de WRU ordinarias. Para un checkpoint sin fragmentación, siendo `S` el tamaño del ítem y `P` el del puntero, en bytes:
 
 ```text
 WRU_por_commit = 2 × ceil(S / 1024) + 2 × ceil(P / 1024)

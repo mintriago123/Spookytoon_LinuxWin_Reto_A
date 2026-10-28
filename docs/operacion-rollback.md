@@ -24,7 +24,7 @@ Ejecutar PM2 y scripts como `ec2-user`, con el mismo PM2_HOME. Configurar `pm2 s
 
 La instancia necesita un IAM Role con permisos sobre la tabla, no access keys en `.env`, PM2 o Docker. Renderizar el marcador `REPLACE_WITH_ACCOUNT_ID` de `infra/iam-policy-dynamodb.json` con la cuenta real antes de adjuntar esa política al role. Permite DescribeTable, GetItem y PutItem en una sola tabla y región; PutItem autoriza también las escrituras Put de TransactWriteItems. No requiere Scan, ListTables, DeleteItem ni acceso a tablas ajenas. La creación de alarmas y las operaciones IAM usan una identidad de operador independiente.
 
-La tabla existente `spookython-manta-state` debe estar ACTIVE, en modo On-Demand, con claves de texto `PK` (partition) y `SK` (sort). El arranque valida estado y nombres de claves; si no coinciden no migra ni modifica la tabla y no reporta ready. Confirmar con `aws dynamodb describe-table --region us-east-2 --table-name spookython-manta-state`. No se ha ejecutado este comando sobre la cuenta desde este cambio.
+La tabla existente `spookython-manta-state` está ACTIVE y On-Demand con `gameId` (partition, S) y `turnId` (sort, N), verificado por SSH el 28 de octubre. El adaptador detecta ese esquema y también admite PK/SK de texto; no migra ni borra datos. Usa prefijos GAME#/META# para separar sus checkpoints de ítems anteriores. Un esquema distinto falla antes de readiness. Confirmar con `aws dynamodb describe-table --region us-east-2 --table-name spookython-manta-state`. El esquema se consultó desde EC2 antes de preparar la release.
 
 ## Desplegar una release
 
