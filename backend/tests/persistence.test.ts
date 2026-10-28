@@ -137,7 +137,8 @@ test("servidor restaura checkpoint pausado antes de GET y admite reanudar/reinic
         if (state.turnId === 5) { clearTimeout(timer); off(); resolve(); }
       });
     });
-    assert.equal((await app.inject({ method: "POST", url: "/simulador/reanudar", headers, payload })).statusCode, 202);
+    assert.equal((await app.inject({ method: "POST", url: "/simulador/reanudar", headers,
+      payload: { gameId: world.gameId, roundId: 1 } })).statusCode, 202);
     assert.equal((await app.inject({ method: "POST", url: "/simulador/reiniciar", headers,
       payload: { ...payload, gameId: "next" } })).statusCode, 409);
     await committed;

@@ -372,7 +372,7 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-      description: Reanuda gameId y roundId actuales; seed opcional, conservada por el servidor si se omite.
+      description: Misma identidad gameId/roundId de una partida pausada. El backend reutiliza la semilla persistida; seed opcional conserva compatibilidad y, si se envía, debe coincidir.
   /simulador/reiniciar:
     post:
       operationId: reiniciarSimulador
@@ -581,11 +581,21 @@ components:
     ReanudarRequest:
       type: object
       additionalProperties: false
-      required: [gameId, roundId]
+      required:
+      - gameId
+      - roundId
       properties:
-        gameId: { type: string, minLength: 1, maxLength: 128 }
-        roundId: { enum: [1, 2, 3] }
-        seed: { type: string, minLength: 1, maxLength: 256 }
+        gameId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        roundId:
+          type: integer
+          enum: [1, 2, 3]
+        seed:
+          type: string
+          minLength: 1
+          maxLength: 256
     PausarRequest:
       type: object
       additionalProperties: false

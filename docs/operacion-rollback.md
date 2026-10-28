@@ -28,11 +28,11 @@ La tabla existente `spookython-manta-state` está ACTIVE y On-Demand con `gameId
 ## Desplegar frontend y backend juntos
 
 Desde la estación de trabajo, Node 24.12+ de la serie 24, Python 3.9+, Git,
-SSH/SCP y la clave SSH existente. La rama final de integración es `prueba`.
+SSH/SCP y la clave SSH existente. La rama final de integración es `main`.
 
 ```bash
 git fetch origin
-SSH_KEY="$HOME/Descargas/Michi.pem" bash infra/deploy-release.sh origin/prueba
+SSH_KEY="$HOME/Descargas/Michi.pem" bash infra/deploy-release.sh origin/main
 ```
 
 El comando extrae el commit a un temporal, instala por lockfile, ejecuta
@@ -65,7 +65,7 @@ El Caddy de esta instancia corre en Docker, con certificados persistentes en
 `/opt/spookython/web:/srv/spookython:ro` y el archivo existente
 `/home/ec2-user/Caddyfile:/etc/caddy/Caddyfile`. El despliegue verifica ese montaje
 antes del corte; no recrea el contenedor ni elimina certificados. La raíz sirve
-el frontend; `/estado`, `/ws` y `/simulador/*` hacen proxy a localhost:3001.
+el frontend; `/estado`, `/ws`, `/simulador/*` y `/operador/*` hacen proxy a localhost:3001.
 `/health/*`, `/motor/*` y `/paso` permanecen internos.
 
 Configuración opcional del orquestador: `EC2_HOST`, `SSH_KEY`,
@@ -160,17 +160,13 @@ en PATH y NODE_BINARY al desplegar. PM2 usa `src/start.ts`: PM2 importa su scrip
 desde un contenedor y por ello la entrada debe arrancar explícitamente sin
 suponer que `process.argv[1]` apunta al módulo importado.
 
-En esta instancia Caddy está en Docker como `caddy-proxy`, red host, no como
-servicio systemd. Conserva volúmenes `caddy_data` y `caddy_config`; el bind mount
-lee `/home/ec2-user/Caddyfile`. Para cambiar su configuración, conservar una
-copia del archivo, escribir sobre su inode existente y validar/recargar:
-
-```bash
-cp /home/ec2-user/Caddyfile /home/ec2-user/Caddyfile.backup
-cat /opt/spookython/current/infra/Caddyfile > /home/ec2-user/Caddyfile
-docker exec caddy-proxy caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
-docker exec caddy-proxy caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
-```
+El despliegue conjunto valida y recarga el `infra/Caddyfile` versionado. Ese
+archivo sirve el frontend y envía `/operador/*` al backend antes del fallback
+de la SPA. Comprueba que `GET /operador/sesion` responda `401` con JSON; una
+respuesta `200` con HTML indica que la ruta llegó al frontend. El script de
+despliegue revierte la entrega si falla esa comprobación. Antes del corte exige
+`OPERATOR_PASSWORD` en `/etc/spookython/backend.env`, distinta de
+`ROUTE_API_KEY`.
 
 No eliminar los volúmenes TLS. Los logs Caddy de este contenedor se consultan
 dentro de él; para que CloudWatch Agent del host recoja ese archivo hay que

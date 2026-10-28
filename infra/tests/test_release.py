@@ -107,6 +107,10 @@ if [[ " $* " == *" reload "* && "${FAIL_RELOAD:-}" == 1 && ! -f "$FIX_TRIPPED" ]
             'curl': '''out=''; url=''
 while (( $# )); do case "$1" in -o) out=$2; shift 2;; http*) url=$1; shift;; *) shift;; esac; done
 if [[ "$url" == */health/ready ]]; then [[ "$(cat "$FIX_BAD_READY" 2>/dev/null || echo 0)" == 0 ]]; exit $?; fi
+if [[ "$url" == */operador/sesion ]]; then
+  if [[ "${FAIL_OPERATOR:-}" == 1 && ! -f "$FIX_TRIPPED" ]]; then touch "$FIX_TRIPPED"; printf '200 text/html'; else printf '401 application/json'; fi
+  exit 0
+fi
 if [[ "${FAIL_PUBLIC:-}" == 1 && ! -f "$FIX_TRIPPED" ]]; then touch "$FIX_TRIPPED"; echo 'invalid-html' > "$out"; exit 0; fi
 if [[ "$url" == */data/grafo_manta.json ]]; then cp "$APP_ROOT/current/backend/data/grafo_manta.json" "$out"; else cp "$APP_ROOT/web/current/index.html" "$out"; fi''',
         }
@@ -166,6 +170,13 @@ if [[ "$url" == */data/grafo_manta.json ]]; then cp "$APP_ROOT/current/backend/d
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assert_old()
         self.assertIn('Entrega anterior restaurada', result.stderr)
+
+    def test_operator_route_serving_html_restores_pair(self):
+        self.fixture()
+        result = self.deploy(FAIL_OPERATOR='1')
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assert_old()
+        self.assertIn('Caddy no enruta /operador/sesion', result.stderr)
 
     def test_failed_rollback_restores_current_pair(self):
         self.fixture()

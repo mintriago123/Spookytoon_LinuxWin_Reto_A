@@ -2,7 +2,7 @@ import type { MantaGraph } from "../../contracts/types.ts";
 import type { CommittedWorldSnapshot, Immutable, RoundConfig, RoundId, SurveillanceCamera, TelemetryMetrics, WorldState } from "./types.ts";
 import type { RoutingClient } from "./routing-client.ts";
 import type { RoutingAlert } from "./routing-failure.ts";
-import { SimulatorControlError, type EdgeCommand, type StartCommand } from "./controls.ts";
+import { SimulatorControlError, type EdgeCommand, type ResumeCommand, type StartCommand } from "./controls.ts";
 import { createSimulationClock, type SimulationClock } from "./simulation-clock.ts";
 import { createWorldState } from "./world-state.ts";
 import { validateRoundConfig } from "./round-validation.ts";
@@ -62,9 +62,10 @@ export class SimulationRuntime {
     this.publishCommitted(this.coordinator.getCommittedWorld());
   }
 
-  resume(command: StartCommand) {
-    if (this.getCommittedWorld()?.status !== "paused") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Solo se reanuda una partida pausada");
-    return this.start(command);
+  resume(command: ResumeCommand) {
+    const current = this.getCommittedWorld();
+    if (current?.status !== "paused") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Solo se reanuda una partida pausada");
+    return this.start({ ...command, seed: command.seed ?? current.rngSeed });
   }
 
   async restart(command: StartCommand) {

@@ -168,7 +168,6 @@ export interface IniciarRequest {
   roundId: 1 | 2 | 3;
   seed: string;
 }
-
 export interface IniciarResponse {
   gameId: string;
   roundId: 1 | 2 | 3;

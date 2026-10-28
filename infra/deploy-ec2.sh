@@ -8,6 +8,7 @@ for command in git node npm pm2 curl flock tar python3 sha256sum sudo; do comman
 require_node
 [[ $# == 3 ]] || { echo 'Uso: deploy-ec2.sh COMMIT FRONTEND_TGZ SHA256' >&2; exit 1; }
 test -r "$BACKEND_ENV_FILE"
+"$NODE_BINARY" --env-file="$BACKEND_ENV_FILE" -e 'if (!process.env.OPERATOR_PASSWORD || process.env.OPERATOR_PASSWORD === process.env.ROUTE_API_KEY) { console.error("OPERATOR_PASSWORD debe estar definida y ser distinta de ROUTE_API_KEY"); process.exit(1) }'
 mkdir -p "$APP_ROOT/releases" "$APP_ROOT/web/releases" "$APP_ROOT/deployments"
 exec 9>"$APP_ROOT/deploy.lock"
 flock -n 9 || { echo 'Otro despliegue/rollback está activo' >&2; exit 1; }
@@ -49,6 +50,8 @@ restore_on_error() {
 }
 trap restore_on_error ERR
 activate_state "$after"
+operator_response=$(curl --silent --show-error --max-time 5 --output /dev/null --write-out '%{http_code} %{content_type}' "${PUBLIC_API_URL%/}/operador/sesion")
+[[ "$operator_response" == "401 application/json"* ]] || { echo 'Caddy no enruta /operador/sesion al backend' >&2; false; }
 save_state "$before" "$APP_ROOT/previous-release.json"
 save_state "$after" "$APP_ROOT/current-release.json"
 python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["backend"])' "$before" > "$APP_ROOT/previous-release"

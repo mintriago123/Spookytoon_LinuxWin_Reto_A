@@ -34,6 +34,9 @@ export function parseStartCommand(value: unknown): StartCommand {
   }
   return { gameId: text(item.gameId, "gameId", 128), roundId: item.roundId, seed: text(item.seed, "seed") };
 }
+export function parseOperatorPassword(value: unknown): string {
+  return text(object(value, ["password"]).password, "password");
+}
 export function parsePauseCommand(value: unknown): { reason: string } {
   const item = object(value, ["reason"]);
   return { reason: text(item.reason, "reason") };
