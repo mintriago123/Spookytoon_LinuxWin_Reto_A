@@ -35,6 +35,22 @@ interface CoordinatorOptions {
   now?: () => number;
   getWsClientCount?: () => number;
   getPersistenceProgress?: () => { snapshotQueueDepth: number; lastSnapshotTurnId: number | null };
+  /** Solo jitter de cierre; no amplía el presupuesto de cálculo. Fijo durante la partida. */
+  commitJitterToleranceMs?: number;
+}
+
+export const DEFAULT_COMMIT_JITTER_TOLERANCE_MS = 10;
+
+/** Diagnóstico interno monotónico. No forma parte de WorldSnapshot ni TURN_UPDATE. */
+export interface TurnTiming {
+  deadlineMonotonicMs: number;
+  workFinishedAtMonotonicMs: number;
+  commitReadyAtMonotonicMs: number;
+  committedAtMonotonicMs: number;
+  timerWakeDelayMs: number;
+  commitDelayMs: number;
+  commitJitterToleranceMs: number;
+  deadlineMiss: boolean;
 }
 
 export interface TurnResult {
@@ -55,17 +71,24 @@ export class TurnCoordinator {
   private pauseRequested: string | null = null;
   private queuedEvents: ScheduledCityEvent[] = [];
   private routeSamples: RouteLatencySample[] = [];
+  private readonly commitJitterToleranceMs: number;
+  private lastTurnTiming: Readonly<TurnTiming> | null = null;
 
   constructor(initial: WorldState, options: CoordinatorOptions) {
     if (!Number.isSafeInteger(options.syncTimeoutMs) || options.syncTimeoutMs < 1 || options.syncTimeoutMs > 2_000) {
       throw new Error("Se requiere timeout explícito de sync entre 1 y 2.000 ms");
     }
     this.options = options;
+    this.commitJitterToleranceMs = options.commitJitterToleranceMs ?? DEFAULT_COMMIT_JITTER_TOLERANCE_MS;
+    if (!Number.isFinite(this.commitJitterToleranceMs) || this.commitJitterToleranceMs < 0 || this.commitJitterToleranceMs >= 2_000) {
+      throw new Error("La tolerancia de cierre debe estar entre 0 y menos de 2.000 ms");
+    }
     this.committed = freeze(structuredClone(initial));
     this.now = options.now ?? (() => performance.now());
   }
 
   getCommittedWorld(): Immutable<WorldState> { return this.committed; }
+  getLastTurnTiming(): Readonly<TurnTiming> | null { return this.lastTurnTiming; }
 
   resume(): void {
     if (this.busy || !["idle", "paused"].includes(this.committed.status) || this.committed.turnId >= 150) {
@@ -144,7 +167,7 @@ export class TurnCoordinator {
     finally { clearTimeout(timer!); }
   }
 
-  async runTurn(deadlineMonotonicMs = this.now() + 2_000): Promise<TurnResult> {
+  async runTurn(deadlineMonotonicMs = this.now() + 2_000, waitForPublication?: () => Promise<void>): Promise<TurnResult> {
     if (this.busy) throw new Error("Ya existe un turno en curso");
     if (this.committed.status !== "running" || this.committed.turnId >= 150) throw new Error("La partida no admite otro turno");
     if (this.committed.survivors.filter(s => s.estado === "vivo").length > 200) throw new Error("Máximo 200 consultas de ruta por turno");
@@ -235,29 +258,58 @@ export class TurnCoordinator {
       work.survivors = admitted.survivors; work.shelters = admitted.shelters;
       work.zombies = awakenDormantZombies({ ...work, turnId, phase: "after-survivor-move" });
       phase("publish");
-      for (const event of this.queuedEvents) if (!work.pendingCityEvents.some(existing => existing.eventId === event.eventId)) {
-        work.pendingCityEvents.push({ ...event });
-      }
-      if (this.pauseRequested !== null && work.pause.status === "none") work.pause = {
-        status: "requested", cause: "operator", reason: this.pauseRequested, afterTurnId: turnId,
-      };
-      if (this.now() >= deadlineMonotonicMs) {
-        work.metrics.deadlineMisses++;
-        if (work.pause.status === "none") work.pause = { status: "requested", cause: "deadline-miss",
-          reason: "El turno no cerró antes del siguiente tick", afterTurnId: turnId };
-      }
+      // Preparar también las métricas y congelar los datos antes de esperar.
+      // El resultado sigue privado y el turno activo hasta el intercambio final.
       const telemetry = updateTurnMetrics(work, this.routeSamples, attempts, decisions, Math.max(0, this.now() - startedAt));
       work.metrics = telemetry.metrics;
-      work.metrics.wsClients = this.options.getWsClientCount?.() ?? work.metrics.wsClients;
-      Object.assign(work.metrics, this.options.getPersistenceProgress?.());
-      if (work.pause.status === "requested") {
-        work.pause = { ...work.pause, status: "effective" }; work.status = "paused";
-      }
-      if (turnId === 150) work.status = "completed";
       work.turnId = turnId; work.worldVersion++;
       work.activeTurn = null; work.activeTurnId = null; work.phase = "idle";
-      work.updatedAt = this.options.isoNow();
-      this.committed = freeze(work); // Único intercambio de la versión completa.
+      const prepared = freeze(work);
+      const workFinishedAt = this.now();
+      let publicationWaitMs = 0;
+      let timerWakeDelayMs = 0;
+      if (waitForPublication && workFinishedAt < deadlineMonotonicMs) {
+        const waitStartedAt = this.now();
+        await waitForPublication();
+        const wokeAt = this.now();
+        publicationWaitMs = Math.max(0, wokeAt - waitStartedAt);
+        timerWakeDelayMs = Math.max(0, wokeAt - deadlineMonotonicMs);
+      }
+      const pendingCityEvents = this.queuedEvents.length ? freeze([...prepared.pendingCityEvents,
+        ...this.queuedEvents.filter(event => !prepared.pendingCityEvents.some(existing => existing.eventId === event.eventId))
+          .map(event => ({ ...event }))]) : prepared.pendingCityEvents;
+      let pause = prepared.pause;
+      if (pause.status === "requested") pause = Object.freeze({ ...pause, status: "effective" as const });
+      if (this.pauseRequested !== null && pause.status === "none") pause = Object.freeze({
+        status: "effective" as const, cause: "operator" as const, reason: this.pauseRequested, afterTurnId: turnId,
+      });
+      const wsClients = this.options.getWsClientCount?.() ?? prepared.metrics.wsClients;
+      const updatedAt = this.options.isoNow();
+      const persistenceProgress = this.options.getPersistenceProgress?.();
+      // Punto lógico de cierre: datos y métricas de rutas ya preparados/congelados.
+      // Desde esta muestra solo sellamos metadatos temporales y cambiamos la referencia,
+      // sin await, callbacks de usuario ni I/O. La notificación HTTP/WS viene después.
+      const commitReadyAt = this.now();
+      const turnDurationMs = Math.max(0, commitReadyAt - startedAt - publicationWaitMs);
+      const deadlineMiss = workFinishedAt >= deadlineMonotonicMs || turnDurationMs >= 2_000 ||
+        commitReadyAt > deadlineMonotonicMs + this.commitJitterToleranceMs;
+      const deadlineMisses = prepared.metrics.deadlineMisses + Number(deadlineMiss);
+      if (deadlineMiss && pause.status === "none") pause = Object.freeze({
+        status: "effective" as const, cause: "deadline-miss" as const,
+        reason: "Se excedió el presupuesto de trabajo o la tolerancia de cierre", afterTurnId: turnId,
+      });
+      const metrics = Object.freeze({ ...prepared.metrics, ...persistenceProgress, deadlineMisses, wsClients,
+        turnDurationMs: Math.round(turnDurationMs * 10) / 10,
+        turnBudgetUsedPercent: Math.round(turnDurationMs / 2_000 * 1_000) / 10,
+        turnEfficiencyPercent: Math.round((turnId - deadlineMisses) * 1_000 / turnId) / 10 });
+      this.committed = Object.freeze({ ...prepared, metrics, pause, pendingCityEvents, updatedAt,
+        status: turnId === 150 ? "completed" : pause.status === "effective" ? "paused" : prepared.status });
+      const committedAt = this.now();
+      this.lastTurnTiming = Object.freeze({ deadlineMonotonicMs,
+        workFinishedAtMonotonicMs: workFinishedAt, commitReadyAtMonotonicMs: commitReadyAt,
+        committedAtMonotonicMs: committedAt, timerWakeDelayMs,
+        commitDelayMs: Math.max(0, committedAt - deadlineMonotonicMs),
+        commitJitterToleranceMs: this.commitJitterToleranceMs, deadlineMiss });
       this.routeSamples = telemetry.samples;
       this.pauseRequested = null; this.queuedEvents = [];
       this.options.onCommitted?.(this.committed);

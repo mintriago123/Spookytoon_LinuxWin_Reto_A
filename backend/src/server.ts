@@ -112,7 +112,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
         return client = createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey, maxSockets: 16 });
       };
       return { sync: (r, signal) => get().sync(r, signal), status: (id, signal) => get().status(id, signal),
-        step: (r, signal) => get().step(r, signal), close: () => client?.close?.() };
+        step: (r, signal) => get().step(r, signal), close: () => client?.close?.(), getTimings: () => client?.getTimings?.() ?? [] };
     }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
   app.register(simulatorPlugin, { runtime: simulator, apiKey });
   app.register(realtimePlugin, { runtime: simulator, allowedOrigins: origins });

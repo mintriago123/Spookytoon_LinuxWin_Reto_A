@@ -28,7 +28,9 @@ class AcceleratedClock implements SimulationClock {
       this.pending = { tick, release }; signal.addEventListener("abort", release, { once: true });
     });
   }
-  next() {
+  async next() {
+    const deadline = performance.now() + 5_000;
+    while (!this.pending && performance.now() < deadline) await new Promise(resolve => setTimeout(resolve, 1));
     assert(this.pending, "El turno debe cerrar y esperar antes de avanzar el reloj");
     this.offset = this.pending.tick - performance.now(); this.pending.release();
   }
@@ -104,6 +106,7 @@ for (const roundId of [1, 2, 3] as RoundId[]) {
         body: JSON.stringify({ gameId: `integration-fixture-${roundId}`, roundId, seed: "integration-only" }) });
       assert.equal(response.status, 202); await response.text();
       for (let turnId = 1; turnId <= 150; turnId++) {
+        await clock.next(); // Liberar el cierre preparado antes de esperar su publicación.
         const message = await update(turnId); const world = message.world;
         assert.equal(message.event, "TURN_UPDATE"); assert.equal(world.worldVersion, turnId);
         assert.equal(world.survivors.length, config.survivorCount);
@@ -117,7 +120,6 @@ for (const roundId of [1, 2, 3] as RoundId[]) {
         }
         const state = await fetch(`${url}/estado`); assert.equal(state.status, 200);
         assert.deepEqual(await state.json(), world, "GET y WS deben coincidir en todo el snapshot");
-        if (turnId < 150) clock.next();
       }
       await runtime.whenStopped();
       assert.deepEqual(committed.map(w => w.turnId), Array.from({ length: 150 }, (_, i) => i + 1));

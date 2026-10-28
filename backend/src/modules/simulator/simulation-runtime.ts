@@ -16,6 +16,8 @@ export interface ScenarioOptions {
   initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
   /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
   clock?: SimulationClock;
+  /** Tolerancia de cierre explícita; por defecto 10 ms. No se aplica al cálculo. */
+  commitJitterToleranceMs?: number;
 }
 interface RuntimeOptions extends ScenarioOptions {
   graph: Immutable<MantaGraph>;
@@ -52,6 +54,7 @@ export class SimulationRuntime {
     this.routingClient = this.options.clientFactory();
     this.coordinator = new TurnCoordinator(world, { client: this.routingClient, syncTimeoutMs: this.options.syncTimeoutMs,
       now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+      commitJitterToleranceMs: this.options.commitJitterToleranceMs,
       getWsClientCount: () => this.realtimeClientCount, getPersistenceProgress: this.options.getPersistenceProgress,
       onCommitted: state => this.publishCommitted(state) });
     this.usedGameIds.add(world.gameId);
@@ -73,6 +76,8 @@ export class SimulationRuntime {
     return this.start(command);
   }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
+  getLastTurnTiming() { return this.coordinator?.getLastTurnTiming() ?? null; }
+  getRoutingRequestTimings() { return this.routingClient?.getTimings?.() ?? []; }
   setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
@@ -109,6 +114,7 @@ export class SimulationRuntime {
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
         getWsClientCount: () => this.realtimeClientCount,
         getPersistenceProgress: this.options.getPersistenceProgress,
+        commitJitterToleranceMs: this.options.commitJitterToleranceMs,
         onCommitted: world => this.publishCommitted(world) });
       this.routingClient?.close?.();
       this.routingClient = client;
@@ -158,13 +164,12 @@ export class SimulationRuntime {
     const origin = this.clock.now();
     this.runner = runner;
     runner.promise = Promise.resolve().then(async () => {
-      // El snapshot inicial ocupa el primer intervalo; los ticks 1..150 caen en 2.000..300.000 ms.
-      let nextTick = origin + 2_000;
+      // Calcular desde T0; publicar en fronteras absolutas T0+2.000..T0+300.000.
+      let closesAt = origin + 2_000;
       while (!runner.controller.signal.aborted && coordinator.getCommittedWorld().status === "running") {
-        await this.clock.waitUntil(nextTick, runner.controller.signal);
-        if (runner.controller.signal.aborted || coordinator.getCommittedWorld().status !== "running") break;
-        await coordinator.runTurn(nextTick + 2_000);
-        nextTick += 2_000; // Absoluto: el tiempo de cálculo no desplaza los ticks siguientes.
+        const boundary = closesAt;
+        await coordinator.runTurn(boundary, () => this.clock.waitUntil(boundary, runner.controller.signal));
+        closesAt += 2_000; // Absoluto: ni el cálculo ni la publicación desplazan ventanas.
       }
     }).catch(() => {
       const world = coordinator.getCommittedWorld();

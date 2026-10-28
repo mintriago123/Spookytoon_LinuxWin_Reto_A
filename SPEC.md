@@ -346,7 +346,7 @@ export interface RoutingStatusResponse {
 }
 ```
 
-Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes y nunca exceden capacidad; reservados solo contiene vivos y no ocupantes; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
+Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes; ocupantes.length + reservados.length <= capacidad en cada refugio; reservados solo contiene vivos y no ocupantes, sin reservas simultáneas en distintos refugios; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
 
 ## 3. OpenAPI y eventos
 
@@ -1501,7 +1501,16 @@ El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la env
       "activeZombies": 12,
       "wsClients": 1,
       "snapshotQueueDepth": 0,
-      "lastSnapshotTurnId": 11
+      "lastSnapshotTurnId": 11,
+      "routeErrors": 0,
+      "routeAvailabilityPercent": 100,
+      "survivalRatePercent": 100,
+      "activeSurvivorsPercent": 100,
+      "bittenSurvivorsPercent": 0,
+      "evacuatedSurvivorsPercent": 0,
+      "turnDurationMs": 100,
+      "turnBudgetUsedPercent": 5,
+      "turnEfficiencyPercent": 100
     }
   }
 }
@@ -1515,7 +1524,7 @@ Máximo de mensaje: 1 MiB. Ping/pong cada 30 s; cerrar conexión sin heartbeat. 
 
 Usar índices enteros, outEdges e inEdges. El grafo es inmutable. Después de mover zombies y aplicar eventos, el Simulador sincroniza un snapshot; routing calcula una sola vez el plan para ese worldVersion y lo publica a todos sus workers. Una llamada /paso no ejecuta Dijkstra: valida identidad/versión y consulta bestMoveByNode[currentNodeId], una búsqueda O(1).
 
-El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
+El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y reservas, y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
 
 RoutePlanSnapshot tiene exactamente una entrada bestMoveByNode por nodo de grafo y está asociado a gameId, turnId, worldVersion y graphVersion. Los workers rechazan plan con versión distinta. buildLatencyMs mide solo el precompute del plan, no se suma a la latencia de cada /paso.
 
@@ -1533,7 +1542,7 @@ H incluye vecinos directos entrantes y salientes de cada horda activa. Z_t son n
 
 ### 4.2 Nivel Base (obligatorio)
 
-Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios no llenos como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
+Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios con plazas generales disponibles como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, además de los planes para reservas descritos abajo, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
 
 Penalización corredor Base: para cada corredor despierto, d(c,v) es distancia mínima en saltos dirigidos, hasta 2. Sea dmin(v) el mínimo sobre corredores. Wc=4*L:
 
@@ -1544,9 +1553,11 @@ Pcor(v) = Wc * (3 - dmin(v)), si dmin(v) ∈ {0,1,2}
 
 Penalización de incertidumbre Base: el Simulador produce una lista de nodos próximos a dormidos no despiertos, sin incluir sus IDs ni coordenadas. Si v aparece, Pincertidumbre(v)=0.25*L; en otro caso es 0. Es un costo blando: nunca bloquea una calle ni identifica/despierta zombies. Dormidos siguen estáticos e invisibles como entidades del motor. Si no se puede formar este agregado, usar lista vacía.
 
-Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. Refugios llenos no son fuentes; disponibilidad se evalúa con la ocupación del snapshot. Llegadas simultáneas se arbitran en el Simulador y nunca exceden capacidad.
+Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. La disponibilidad general es capacidad - ocupantes.length - reservados.length; un refugio sin plazas generales no es fuente del plan general. Llegadas simultáneas se arbitran en el Simulador conforme a la prioridad de reservas de §5.3 y nunca exceden capacidad.
 
-El plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. targetShelterId en request es compatible con Pro; Base elige el refugio disponible de menor costo.
+Una reserva válida retiene una plaza para un sobreviviente vivo que no sea ocupante ni tenga otro refugio asignado como destino. Routing conserva reservedPlans por refugio con reservas, precomputados en la sincronización y reutilizados por sus titulares: estos pueden recibir ruta hacia su plaza aunque no haya disponibilidad general. El lookup de /paso sigue siendo O(1); no se calcula una ruta por sobreviviente ni se modifica WorldState desde el motor. Una reserva no autoriza entrar en aristas cerradas, peligros o cruces frontales. El Simulador consume la reserva al admitir, y libera las de mordidos, evacuados y quienes cambian de destino; una reserva válida de alguien todavía en camino sigue reteniendo su plaza.
+
+Cada plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. Base respeta la plaza retenida de quien tiene reserva; para los demás elige el refugio con disponibilidad general de menor costo. targetShelterId en request es compatible con Pro.
 
 El cruce frontal excluye u→v cuando F_t(u,v) es true. H, aristas cerradas y nodos inexistentes son restricciones duras. Corredor e incertidumbre son penalizaciones blandas. El Simulador valida la respuesta contra el mismo snapshot antes de mover; un sobreviviente avanza máximo una arista por turno.
 
@@ -1591,7 +1602,7 @@ export interface RoundConfig {
 
 La lista de spawns DEBE tener IDs únicos y nodeIds del grafo; su longitud de sobrevivientes debe coincidir con survivorCount y la composición de zombieSpawns con las reglas de la ronda. Ningún sobreviviente inicia en nodo zombie, zona de horda o nodo de refugio. Estas posiciones son datos del escenario, no valores inferidos por el motor.
 
-Turnos seriales con reloj monotónico y ticks absolutos cada 2.000 ms. No solapar ni saltar fases. Cada turno debe cerrar antes de su siguiente tick; si termina antes, esperar. Si no cierra antes del tick, terminar y comprometer ese turno, incrementar deadlineMisses y pausar antes de iniciar otro. La ronda con cualquier deadline miss no cumple aceptación temporal. Sin overruns se completan exactamente 150 turnos en 5 minutos. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
+Turnos seriales con reloj monotónico y ventanas absolutas de 2.000 ms. En ejecución continua sin pausas, el trabajo del turno k tiene inicio nominal T0 + (k-1)×2.000 ms y debe terminar antes de T0 + k×2.000 ms. El turno 1 calcula desde T0; el turno 150 calcula dentro de [T0+298.000, T0+300.000). Si el trabajo acaba antes, conservar el resultado privado y esperar la frontera nominal de cierre. La espera deliberada no cuenta en turnDurationMs. Para el cierre se admite exclusivamente la tolerancia de jitter de §5.4, sin ampliar el presupuesto de cálculo ni desplazar las siguientes ventanas. Un incumplimiento incrementa deadlineMisses una sola vez por turno; comprometer siempre el estado consistente y pausar antes de iniciar otro. En el turno 150 prevalece completed aunque haya incumplimiento. La frontera nominal final es T0+300.000 ms: nunca iniciar allí el cálculo del último turno ni publicar antes de esa frontera. La tolerancia no autoriza afirmar un cierre físico exacto en 300.000 ms. No solapar ni saltar fases. Una reanudación fija un nuevo origen para las ventanas restantes, sin recuperar tiempo pausado. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
 
 ### 5.2 Zombies
 
@@ -1600,8 +1611,11 @@ Todos calculan intención desde la misma vista pre-movimiento y aplican movimien
 ### 5.3 Orden exacto
 
 ```text
+T0 = monotonicNow() // al iniciar o reanudar
+frontera = T0 + 2.000 ms
+jitterCierreMs = 10 // fijo durante la partida; configurable explícitamente
 loop mientras status == running:
-  t0 = monotonicNow()
+  inicioTrabajo = monotonicNow()
   k = turnId + 1
 
   phase = city-events
@@ -1635,29 +1649,54 @@ loop mientras status == running:
     (2) está en nodo horda o vecino directo de horda, o
     (3) survivor A→B y zombie B→A en el turno
   primero resolver mordidas; después refugios
-  por refugio ordenar llegadas survivorId; admitir solo cupos libres
+  liberar reservas de mordidos, evacuados y quienes cambiaron de destino
+  por refugio:
+    admitir llegadas con reserva válida, ordenadas por survivorId; consumir su reserva
+    admitir demás llegadas por survivorId usando capacidad - ocupantes - reservados
+    mantener ocupantes.length + reservados.length <= capacidad
   no admitidos quedan vivos en el nodo del refugio
   despertar dormidos por posiciones nuevas; recalcular reservas/métricas
 
   phase = publish
-  deadlineMiss = monotonicNow() >= t0 + 2.000 ms
+  preparar métricas de rutas y congelar los datos del nuevo snapshot privado
+  finTrabajo = monotonicNow()
+  esperaPublicacionMs = 0
+  si finTrabajo < frontera:
+    inicioEspera = monotonicNow()
+    esperar hasta frontera manteniendo privado el resultado
+    esperaPublicacionMs = monotonicNow() - inicioEspera
+  incorporar controles recibidos durante cálculo/espera; resolver pausa solicitada
+  completar fecha y conteo WS; los datos pesados ya estaban preparados antes de esperar
+  cierreLogico = monotonicNow() // después de preparar/congelar; antes del sellado e intercambio síncronos
+  turnDurationMs = cierreLogico - inicioTrabajo - esperaPublicacionMs
+  deadlineMiss = finTrabajo >= frontera o turnDurationMs >= 2.000 ms
+                 o cierreLogico > frontera + jitterCierreMs
   si deadlineMiss: incrementar deadlineMisses
+  turnEfficiencyPercent = 100 × (k - deadlineMisses) / k
+  sellar métricas temporales con turnDurationMs, excluyendo la espera deliberada
   si k == 150: status=completed
   si no, si pausa solicitada o deadlineMiss: status=paused
   activeTurnId = null
   comprometer snapshot atómicamente; turnId=k; worldVersion++
+  observar instante posterior al intercambio para diagnóstico interno de retraso real
   actualizar GET /estado y emitir TURN_UPDATE
   encolar snapshot DynamoDB sin esperar
-  si status == running: esperar hasta t0 + 2.000 ms
+  frontera += 2.000 ms // absoluta; comenzar el siguiente cálculo sin otra espera
 ```
 
-Una persona mordida no se evacúa aunque termine en refugio. La capacidad nunca se excede; admisión simultánea desempata por survivorId. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
+Una persona mordida no se evacúa aunque termine en refugio y tenga reserva. La admisión simultánea prioriza primero reservas válidas y después llegadas sin reserva, con orden lexicográfico por survivorId dentro de cada grupo. Al admitir se consume la reserva; las plazas aún reservadas para vivos en camino no se ofrecen al grupo sin reserva. Sin reservas, la admisión sigue estrictamente el orden por survivorId. Siempre se cumple ocupantes.length + reservados.length <= capacidad. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
 
 ### 5.4 Concurrencia y latencia
 
 Usar Promise.allSettled para hasta 200 solicitudes con límite de 200 en vuelo. Todas comparten turnId/worldVersion; no sincronizar nueva versión hasta cerrar lote. Requests idempotentes. Pool rechaza exceso con 429. Workers no comparten datos mutables; sync publica snapshot completo de forma atómica.
 
 Medir una muestra por request incluyendo error; timeout cuenta como 500 ms. Ring buffer deslizante de últimas 1.000 solicitudes. Percentiles nearest-rank: ordenar muestra, índice ceil(p*n)-1; reportar una decimal. p95 de extremo a extremo de POST /paso. routeTimeouts, invalidRouteResponses y deadlineMisses son acumulados por partida; controles fuera de la ventana. Un timeout no detiene el loop ni mueve al sobreviviente.
+
+**Cierre y jitter.** `commitJitterToleranceMs` es 10 ms por defecto, acordados para el cierre, y queda fijo durante la partida. Puede configurarse explícitamente entre 0 y menos de 2.000 ms; el valor usado debe acompañar la evidencia de aceptación. El trabajo que alcanza el deadline absoluto o consume 2.000 ms de duración activa incumple aunque el exceso sea menor que la tolerancia. Esta solo evita atribuir al cálculo el pequeño retraso del temporizador o del cierre: un cierre lógico exactamente en frontera + tolerancia es admisible; por encima incumple. No se acumula la tolerancia por turno ni se mueve T0, la siguiente frontera o el deadline de cálculo.
+
+La muestra `commitReadyAtMonotonicMs` se toma después de calcular métricas de rutas, actualizar estado/fecha y congelar los datos. Es el punto lógico usado para clasificar el cierre; después solo se sellan los cuatro indicadores temporales y se intercambia la referencia, sin await, callbacks de usuario ni I/O. `turnDurationMs` incluye preparación y congelado hasta esa muestra, descontando la espera completa de publicación. Inmediatamente después del intercambio se observa `committedAtMonotonicMs`; esa segunda muestra es diagnóstica y no introduce otro commit. El diagnóstico interno `TurnTiming` conserva ambos instantes, deadline, tolerancia, retraso del despertar y retraso real observado del commit (sin redondear). No se oculta un retraso por estar dentro de tolerancia y no se amplía el snapshot público de 23 métricas. Para contrastar un cierre físico con 300.000 ms se usa el retraso observado, no solo `deadlineMisses` ni la eficiencia.
+
+La actualización de GET /estado y el encolado de TURN_UPDATE siguen al commit. El broadcast WebSocket usa setImmediate; `emittedAt` es una fecha UTC de codificación del mensaje, no un reloj monotónico ni un acuse de recepción. La entrega WS/red se mide por separado y no determina el cumplimiento del cierre lógico. No se exige igualdad exacta del temporizador del sistema con la frontera nominal.
 
 ## 6. Frontend
 
@@ -1677,7 +1716,7 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 
 1. **Extracción y grafo:** 250–350 nodos, cuatro zonas, cuatro refugios con capacidad positiva, IDs únicos, arcos dirigidos/factores/referencias válidos, atribución, graphVersion y hash compartido.
 2. **Estado/sincronización:** carga y validación antes de readiness; instalar versión atómica en workers; sync idéntico idempotente, versión obsoleta/conflicto 409; estado parcial nunca público.
-3. **POST /paso y plan Base:** una búsqueda Dijkstra inversa por worldVersion, tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: jamás devuelve edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
+3. **POST /paso y plan Base:** precomputar por worldVersion el Dijkstra inverso del plan general y los planes por refugio con reservas (reservedPlans), conforme a §4.2; no ejecutar Dijkstra por sobreviviente. Tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: respetar la disponibilidad general descontando reservas y mantener rutas para sus titulares; jamás devolver edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
 4. **API/OpenAPI/controles:** rutas y contratos alineados; x-api-key exigida en motor/controles; dos inicios concurrentes no aceptados; pausar cierra turno; cierre afecta ambos sentidos del segmento.
 5. **AWS/persistencia/telemetría:** EC2/Caddy, PM2 o Docker, DynamoDB On-Demand, IAM Role y CloudWatch en la región seleccionada mediante AWS_REGION. Aceptación: región confirmada antes del despliegue; una tarea autoritativa; snapshot por turno asíncrono; reinicio restaura pausado; alertas p95/timeout/cola/health; secretos fuera del frontend/logs.
 6. **Costos/operación:** documentar sizing medido, retención, alarmas y rollback; estimación vía AWS Pricing Calculator antes del evento.

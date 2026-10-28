@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 import Fastify from "fastify";
 import WebSocket from "ws";
@@ -19,6 +20,12 @@ import { RouteEngine } from "../backend/src/modules/routing/route-engine.ts";
 const isoNow = () => "2026-10-27T00:00:00Z";
 const start = { gameId: "realtime-fixture", roundId: 1 as const, seed: "private-seed" };
 const apiKey = "fixture-realtime-key";
+const publicMetricKeys = ["routeSamples", "routeLatencyP50Ms", "routeLatencyP95Ms", "routeLatencyP99Ms",
+  "routeTimeouts", "invalidRouteResponses", "deadlineMisses", "activeSurvivors", "bittenSurvivors",
+  "evacuatedSurvivors", "activeZombies", "wsClients", "snapshotQueueDepth", "lastSnapshotTurnId",
+  "routeErrors", "routeAvailabilityPercent", "survivalRatePercent", "activeSurvivorsPercent",
+  "bittenSurvivorsPercent", "evacuatedSurvivorsPercent", "turnDurationMs", "turnBudgetUsedPercent",
+  "turnEfficiencyPercent"] as const;
 class ManualClock implements SimulationClock {
   time = 0;
   private waiters = new Set<{ tick: number; finish: () => void }>();
@@ -97,21 +104,65 @@ class Peer implements RealtimePeer {
 }
 const flush = () => new Promise<void>(resolve => setImmediate(resolve));
 
+test("el ejemplo TURN_UPDATE del SPEC incluye las mismas 23 métricas públicas", async () => {
+  const spec = await readFile(new URL("../SPEC.md", import.meta.url), "utf8");
+  const examples = [...spec.matchAll(/```json\r?\n([\s\S]*?)```/g)].flatMap(match => {
+    try { return [JSON.parse(match[1])]; } catch { return []; }
+  });
+  const update = examples.find(example => example.event === "TURN_UPDATE");
+  assert(update, "El SPEC debe conservar un ejemplo JSON de TURN_UPDATE");
+  assert.deepEqual(Object.keys(update.world.metrics).sort(), [...publicMetricKeys].sort());
+});
+
 test("proyección pública es cerrada, independiente e inmutable y no filtra datos internos", () => {
   const world = fixture().initial();
   Object.assign(world.survivors[0], { privateField: "do-not-leak" });
   Object.assign(world.metrics, { privateField: "do-not-leak" });
+  const additionalMetrics = { routeErrors: 7, routeAvailabilityPercent: 91, survivalRatePercent: 85,
+    activeSurvivorsPercent: 60, bittenSurvivorsPercent: 15, evacuatedSurvivorsPercent: 25,
+    turnDurationMs: 100, turnBudgetUsedPercent: 5, turnEfficiencyPercent: 95 };
+  Object.assign(world.metrics, additionalMetrics);
+  const metricsBefore = structuredClone(world.metrics);
   const snapshot = createWorldSnapshot(world);
   assert.deepEqual(Object.keys(snapshot).sort(), ["schemaVersion", "gameId", "roundId", "status", "turnId", "worldVersion",
     "graphVersion", "updatedAt", "zombies", "survivors", "shelters", "blockedEdges", "metrics"].sort());
-  assert.equal(Object.keys(snapshot.metrics).length, 14);
+  assert.equal(Object.keys(snapshot.metrics).length, 23);
+  assert.deepEqual(Object.keys(snapshot.metrics).sort(), [...publicMetricKeys].sort());
+  for (const key of publicMetricKeys) assert.equal(snapshot.metrics[key], metricsBefore[key]);
+  assert.deepEqual(world.metrics, metricsBefore, "Proyectar no modifica métricas internas");
+  for (const [key, value] of Object.entries(additionalMetrics)) assert.equal(snapshot.metrics[key as keyof typeof additionalMetrics], value);
   for (const field of ["privateField", "rngSeed", "randomState", "pendingCityEvents", "pause", "routing", "activeTurn", "graph"]) {
     assert(!JSON.stringify(snapshot).includes(`"${field}"`));
   }
   assert(!JSON.stringify(snapshot).includes(start.seed));
   world.survivors[0].nodeId = "B"; world.shelters[0].ocupantes.push("S-0");
+  world.metrics.activeSurvivors = 3;
+  assert.equal(snapshot.metrics.activeSurvivors, metricsBefore.activeSurvivors);
   assert.equal(snapshot.survivors[0].nodeId, "A"); assert.deepEqual(snapshot.shelters[0].ocupantes, []);
   assert(Object.isFrozen(snapshot)); assert(Object.isFrozen(snapshot.survivors[0]));
+  assert(Object.isFrozen(snapshot.metrics));
+  assert.throws(() => { (snapshot.metrics as TelemetryMetrics).activeSurvivors = 2; }, TypeError);
+});
+
+test("HTTP y WS publican las mismas 23 métricas, incluidas disponibilidad y eficiencia", async () => {
+  const env = await application();
+  try {
+    const client = await connect(env.wsUrl);
+    env.runtime.start(start);
+    for (const turnId of [0, 1]) {
+      const update = await client.update(update => update.world.turnId === turnId);
+      const response = await env.app.inject({ method: "GET", url: "/estado" });
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.json(), update.world);
+      assert.deepEqual(Object.keys(update.world.metrics).sort(), [...publicMetricKeys].sort());
+      const internal = env.runtime.getCommittedWorld()!.metrics;
+      for (const key of publicMetricKeys) assert.equal(update.world.metrics[key], internal[key]);
+      assert(Object.hasOwn(internal, "turnDurationMs"));
+      assert(Object.hasOwn(update.world.metrics, "turnDurationMs"));
+      assert(Object.isFrozen(env.runtime.getCommittedSnapshot()!.metrics));
+      if (turnId === 0) env.clock.advance(2_000);
+    }
+  } finally { await env.app.close(); }
 });
 
 test("antes de crear partida GET devuelve 503 no-store y WS conecta sin mundo inventado", async () => {
@@ -132,13 +183,15 @@ test("HTTP y WS muestran la misma copia comprometida y no las fases del turno ac
   try {
     const client = await connect(env.wsUrl);
     const created = await env.app.inject({ method: "POST", url: "/simulador/iniciar", headers: { "x-api-key": apiKey }, payload: start });
-    assert.equal(created.statusCode, 202); await entered.promise;
+    assert.equal(created.statusCode, 202);
+    await entered.promise;
     const zero = await client.update(update => update.world.turnId === 0);
     const during = await env.app.inject({ method: "GET", url: "/estado" });
     assert.deepEqual(during.json(), zero.world); assert.equal(during.json().worldVersion, 0);
     assert(during.json().survivors.every((s: { nodeId: string }) => s.nodeId === "A"));
     assert(!client.messages.some(update => update.world.turnId === 1));
-    gate.resolve(); const first = await client.update(update => update.world.turnId === 1);
+    gate.resolve(); await flush(); env.clock.advance(2_000);
+    const first = await client.update(update => update.world.turnId === 1);
     const after = await env.app.inject({ method: "GET", url: "/estado" });
     assert.deepEqual(after.json(), first.world); assert.equal(after.statusCode, 200);
     assert(first.world.survivors.every(s => s.nodeId === "B"));
@@ -147,16 +200,16 @@ test("HTTP y WS muestran la misma copia comprometida y no las fases del turno ac
   } finally { gate.resolve(); await env.app.close(); }
 });
 
-test("pausa entre ticks y reanudación notifican status con el mismo turno y versión", async () => {
+test("pausa al cerrar y reanudación notifican status con el mismo turno y versión", async () => {
   const env = await application(); const next = deferred<void>(); const entered = deferred<void>(); const sync = env.client.sync;
   env.client.sync = async (request, signal) => { if (request.turnId === 2) { entered.resolve(); await next.promise; } return sync(request, signal); };
   try {
     const client = await connect(env.wsUrl);
-    env.runtime.start(start); await client.update(update => update.world.turnId === 1);
-    const before = env.runtime.getCommittedSnapshot()!;
-    assert.equal(env.runtime.pause("revisión").status, "paused"); await env.runtime.whenStopped();
+    env.runtime.start(start); await flush();
+    assert.equal(env.runtime.pause("revisión").status, "pausing");
+    env.clock.advance(2_000); await env.runtime.whenStopped();
     const paused = await client.update(update => update.world.turnId === 1 && update.world.status === "paused");
-    assert.equal(paused.world.worldVersion, before.worldVersion);
+    assert.equal(paused.world.worldVersion, 1);
     assert.deepEqual((await env.app.inject({ method: "GET", url: "/estado" })).json(), paused.world);
     const afterPause = client.messages.length;
     env.runtime.start(start); await entered.promise;
@@ -170,10 +223,11 @@ test("pausa entre ticks y reanudación notifican status con el mismo turno y ver
 test("reconexión recibe el estado vigente y GET recupera un turno perdido", async () => {
   const env = await application();
   try {
-    const first = await connect(env.wsUrl); env.runtime.start(start);
+    const first = await connect(env.wsUrl); env.runtime.start(start); await flush();
+    env.clock.advance(2_000);
     await first.update(update => update.world.turnId === 1);
     const closed = once(first.socket, "close"); first.socket.close(); await closed;
-    env.clock.advance(2_000); await flush();
+    env.clock.advance(4_000); await flush();
     assert.equal(env.runtime.getCommittedSnapshot()?.turnId, 2);
     const recovered = (await env.app.inject({ method: "GET", url: "/estado" })).json();
     const second = await connect(env.wsUrl);
@@ -265,8 +319,10 @@ test("saturación de publicaciones mantiene memoria acotada y permite recuperar 
 
 test("excepción de un observador no detiene la partida ni revierte el snapshot comprometido", async () => {
   const env = fixture(); let seen = 0;
+  const committed = deferred<void>();
   const unsubscribe = env.runtime.subscribeCommitted(() => { throw new Error("observer failure"); });
-  env.runtime.subscribeCommitted(() => { seen++; }); env.runtime.start(start); await flush();
+  env.runtime.subscribeCommitted(snapshot => { seen++; if (snapshot.turnId === 1) committed.resolve(); });
+  env.runtime.start(start); await flush(); env.clock.advance(2_000); await committed.promise;
   assert.equal(env.runtime.getCommittedSnapshot()?.turnId, 1); assert.equal(seen, 2); unsubscribe();
   env.runtime.pause("done"); await env.runtime.close(); assert.equal(seen, 3);
 });

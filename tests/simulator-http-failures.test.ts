@@ -21,12 +21,12 @@ function deferred() {
   const promise = new Promise<void>(done => { resolve = done; }); return { promise, resolve };
 }
 
-// Ejecuta solo el primer tick: usa tiempo real dentro del turno y retiene los
-// siguientes ticks hasta cerrar. No es una prueba de cadencia ni aceptación oficial.
+// Libera la primera frontera de publicación; retiene las siguientes.
+// El trabajo posterior se retiene también en sync para observar solo el primer lote.
 function firstTickOnly(): SimulationClock {
-  let first = true;
-  return { now: () => performance.now(), waitUntil: async (_tick, signal) => {
-    if (first) { first = false; return; }
+  let first = true, offset = 0;
+  return { now: () => performance.now() + offset, waitUntil: async (tick, signal) => {
+    if (first) { first = false; offset = tick - performance.now(); return; }
     if (!signal.aborted) await new Promise<void>(resolve => signal.addEventListener("abort", () => resolve(), { once: true }));
   } };
 }
@@ -48,7 +48,11 @@ for (const roundId of [1, 2, 3] as RoundId[]) for (const fault of faults) {
         clock: firstTickOnly(), syncTimeoutMs: 500,
         clientFactory: () => {
           const client = createRoutingClient({ baseUrl: url, apiKey });
-          return { ...client, step: (request, signal) => {
+          return { ...client, sync: (request, signal) => request.turnId === 1 ? client.sync(request, signal)
+            : new Promise((_, reject) => {
+              if (signal.aborted) { reject(new Error("fixture stopped")); return; }
+              signal.addEventListener("abort", () => reject(new Error("fixture stopped")), { once: true });
+            }), step: (request, signal) => {
             signal.addEventListener("abort", () => { aborts++; }, { once: true });
             return client.step(request, signal);
           } };
