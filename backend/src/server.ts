@@ -8,7 +8,7 @@ import { routingPlugin } from "./modules/routing/http-server.ts";
 import { SimulationRuntime, type ScenarioOptions } from "./modules/simulator/simulation-runtime.ts";
 import { simulatorPlugin } from "./modules/simulator/http-plugin.ts";
 import { createRoutingClient } from "./modules/simulator/routing-client.ts";
-import { realtimePlugin } from "./modules/realtime/http-plugin.ts";
+import { realtimePlugin, originPolicy } from "./modules/realtime/http-plugin.ts";
 
 export async function createBackendApp(options: { apiKey?: string; simulator?: ScenarioOptions; frontendOrigin?: string } = {}) {
   const manifest = JSON.parse(await readFile(new URL("../data/graph-manifest.json", import.meta.url), "utf8")) as {
@@ -20,6 +20,26 @@ export async function createBackendApp(options: { apiKey?: string; simulator?: S
   const engine = new RouteEngine(graph);
   const app = Fastify({ bodyLimit: 1_048_576, logger: true });
   app.decorate("routeEngine", engine);
+  const frontendOriginForCors = options.frontendOrigin ?? process.env.FRONTEND_ORIGIN;
+  // CORS a nivel raíz: los hooks/rutas que registra realtimePlugin (abajo)
+  // solo cubren /estado y /ws por el encapsulamiento de plugins de Fastify
+  // — sin esto, el navegador bloquea por preflight cualquier POST con
+  // x-api-key/JSON a /simulador/* y /motor/*, aunque curl (sin CORS) sí
+  // funcione. Misma política de origen que ya usa realtimePlugin.
+  const corsAllowed = originPolicy(frontendOriginForCors ? [frontendOriginForCors] : []);
+  app.addHook("onRequest", async (request, reply) => {
+    const origin = request.headers.origin;
+    if (origin && corsAllowed(origin, request.headers.host)) {
+      reply.header("Access-Control-Allow-Origin", origin).header("Vary", "Origin");
+    }
+  });
+  app.options("/*", async (_request, reply) =>
+    reply
+      .header("Access-Control-Allow-Methods", "GET,POST,OPTIONS")
+      .header("Access-Control-Allow-Headers", "Content-Type,x-api-key")
+      .code(204)
+      .send(),
+  );
   app.register(routingPlugin, { engine, apiKey });
   const simulator = new SimulationRuntime({ ...options.simulator, graph, syncTimeoutMs: 500,
     clientFactory: () => {
@@ -28,8 +48,10 @@ export async function createBackendApp(options: { apiKey?: string; simulator?: S
       return createRoutingClient({ baseUrl: `http://127.0.0.1:${address.port}`, apiKey });
     }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
   app.register(simulatorPlugin, { runtime: simulator, apiKey });
-  const frontendOrigin = options.frontendOrigin ?? process.env.FRONTEND_ORIGIN;
-  app.register(realtimePlugin, { runtime: simulator, allowedOrigins: frontendOrigin ? [frontendOrigin] : [] });
+  app.register(realtimePlugin, {
+    runtime: simulator,
+    allowedOrigins: frontendOriginForCors ? [frontendOriginForCors] : [],
+  });
   return { app, engine, graph, simulator };
 }
 

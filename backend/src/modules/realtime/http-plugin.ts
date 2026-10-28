@@ -8,7 +8,7 @@ import { MAX_MESSAGE_BYTES, RealtimeHub } from "./realtime-hub.ts";
 export interface RealtimeOptions { runtime: SimulationRuntime; allowedOrigins?: readonly string[] }
 
 /** Comparación exacta de orígenes configurados. Sin configuración, solo mismo origen y clientes sin Origin. */
-function originPolicy(allowed: readonly string[]) {
+export function originPolicy(allowed: readonly string[]) {
   const configured = new Set(allowed.map(origin => {
     const url = new URL(origin);
     if (!["http:", "https:"].includes(url.protocol) || url.origin !== origin) throw new Error("Origen frontend inválido");
