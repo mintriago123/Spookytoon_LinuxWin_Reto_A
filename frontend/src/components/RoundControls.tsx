@@ -147,16 +147,16 @@ export function RoundControls() {
       </label>
 
       <div className="flex gap-2">
-        <label className="flex flex-1 flex-col gap-1">
+        <label className="flex min-w-0 flex-1 flex-col gap-1">
           <span>gameId</span>
-          <input value={gameId} onChange={(e) => setGameId(e.target.value)} className={inputClass} />
+          <input value={gameId} onChange={(e) => setGameId(e.target.value)} className={`w-full ${inputClass}`} />
         </label>
-        <label className="flex flex-col gap-1">
+        <label className="flex w-32 shrink-0 flex-col gap-1">
           <span>Ronda</span>
           <select
             value={roundId}
             onChange={(e) => setRoundId(Number(e.target.value) as 1 | 2 | 3)}
-            className={inputClass}
+            className={`w-full ${inputClass}`}
           >
             <option value={1}>1 — Anochecer</option>
             <option value={2}>2 — Medianoche</option>
