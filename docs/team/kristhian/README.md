@@ -23,11 +23,12 @@ Dueño de la aplicación React/Vite/TypeScript, mapa Leaflet, estado del cliente
 
 ## Componentes y capas
 
-- LiveMap: vías, zonas, cierres, refugios y entidades.
-- RoundControls: iniciar/pausar en modo operador.
-- MetricsPanel: vivos, mordidos, evacuados, turno, reloj, p95, timeouts y rutas inválidas.
-- ConnectionStatus y EntityLegend: estado de conexión y explicación de iconos/colores.
-- Leaflet: estilos por tipo de vía; cierres; nodos por zona; ocupación/capacidad de refugios; tipo/estado de zombies; hordas y radio de corredores.
+- LiveMap: vías, zonas (rotuladas), cierres, refugios y entidades sobre el grafo real de Manta.
+- RoundControls: iniciar/pausar y cerrar/abrir segmentos en modo operador; la x-api-key vive solo en memoria del navegador.
+- MetricsPanel: ronda, vivos, mordidos, evacuados, turno, reloj, p95, timeouts, rutas inválidas y disponibilidad (usa `routeAvailabilityPercent` del Backend cuando está presente; si no, lo aproxima localmente).
+- ShelterOccupancy: barras de ocupación/capacidad por refugio, independiente de si ya llegó un snapshot.
+- ConnectionStatus y EntityLegend: estado de conexión (con `aria-live`) y explicación de iconos/colores; la leyenda es colapsable y recuerda la preferencia en `localStorage`.
+- Leaflet: estilos por tipo de vía; cierres; rótulos de zona; ocupación/capacidad de refugios; tipo/estado de zombies; hordas y radio de corredores. El mapa encuadra automáticamente la extensión real del grafo (`bounds`), no un centro/zoom fijos.
 
 ## Límites de seguridad y consistencia
 
