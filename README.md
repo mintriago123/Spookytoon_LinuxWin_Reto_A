@@ -4,7 +4,7 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 
 ## Estado
 
-El backend incluye grafo peatonal, motor Base de rutas, simulador, telemetría y publicación HTTP/WebSocket. Usa snapshots en RAM y autenticación `x-api-key` en routing y controles. El equipo confirmó en EC2 el despliegue público y la tabla DynamoDB indicados debajo. Esta rama incluye persistencia DynamoDB asíncrona, recuperación pausada, workers reales de precompute y readiness independiente de una partida. La verificación en AWS de este código requiere desplegarlo; su implementación local no acredita escrituras en la cuenta.
+El backend incluye grafo peatonal, motor Base de rutas, simulador, telemetría y publicación HTTP/WebSocket. Usa snapshots en RAM y autenticación `x-api-key` en routing y controles. El equipo confirmó en EC2 el despliegue público y la tabla DynamoDB indicados debajo. Esta rama incluye persistencia DynamoDB asíncrona, recuperación pausada, workers reales de precompute y readiness independiente de una partida. La release `a09f235` se desplegó y verificó en EC2 con persistencia real. El ciclo final completó 150 turnos por ronda, con máximos p95 de 26,4 / 50,1 / 89,3 ms y disponibilidad del 100 %. R2 registró un cierre tardío y una pausa/reanudación; el criterio de cero deadline misses sigue pendiente. [Evidencia completa](docs/evidence/integracion-2026-10-28/README.md).
 
 ## Despliegue confirmado en EC2
 

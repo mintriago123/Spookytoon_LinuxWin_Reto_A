@@ -1,0 +1,15 @@
+{
+  "frontendCommit": "6afb9a1",
+  "backendCommit": "a09f235",
+  "frontendOrigin": "http://127.0.0.1:5173",
+  "api": "https://3-128-78-190.sslip.io",
+  "webSocket": "wss://3-128-78-190.sslip.io/ws",
+  "cors": "http://127.0.0.1:5173",
+  "roundId": 1,
+  "turnId": 110,
+  "graphVersion": "manta-osm-2026-10-13-d70af9643354ddac",
+  "p95Ms": 18.8,
+  "availability": 100,
+  "browserErrors": [],
+  "assets": "temporary build served by Vite preview; no interception or frontend deployment"
+}

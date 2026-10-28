@@ -30,3 +30,26 @@ Estado revisado contra `EZMayk` en `05d6145`. Marcar una puerta como completada 
 - Integración y verificación de `.gitattributes` para evitar divergencia LF/CRLF y checksum en Windows.
 - Región, límite de Budget y contacto de alertas AWS.
 - Estado/URL del frontend integrado, dominio de API y responsable de la aprobación final del escenario.
+
+
+## Actualización de integración — 28 de octubre de 2026
+
+La [evidencia de integración](evidence/integracion-2026-10-28/README.md) actualiza
+las observaciones históricas de la tabla anterior:
+
+- Michael: persistencia DynamoDB real, recuperación pausada, workers de precompute,
+  readiness previo a partida y OpenAPI implementados. Release `a09f235` desplegada
+  por PM2/Node 24.22.0 en EC2 Ohio, un escritor online y sin reinicios durante el
+  ciclo final. Caddy HTTPS/WSS operativo. Artefactos de CloudWatch versionados;
+  Agent/alarmas no se instalaron durante esta aceptación.
+- Maykel: rama integrada hasta `3972b8f`; fixtures adaptados al cálculo/publicación
+  por ventanas absolutas. Suite de raíz 172/172 y backend 32/32, ambos typechecks
+  aprobados. Tres rondas reales de 150 turnos completadas, eventos en vivo y
+  manifiestos finales confirmados en DynamoDB.
+- Kristhian: `origin/design@6afb9a1` probado en copia temporal: 11 tests, typecheck,
+  build y Chromium con backend local/EC2; CORS y WSS reales. No se fusionó ni
+  modificó frontend y no se publicó su build en EC2.
+- SLA de rutas final: máximos p95 R1/R2/R3 26,4 / 50,1 / 89,3 ms, disponibilidad
+  100 %. La regularidad estricta de cierre no queda certificada: un deadline miss
+  en R2 turno 138, con pausa/reanudación conservada en la evidencia. No se relajó
+  la tolerancia de 10 ms ni se descartaron muestras.

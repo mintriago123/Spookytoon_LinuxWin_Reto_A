@@ -1,0 +1,9 @@
+{
+  "gameId": "ec2-recovery-mvrr2ppc",
+  "turnId": 2,
+  "worldVersion": 2,
+  "status": "paused",
+  "survivorsEqual": true,
+  "sheltersEqual": true,
+  "recoveredFromDynamoDb": true
+}
