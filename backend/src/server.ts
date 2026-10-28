@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import Fastify from "fastify";
+import Fastify, { LogController, type FastifyServerOptions } from "fastify";
 import { loadGraph } from "./modules/graph/load-graph.ts";
 import { RouteEngine } from "./modules/routing/route-engine.ts";
 import { RoutingWorkerPool } from "./modules/routing/worker-pool.ts";
@@ -23,7 +23,8 @@ export interface BackendOptions {
   apiKey?: string;
   simulator?: ScenarioOptions;
   frontendOrigin?: string;
-  logger?: boolean;
+  logger?: FastifyServerOptions["logger"];
+  requestLogging?: boolean;
   persistence?: PersistenceAdapter;
   workerCount?: number;
   snapshotQueueLimit?: number;
@@ -51,7 +52,19 @@ export async function createBackendApp(options: BackendOptions = {}) {
   const workers = new RoutingWorkerPool(graph, { size: options.workerCount ?? Number(process.env.ROUTING_WORKERS ?? 1) });
   const persistence = options.persistence ?? createPersistenceAdapter();
   const engine = new RouteEngine(graph, { workerCount: workers.size });
-  const app = Fastify({ bodyLimit: 1_048_576, logger: options.logger ?? true });
+  const detailedRequests = options.requestLogging ?? process.env.LOG_HTTP_REQUESTS === "true";
+  const app = Fastify({ bodyLimit: 1_048_576, logger: options.logger ?? true, logController: new LogController({ disableRequestLogging: !detailedRequests }) });
+  // En producción se conservan controles, errores y lentitud; los agregados se
+  // publican periódicamente sin dos escrituras de log por cada /paso exitoso.
+  if (!detailedRequests) app.addHook("onResponse", async (request, reply) => {
+    if (reply.statusCode < 400 && reply.elapsedTime < 150 && !request.url.startsWith("/simulador/")) return;
+    const body = request.body && typeof request.body === "object" ? request.body as Record<string, unknown> : {};
+    app.log.info({ event: "http-response", requestId: request.id, path: request.routeOptions.url,
+      gameId: typeof body.gameId === "string" ? body.gameId : undefined,
+      turnId: typeof body.turnId === "number" ? body.turnId : undefined,
+      worldVersion: typeof body.worldVersion === "number" ? body.worldVersion : undefined,
+      statusCode: reply.statusCode, durationMs: reply.elapsedTime });
+  });
   const origins = frontendOrigins(options.frontendOrigin ?? process.env.FRONTEND_ORIGIN);
   app.addHook("onRequest", async (request, reply) => {
     const origin = request.headers.origin;

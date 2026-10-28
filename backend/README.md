@@ -120,3 +120,13 @@ la alineación de sus ventanas con la rama de Maykel se conserva como trabajo de
 y [costos Ohio](../docs/costos.md) describen despliegue y verificación. Los tests de
 persistencia usan un transporte inyectado, sin AWS. No son evidencia de escritura
 real en la tabla de producción ni de 150 turnos en EC2.
+
+### Logs y latencia
+
+Por defecto el servidor registra controles, respuestas con error o lentitud y
+métricas agregadas; `LOG_HTTP_REQUESTS=true` habilita trazas de todas las
+peticiones solo para diagnóstico. Se evita enviar dos JSON por cada `/paso`
+exitoso a PM2, manteniendo requestId/gameId/turnId/worldVersion en los eventos
+relevantes y excluyendo API key, seed y snapshots. El experimento aislado en
+`tests/fixtures/request-logging-experiment.ts` alterna ambos modos con R3 y
+persistencia en memoria para medir el efecto sin tocar producción.

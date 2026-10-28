@@ -19,7 +19,7 @@ module.exports = {
     env: {
       NODE_ENV: 'production', PORT: '3001', HOST: '127.0.0.1',
       AWS_REGION: 'us-east-2', AWS_AVAILABILITY_ZONE: 'us-east-2a',
-      DYNAMODB_TABLE_NAME: 'spookython-manta-state', ROUTING_WORKERS: '1',
+      DYNAMODB_TABLE_NAME: 'spookython-manta-state', ROUTING_WORKERS: '1', LOG_HTTP_REQUESTS: 'false',
       FRONTEND_ORIGIN: 'https://3-128-78-190.sslip.io',
     },
   }],
