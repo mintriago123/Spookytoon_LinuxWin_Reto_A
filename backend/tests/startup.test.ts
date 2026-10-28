@@ -16,11 +16,22 @@ test("entrada importada por un supervisor inicia HTTP y cierra con SIGTERM", { t
   const exited = once(child, "exit");
   try {
     await new Promise<void>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("El supervisor no abrió HTTP")), 8_000);
-      child.stdout!.on("data", data => { output += data; if (output.includes('"event":"backend-ready"')) { clearTimeout(timer); resolve(); } });
-      child.once("exit", () => { clearTimeout(timer); reject(new Error("El proceso terminó antes de readiness")); });
+      const timer = setTimeout(() => reject(new Error(`El supervisor no instaló el manejador SIGTERM: ${output}`)), 8_000);
+      child.stdout!.on("data", data => { output += data; if (output.includes('"event":"shutdown-handlers-installed"')) { clearTimeout(timer); resolve(); } });
+      child.once("exit", () => { clearTimeout(timer); reject(new Error(`El proceso terminó antes de instalar el manejador: ${output}`)); });
     });
-    assert.equal((await fetch(`http://127.0.0.1:${address.port}/health/ready`)).status, 200);
+    await new Promise<void>((resolve, reject) => {
+      const deadline = Date.now() + 8_000;
+      const poll = async () => {
+        try {
+          const response = await fetch(`http://127.0.0.1:${address.port}/health/ready`);
+          if (response.status === 200) { resolve(); return; }
+        } catch { /* El servidor todavía está iniciando. */ }
+        if (Date.now() >= deadline) { reject(new Error("El supervisor no abrió HTTP después de instalar el manejador")); return; }
+        setTimeout(poll, 25);
+      };
+      void poll();
+    });
   } finally { child.kill("SIGTERM"); }
   assert.equal((await exited)[0], 0);
 });
