@@ -24,7 +24,7 @@ Dueño de la aplicación React/Vite/TypeScript, mapa Leaflet, estado del cliente
 ## Componentes y capas
 
 - LiveMap: vías, zonas (rotuladas), cierres, refugios y entidades sobre el grafo real de Manta.
-- RoundControls: iniciar/pausar y cerrar/abrir segmentos en modo operador; la x-api-key vive solo en memoria del navegador.
+- RoundControls: iniciar/pausar y cerrar/abrir segmentos en modo operador; login por contraseña contra POST /operador/sesion, que fija una cookie httpOnly — el navegador nunca ve ni guarda la x-api-key real (SPEC.md §3.3/§6).
 - MetricsPanel: ronda, vivos, mordidos, evacuados, turno, reloj, p95, timeouts, rutas inválidas y disponibilidad (usa `routeAvailabilityPercent` del Backend cuando está presente; si no, lo aproxima localmente).
 - ShelterOccupancy: barras de ocupación/capacidad por refugio, independiente de si ya llegó un snapshot.
 - ConnectionStatus y EntityLegend: estado de conexión (con `aria-live`) y explicación de iconos/colores; la leyenda es colapsable y recuerda la preferencia en `localStorage`.
@@ -33,7 +33,7 @@ Dueño de la aplicación React/Vite/TypeScript, mapa Leaflet, estado del cliente
 ## Límites de seguridad y consistencia
 
 - No decidir rutas, mordidas ni evacuaciones en el cliente.
-- No incluir ni almacenar x-api-key en el bundle. Los controles usan el mecanismo operador/proxy configurado por Backend.
+- No incluir ni almacenar x-api-key en el bundle. Los controles usan el mecanismo operador/proxy configurado por Backend: login con contraseña + cookie httpOnly de sesión (POST /operador/sesion), `credentials: "include"` en cada llamada.
 - Rechazar snapshots de graphVersion diferente; nunca dibujar entidades sobre un grafo incompatible.
 - Ignorar eventos repetidos o atrasados. El cliente lento se recupera desde /estado.
 

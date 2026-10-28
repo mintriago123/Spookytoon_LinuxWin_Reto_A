@@ -421,7 +421,12 @@ Decision mover|esperar. Para esperar: toNodeId=fromNodeId, edgeId=null, routeCos
 
 ### 3.3 Otros endpoints
 
-POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check local de EC2.
+POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check local de EC2. Los controles de /simulador/* también aceptan, en lugar de x-api-key, una cookie httpOnly de sesión de operador obtenida vía POST /operador/sesion (ver más abajo); el Frontend nunca ve ni almacena la x-api-key real.
+
+- POST /operador/sesion: público (sin x-api-key); request {password}. Si coincide con OPERATOR_PASSWORD (o, a falta de ella, con ROUTE_API_KEY) responde 204 y fija una cookie httpOnly `spookython_operator` — `Secure; SameSite=None` si la conexión pública es https, `SameSite=Lax` en HTTP local. Contraseña incorrecta da 401. GET en la misma ruta exige x-api-key o cookie vigente y responde 204/401 sin ejecutar ningún control (lo usa el Frontend para saber si ya hay sesión al montar).
+- POST /operador/salir: público; revoca la cookie de sesión si existe y responde 204 siempre (idempotente).
+
+
 
 - GET /estado: 200 WorldSnapshot del último estado completo comprometido, Cache-Control no-store. Antes de crear la primera partida responde 503 con error.code=GAME_NOT_STARTED; no inventa gameId, roundId ni entidades. Una partida creada tiene snapshot inicial en turno 0. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases. Los controles comprometidos de inicio, pausa entre ticks y reanudación actualizan status sin avanzar turnId/worldVersion.
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
@@ -1764,7 +1769,7 @@ La actualización de GET /estado y el encolado de TURN_UPDATE siguen al commit. 
 
 React + Vite + TypeScript + Tailwind + Leaflet/React-Leaflet. El Frontend no decide movimientos ni muertes. Carga grafo estático y TURN_UPDATE; ante reconexión pide GET /estado.
 
-Componentes: LiveMap, RoundControls, MetricsPanel, ConnectionStatus y EntityLegend. RoundControls solo para operador autenticado; API key nunca en el bundle. Métricas: vivos, mordidos, evacuados, zombies, turno n/150, reloj, p95, timeouts y rutas inválidas.
+Componentes: LiveMap, RoundControls, MetricsPanel, ConnectionStatus y EntityLegend. RoundControls solo para operador autenticado; API key nunca en el bundle, ni siquiera pegada en memoria por el operador: el login es una contraseña corta contra POST /operador/sesion (§3.3), que fija una cookie httpOnly; todas las llamadas de control van con `credentials: "include"` y sin header x-api-key. Métricas: vivos, mordidos, evacuados, zombies, turno n/150, reloj, p95, timeouts y rutas inválidas.
 
 Capas Leaflet: vías por tipo; cierres rojos discontinuos; nodos por zona; refugio con ocupación/capacidad; sobrevivientes por estado; zombies por tipo; hordas con nodo+vecinos bloqueados; corredores con radio de dos saltos; dormidos atenuados. No dibujar geometrías ausentes del grafo.
 
@@ -1779,7 +1784,7 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 1. **Extracción y grafo:** 250–350 nodos, cuatro zonas, cuatro refugios con capacidad positiva, IDs únicos, arcos dirigidos/factores/referencias válidos, atribución, graphVersion y hash compartido.
 2. **Estado/sincronización:** carga y validación antes de readiness; instalar versión atómica en workers; sync idéntico idempotente, versión obsoleta/conflicto 409; estado parcial nunca público.
 3. **POST /paso y plan Base:** precomputar por worldVersion el Dijkstra inverso del plan general y los planes por refugio con reservas (reservedPlans), conforme a §4.2; no ejecutar Dijkstra por sobreviviente. Tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: respetar la disponibilidad general descontando reservas y mantener rutas para sus titulares; jamás devolver edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
-4. **API/OpenAPI/controles:** rutas y contratos alineados; x-api-key exigida en motor/controles; dos inicios concurrentes no aceptados; pausar cierra turno; cierre afecta ambos sentidos del segmento.
+4. **API/OpenAPI/controles:** rutas y contratos alineados; x-api-key exigida en motor/controles (o cookie de sesión de operador equivalente en /simulador/*, vía /operador/sesion); dos inicios concurrentes no aceptados; pausar cierra turno; cierre afecta ambos sentidos del segmento.
 5. **AWS/persistencia/telemetría:** EC2/Caddy, PM2 o Docker, DynamoDB On-Demand, IAM Role y CloudWatch en la región seleccionada mediante AWS_REGION. Aceptación: región confirmada antes del despliegue; una tarea autoritativa; snapshot por turno asíncrono; reinicio restaura pausado; alertas p95/timeout/cola/health; secretos fuera del frontend/logs.
 6. **Costos/operación:** documentar sizing medido, retención, alarmas y rollback; estimación vía AWS Pricing Calculator antes del evento.
 
@@ -1797,7 +1802,7 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 2. **Mapa:** vías, zonas, cierres, refugios, sobrevivientes, zombies, hordas y corredor; leyenda para todo tipo/estado.
 3. **WS/store:** TURN_UPDATE, reconciliación GET /estado, descartar duplicados/obsoletos; reconexión recupera turno actual.
 4. **Interpolación/telemetría:** 1.800 ms visual, sin cambiar estado lógico; métricas coinciden con snapshot.
-5. **Controles/responsive:** iniciar/pausar sin secretos en bundle; errores visibles; interfaz usable en móvil y escritorio.
+5. **Controles/responsive:** iniciar/pausar vía sesión de operador (login + cookie httpOnly), nunca con la x-api-key en el bundle ni en memoria del navegador; errores visibles; interfaz usable en móvil y escritorio.
 
 ### Aceptación integrada
 

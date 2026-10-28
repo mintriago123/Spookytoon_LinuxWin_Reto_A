@@ -20,13 +20,22 @@ test("CORS permite HTTP autenticado local/producción y rechaza orígenes no con
       assert.equal(response.headers["access-control-allow-origin"], origin);
       assert.match(String(response.headers["access-control-allow-headers"]), /x-api-key/i);
       assert.match(String(response.headers["access-control-allow-methods"]), /POST/);
+      // Origen explícitamente configurado: la cookie de sesión de operador
+      // puede viajar con credentials:"include".
+      assert.equal(response.headers["access-control-allow-credentials"], "true");
     }
     assert.equal((await app.inject({ method: "GET", url: "/estado", headers: { origin: "https://unknown.example" } })).statusCode, 403);
     assert.equal((await app.inject({ method: "POST", url: "/simulador/iniciar", payload: {} })).statusCode, 401);
   } finally { await app.close(); }
   const open = await createBackendApp({ apiKey, logger: false, frontendOrigin: "*" });
   try {
-    assert.equal((await open.app.inject({ method: "OPTIONS", url: "/simulador/iniciar", headers: { origin: "https://other.example" } })).statusCode, 204);
+    const wildcard = await open.app.inject({ method: "OPTIONS", url: "/simulador/iniciar", headers: { origin: "https://other.example" } });
+    assert.equal(wildcard.statusCode, 204);
+    // FRONTEND_ORIGIN=* nunca debe habilitar Allow-Credentials: con cookie +
+    // CORS abierto, cualquier sitio podría disparar un control autenticado
+    // con la sesión de operador de otra pestaña (CSRF). x-api-key sigue
+    // funcionando igual porque no depende de credentials/cookies.
+    assert.equal(wildcard.headers["access-control-allow-credentials"], undefined);
   } finally { await open.app.close(); }
 });
 
