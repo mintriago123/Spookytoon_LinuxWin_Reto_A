@@ -60,5 +60,10 @@
       "dynamoDbTurn150": true
     }
   ],
-  "billingVerified": false
+  "billingVerified": false,
+  "deployedCommit": "5452411806496a97f76cc97d6ee1ce033ef926e2",
+  "recoveryVerified": true,
+  "resumeAfterRecoveryVerified": true,
+  "browserReconnectionVerified": true,
+  "runtimeEquivalentToAcceptance": true
 }

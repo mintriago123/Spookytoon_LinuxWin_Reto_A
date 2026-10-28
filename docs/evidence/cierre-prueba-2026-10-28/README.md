@@ -54,3 +54,33 @@ por una identidad de facturación. No se ampliaron permisos del role en esta ent
 
 La documentación operativa contiene los comandos de despliegue, rollback y
 consultas financieras. No se incluyen claves AWS ni la API key en estos artefactos.
+
+## Verificación final de la release 5452411
+
+Frontend y backend activos en `5452411806496a97f76cc97d6ee1ce033ef926e2`.
+El nuevo despliegue repitió las 38 pruebas backend en EC2 antes del corte.
+Los árboles de frontend, backend/src, backend/data y dependencias son idénticos
+a la fuente `ef8cf79` de las tres rondas completas. El cambio de infraestructura
+valida también Node 24 en rollback antes de detener el proceso.
+
+`close-runtime.json` demuestra una nueva partida real: pausa en turno 4,
+reinicio PM2, restauración desde DynamoDB y reanudación hasta turno 6; los
+sobrevivientes, refugios y cámaras se conservaron. El proceso único quedó online
+con 174.399.488 bytes RSS (aproximadamente 166,3 MiB) y las cuatro alarmas en OK.
+El reinicio registrado fue deliberado para probar recuperación.
+
+El navegador comprobó dos conexiones WebSocket reales y recuperación por HTTP,
+sin errores ni requests fallidos, en escritorio y móvil. Para esta prueba se
+cerró el WebSocket del propio cliente; no se falsificaron respuestas ni se
+interceptó el backend. `browser-final.json` y las capturas finales documentan
+el resultado. Un primer intento de navegación expiró esperando `networkidle`
+durante el reinicio; se conserva en `browser-incident.json`. Se verificó después
+la disponibilidad del mapa y la reconexión explícitamente, sin depender del
+reposo de recursos externos.
+
+La demo final queda pausada en Ronda 1, turno 6. Para reanudar con la API key
+del operador (no incluida en el repositorio): gameId `demo-cierre-5452411`,
+ronda 1 y seed `demo-manta-2026`.
+
+`inventory.json` contiene metadatos IMDS y tamaños agregados de DynamoDB/logs.
+Es inventario técnico, no facturación conciliada.

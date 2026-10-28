@@ -5,12 +5,13 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 ## Estado
 
 Frontend y backend están publicados en **https://3-128-78-190.sslip.io**.
-La release integrada `ef8cf79` incluye cámaras simuladas, persistencia DynamoDB,
+La release desplegada `5452411` incluye cámaras simuladas, persistencia DynamoDB,
 recuperación pausada, workers y despliegue/rollback conjunto con artefactos
 verificados. La evidencia vigente está en
 [cierre-prueba-2026-10-28](docs/evidence/cierre-prueba-2026-10-28/README.md).
 La aceptación anterior de `a09f235` se conserva como histórica y no sustituye
-las mediciones del cierre integrado.
+las mediciones del cierre integrado, realizadas sobre `ef8cf79` con el mismo código
+de backend/frontend que la release final.
 El cierre completó las tres rondas de 150 turnos: p95 máximo 37,2 / 50,3 / 85 ms,
 disponibilidad 100 % y cero deadline misses. HTTP/WS coincidieron en 453 snapshots
 y DynamoDB confirmó los turnos finales.
