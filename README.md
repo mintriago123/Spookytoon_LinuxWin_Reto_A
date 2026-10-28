@@ -6,6 +6,18 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 
 El backend incluye grafo peatonal, motor Base de rutas, simulador, telemetría, publicación HTTP/WebSocket, persistencia DynamoDB asíncrona, recuperación pausada y workers de precompute. La release `a09f235` se desplegó y verificó en EC2 con persistencia real y tres rondas de 150 turnos. Sus máximos p95 fueron 26,4 / 50,1 / 89,3 ms y la disponibilidad fue del 100 %; R2 registró un cierre tardío y un deadline miss, por lo que el criterio de cero incumplimientos sigue pendiente. La evidencia está en [integracion-2026-10-28](docs/evidence/integracion-2026-10-28/README.md). Los cambios posteriores incluidos en esta rama, entre ellos las detecciones simuladas de Ojos de Águila, aún requieren despliegue para validarse en AWS.
 
+| Área | Estado |
+|---|---|
+| Grafo de Manta | Publicado y validado: 300 nodos, 736 aristas, un SCC, cuatro refugios alcanzables desde todo nodo. Mismo `graphVersion`/SHA-256 en `backend/data/` y `frontend/public/data/`. |
+| Motor de rutas (graph/routing) | Implementado: Dijkstra inverso por `worldVersion`, `bestMoveByNode` O(1), `x-api-key`, fallback al nodo actual. |
+| Simulador (game loop) | Integrado de punta a punta: `city-events → zombie-move → sync → routing → survivor-move → resolve → publish`, 150 turnos serializados, pausa/reanudación, cierres de segmento. |
+| Realtime | `GET /estado` y `WSS /ws` publican el mismo snapshot tras cada commit. |
+| Ojos de Águila | Rebanada simulada implementada: detecciones temporales de zombies activos modifican rutas y se muestran en el mapa. Ubicaciones y coberturas son aproximadas; sin video ni conexión real. No desplegada. |
+| Rondas reales (R1/R2/R3) y telemetría | Integradas desde `feat/backend-rounds-metrics`; las pruebas de backend se ejecutan en esta rama combinada. |
+| Persistencia (DynamoDB) | Adaptador, cola asíncrona y recuperación pausada implementados. La release `a09f235` fue verificada con persistencia real en EC2; consultar la evidencia para distinguir esa versión de los cambios posteriores de esta rama. |
+| Frontend | Scaffold completo Vite + React + TypeScript + Tailwind + Leaflet: mapa en vivo, métricas, ocupación de refugios, controles de operador, leyenda colapsable, reconexión WS con backoff. 11/11 tests. |
+| AWS | El equipo reporta EC2 en Ohio, DynamoDB y CloudWatch/SNS operativos. La release backend `a09f235` tiene evidencia de despliegue; los cambios posteriores de `design`, incluido Ojos de Águila, no se han desplegado. La integración final reporta p95 máximos de 26,4 / 50,1 / 89,3 ms; R2 registró un deadline miss, por lo que el criterio conjunto de cero misses no se cumple. [Evidencia de integración](docs/evidence/integracion-2026-10-28/README.md) y [CloudWatch](docs/evidence/cloudwatch-2026-10-28/README.md). |
+
 ## Despliegue confirmado en EC2
 
 Configuración comunicada por el equipo el 28 de octubre de 2026. La SCP de la organización permite operar en Ohio.
