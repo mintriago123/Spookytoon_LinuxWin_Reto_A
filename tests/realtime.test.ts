@@ -19,6 +19,9 @@ import { RouteEngine } from "../backend/src/modules/routing/route-engine.ts";
 const isoNow = () => "2026-10-27T00:00:00Z";
 const start = { gameId: "realtime-fixture", roundId: 1 as const, seed: "private-seed" };
 const apiKey = "fixture-realtime-key";
+const publicMetricKeys = ["routeSamples", "routeLatencyP50Ms", "routeLatencyP95Ms", "routeLatencyP99Ms",
+  "routeTimeouts", "invalidRouteResponses", "deadlineMisses", "activeSurvivors", "bittenSurvivors",
+  "evacuatedSurvivors", "activeZombies", "wsClients", "snapshotQueueDepth", "lastSnapshotTurnId"] as const;
 class ManualClock implements SimulationClock {
   time = 0;
   private waiters = new Set<{ tick: number; finish: () => void }>();
@@ -101,17 +104,51 @@ test("proyección pública es cerrada, independiente e inmutable y no filtra dat
   const world = fixture().initial();
   Object.assign(world.survivors[0], { privateField: "do-not-leak" });
   Object.assign(world.metrics, { privateField: "do-not-leak" });
+  const internalMetrics = { routeErrors: 7, routeAvailabilityPercent: 91, survivalRatePercent: 85,
+    activeSurvivorsPercent: 60, bittenSurvivorsPercent: 15, evacuatedSurvivorsPercent: 25,
+    turnDurationMs: 100, turnBudgetUsedPercent: 5, turnEfficiencyPercent: 95 };
+  Object.assign(world.metrics, internalMetrics);
+  const metricsBefore = structuredClone(world.metrics);
   const snapshot = createWorldSnapshot(world);
   assert.deepEqual(Object.keys(snapshot).sort(), ["schemaVersion", "gameId", "roundId", "status", "turnId", "worldVersion",
     "graphVersion", "updatedAt", "zombies", "survivors", "shelters", "blockedEdges", "metrics"].sort());
   assert.equal(Object.keys(snapshot.metrics).length, 14);
+  assert.deepEqual(Object.keys(snapshot.metrics).sort(), [...publicMetricKeys].sort());
+  for (const key of publicMetricKeys) assert.equal(snapshot.metrics[key], metricsBefore[key]);
+  assert.deepEqual(world.metrics, metricsBefore, "Proyectar no modifica métricas internas");
+  for (const key of Object.keys(internalMetrics)) assert(!Object.hasOwn(snapshot.metrics, key));
   for (const field of ["privateField", "rngSeed", "randomState", "pendingCityEvents", "pause", "routing", "activeTurn", "graph"]) {
     assert(!JSON.stringify(snapshot).includes(`"${field}"`));
   }
   assert(!JSON.stringify(snapshot).includes(start.seed));
   world.survivors[0].nodeId = "B"; world.shelters[0].ocupantes.push("S-0");
+  world.metrics.activeSurvivors = 3;
+  assert.equal(snapshot.metrics.activeSurvivors, metricsBefore.activeSurvivors);
   assert.equal(snapshot.survivors[0].nodeId, "A"); assert.deepEqual(snapshot.shelters[0].ocupantes, []);
   assert(Object.isFrozen(snapshot)); assert(Object.isFrozen(snapshot.survivors[0]));
+  assert(Object.isFrozen(snapshot.metrics));
+  assert.throws(() => { (snapshot.metrics as TelemetryMetrics).activeSurvivors = 2; }, TypeError);
+});
+
+test("HTTP y WS publican las mismas 14 métricas del SPEC y conservan extras solo internamente", async () => {
+  const env = await application();
+  try {
+    const client = await connect(env.wsUrl);
+    env.runtime.start(start);
+    for (const turnId of [0, 1]) {
+      const update = await client.update(update => update.world.turnId === turnId);
+      const response = await env.app.inject({ method: "GET", url: "/estado" });
+      assert.equal(response.statusCode, 200);
+      assert.deepEqual(response.json(), update.world);
+      assert.deepEqual(Object.keys(update.world.metrics).sort(), [...publicMetricKeys].sort());
+      const internal = env.runtime.getCommittedWorld()!.metrics;
+      for (const key of publicMetricKeys) assert.equal(update.world.metrics[key], internal[key]);
+      assert(Object.hasOwn(internal, "turnDurationMs"));
+      assert(!Object.hasOwn(update.world.metrics, "turnDurationMs"));
+      assert(Object.isFrozen(env.runtime.getCommittedSnapshot()!.metrics));
+      if (turnId === 0) env.clock.advance(2_000);
+    }
+  } finally { await env.app.close(); }
 });
 
 test("antes de crear partida GET devuelve 503 no-store y WS conecta sin mundo inventado", async () => {
