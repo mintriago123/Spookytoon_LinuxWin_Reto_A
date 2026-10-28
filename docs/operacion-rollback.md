@@ -55,17 +55,31 @@ Retención: este cambio no borra datos. Conservar manifests y todas sus partes m
 
 Readiness local exige grafo validado con manifiesto/checksum, motor inicializado, todos los workers listos, adaptador listo y cola saludable; no requiere partida ni sync previa. Liveness indica que el proceso HTTP responde. Cada 30 s se emite JSON `event=backend-metrics`: gameId, turno, versión, p95 de rutas, timeouts, clientes WS, RSS, salud de workers y profundidad/edad/fallos de cola. Cada turno publica progreso de persistencia en el siguiente snapshot. Los logs de alarma no contienen snapshots ni claves API.
 
-Para enviar logs, instalar CloudWatch Agent, otorgarle permisos de escritura de logs (por ejemplo CloudWatchAgentServerPolicy, revisada para el entorno) y aplicar `infra/cloudwatch-agent.json` desde la instancia:
+Para enviar logs, instalar CloudWatch Agent y otorgarle permisos de escritura sobre el grupo del backend. La política mínima está en `infra/iam-policy-cloudwatch-agent.json` (renderizar la cuenta); la identidad de instalación debe crear previamente el grupo. Aplicar `infra/cloudwatch-agent.json` desde la instancia:
 
 ```bash
+sudo dnf install -y amazon-cloudwatch-agent
 sudo /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl \
   -a fetch-config -m ec2 -s -c file:infra/cloudwatch-agent.json
-# Con los grupos de logs creados por el agente:
+sudo systemctl enable amazon-cloudwatch-agent
+# El script prepara el grupo con retención de 14 días antes de los filtros:
 SNS_TOPIC_ARN=arn:aws:sns:us-east-2:CUENTA:TEMA bash infra/cloudwatch-alarms.sh
 aws logs tail /spookython/backend --follow --region us-east-2
 ```
 
-El script crea CPU >80% (dos periodos de 5 min), StatusCheckFailed ≥1 (dos de 60 s), p95 >150 ms y fallos de persistencia. Sin SNS crea alarmas sin notificación externa y lo indica. Los filtros de p95 son el máximo de percentiles de ventana ya calculados por el backend; no son un percentil CloudWatch sobre todas las peticiones. No se crearon alarmas ni tópicos desde esta sesión. Vigilar además CPUCreditBalance/CPUSurplusCreditsCharged, memoria, disco y logs de PM2/Caddy. Configurar rotación local (PM2 logrotate y política Caddy) para no llenar EBS. Retención CloudWatch: 14 días.
+El script crea CPU >80% (dos periodos de 5 min), StatusCheckFailed ≥1 (dos de 60 s), p95 >150 ms y fallos de persistencia. Sin SNS crea alarmas sin notificación externa y lo indica. Los filtros de p95 son el máximo de percentiles de ventana ya calculados por el backend; no son un percentil CloudWatch sobre todas las peticiones. Vigilar además CPUCreditBalance/CPUSurplusCreditsCharged, memoria, disco y logs de PM2/Caddy. Configurar rotación local (PM2 logrotate y política Caddy) para no llenar EBS. Retención CloudWatch: 14 días.
+
+Para configurar SNS de forma reproducible, usar una identidad con permisos de SNS y filtros de logs. El script conserva la política existente del tema, autoriza publicaciones solo desde las alarmas `spookython-*` de la cuenta/región y evita suscripciones duplicadas:
+
+```bash
+python3 infra/cloudwatch-notifications.py CORREO_DEL_OPERADOR
+```
+
+La suscripción requiere confirmación en el correo de AWS. `infra/iam-policy-cloudwatch-setup.json` contiene los permisos adicionales que faltaron al role real de EC2: `logs:PutMetricFilter`, lectura de filtros y lectura/edición de la política del tema del proyecto. Una identidad administradora debe adjuntarla antes de repetir la configuración; la instancia no puede modificar su propio role. No se requieren access keys.
+
+Activación del 28 de octubre de 2026: CloudWatch Agent `1.300071.0` instalado y habilitado por systemd, con logs del backend enviados a `/spookython/backend`. Se crearon las cuatro alarmas, los filtros p95/persistencia y el tema `spookython-alerts` en Ohio, con suscripción de correo confirmada y política de publicación restringida a las alarmas del proyecto. El administrador agregó los permisos tras el rechazo IAM inicial. Consultar [la evidencia](evidence/cloudwatch-2026-10-28/README.md) para las mediciones y el estado observado. El archivo del agente instalado en EC2 es `/opt/aws/amazon-cloudwatch-agent/etc/spookython.json`.
+
+La configuración activa recoge solo backend y errores de PM2. El access log de Caddy está dentro del contenedor y no tiene un bind mount al host; no se acredita su envío a CloudWatch. Para incorporarlo, preparar un volumen de logs en una ventana de despliegue y ampliar de forma explícita la configuración/permisos del agente.
 
 ## Rollback
 
@@ -117,8 +131,8 @@ docker exec caddy-proxy caddy reload --config /etc/caddy/Caddyfile --adapter cad
 No eliminar los volúmenes TLS. Los logs Caddy de este contenedor se consultan
 dentro de él; para que CloudWatch Agent del host recoja ese archivo hay que
 montar también el directorio de logs del host al crear el contenedor. Los logs
-de backend sí están en `/var/log/spookython/` del host. Este cambio no afirma
-haber instalado el Agent ni aplicado las alarmas en AWS.
+de backend sí están en `/var/log/spookython/` del host. El Agent y las alarmas
+se activaron después de la aceptación de rondas; ver la sección de monitoreo.
 
 Identidad AWS verificada: IAM Role `spookython-ec2-role`, región Ohio; sin llaves
 AWS en el código o archivo env generado. Se comprobó recuperación real desde

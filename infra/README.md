@@ -39,3 +39,11 @@ en AWS. Ver [operación y rollback](../docs/operacion-rollback.md),
 
 Los scripts de release extraen commits ya versionados: cambios locales sin commit
 no viajan al despliegue. No contienen credenciales y nunca crean un segundo escritor.
+
+CloudWatch se activó en la instancia el 28 de octubre: Agent para logs del
+backend con retención de 14 días, cuatro alarmas (CPU, salud EC2, p95 y
+persistencia), tema SNS y correo confirmado. Configuración reproducible:
+`python3 infra/cloudwatch-notifications.py CORREO_DEL_OPERADOR`.
+Los permisos adicionales de instalación están en
+`iam-policy-cloudwatch-setup.json`; no modifican IAM automáticamente.
+Ver [evidencia y métricas](../docs/evidence/cloudwatch-2026-10-28/README.md).

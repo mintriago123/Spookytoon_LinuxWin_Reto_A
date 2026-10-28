@@ -1,0 +1,22 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "ConfigureBackendMetricFiltersOhio",
+      "Effect": "Allow",
+      "Action": ["logs:PutMetricFilter", "logs:DescribeMetricFilters"],
+      "Resource": [
+        "arn:aws:logs:us-east-2:901454175123:log-group:/spookython/backend",
+        "arn:aws:logs:us-east-2:901454175123:log-group:/spookython/backend:*"
+      ],
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-2"}}
+    },
+    {
+      "Sid": "ConfigureAlarmTopicOhio",
+      "Effect": "Allow",
+      "Action": ["sns:GetTopicAttributes", "sns:SetTopicAttributes"],
+      "Resource": "arn:aws:sns:us-east-2:901454175123:spookython-alerts",
+      "Condition": {"StringEquals": {"aws:RequestedRegion": "us-east-2"}}
+    }
+  ]
+}
