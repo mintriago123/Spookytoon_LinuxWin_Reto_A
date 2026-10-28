@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
-import Fastify, { LogController, type FastifyServerOptions } from "fastify";
+import Fastify, { LogController, type FastifyInstance, type FastifyServerOptions } from "fastify";
 import { loadGraph } from "./modules/graph/load-graph.ts";
 import { RouteEngine } from "./modules/routing/route-engine.ts";
 import { RoutingWorkerPool } from "./modules/routing/worker-pool.ts";
@@ -187,12 +187,20 @@ function isMain() {
 
 /** Entrada explícita para supervisores que importan el módulo (p. ej. PM2). */
 export async function runBackendServer(): Promise<void> {
-  const { app } = await startBackendServer();
+  let app: FastifyInstance | undefined;
   let stopping = false;
   for (const signal of ["SIGINT", "SIGTERM"] as const) process.on(signal, () => {
     if (stopping) return; stopping = true;
+    if (!app) { process.exitCode = 0; return; }
     void app.close().then(() => { process.exitCode = 0; }, () => { process.exitCode = 1; });
   });
+  console.info(JSON.stringify({ event: "shutdown-handlers-installed", signals: ["SIGINT", "SIGTERM"] }));
+  const backend = await startBackendServer();
+  app = backend.app;
+  if (stopping) {
+    await app.close();
+    process.exitCode = 0;
+  }
 }
 if (isMain()) runBackendServer().catch(error => {
   console.error(error instanceof Error ? error.message : error);
