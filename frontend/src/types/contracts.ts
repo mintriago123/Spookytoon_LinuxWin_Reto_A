@@ -176,6 +176,12 @@ export interface IniciarResponse {
   nextTurnId: number;
 }
 
+export interface ReanudarRequest {
+  gameId: string;
+  roundId: 1 | 2 | 3;
+  seed?: string;
+}
+
 export interface PausarRequest {
   reason: string;
 }

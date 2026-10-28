@@ -346,7 +346,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IniciarRequest'
+              $ref: '#/components/schemas/ReanudarRequest'
       responses:
         '202':
           description: Ronda aceptada
@@ -372,7 +372,7 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-      description: Misma identidad gameId/roundId/seed de una partida pausada.
+      description: Reanuda gameId y roundId actuales; seed opcional, conservada por el servidor si se omite.
   /simulador/reiniciar:
     post:
       operationId: reiniciarSimulador
@@ -578,6 +578,14 @@ components:
           type: string
           minLength: 1
           maxLength: 256
+    ReanudarRequest:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId]
+      properties:
+        gameId: { type: string, minLength: 1, maxLength: 128 }
+        roundId: { enum: [1, 2, 3] }
+        seed: { type: string, minLength: 1, maxLength: 256 }
     PausarRequest:
       type: object
       additionalProperties: false

@@ -4,7 +4,7 @@
 	handle @internal {
 		respond 404
 	}
-	@api path /estado /ws /simulador/*
+	@api path /estado /ws /simulador/* /operador/*
 	handle @api {
 		reverse_proxy localhost:3001
 	}

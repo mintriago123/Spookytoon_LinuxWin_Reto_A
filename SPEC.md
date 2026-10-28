@@ -430,7 +430,7 @@ POST /paso, sincronización y controles requieren x-api-key; GET /estado y healt
 
 - GET /estado: 200 WorldSnapshot del último estado completo comprometido, Cache-Control no-store. Antes de crear la primera partida responde 503 con error.code=GAME_NOT_STARTED; no inventa gameId, roundId ni entidades. Una partida creada tiene snapshot inicial en turno 0. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases. Los controles comprometidos de inicio, pausa entre ticks y reanudación actualizan status sin avanzar turnId/worldVersion.
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
-- POST /simulador/reanudar: alias explícito de inicio para una partida pausada; request y respuesta iguales a iniciar. Exige el mismo gameId, roundId y seed; sin partida pausada responde 409.
+- POST /simulador/reanudar: request {gameId, roundId, seed?}; respuesta igual a iniciar. Exige el mismo gameId y roundId. Si seed se omite, el servidor conserva la semilla de la partida pausada; si se proporciona, debe coincidir. No reinicia entidades, RNG ni turno. Sin partida pausada o con identidad incompatible responde 409.
 - POST /simulador/reiniciar: request y respuesta iguales a iniciar. Solo desde paused/completed y con gameId nuevo; rechaza running con 409. Conserva el historial persistido de la partida anterior y crea turno 0 para la nueva.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
@@ -735,7 +735,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/IniciarRequest'
+              $ref: '#/components/schemas/ReanudarRequest'
       responses:
         '202':
           description: Ronda aceptada
@@ -761,7 +761,7 @@ paths:
           $ref: '#/components/responses/Error'
         '500':
           $ref: '#/components/responses/Error'
-      description: Misma identidad gameId/roundId/seed de una partida pausada.
+      description: Reanuda gameId y roundId actuales; seed opcional, conservada por el servidor si se omite.
   /simulador/reiniciar:
     post:
       operationId: reiniciarSimulador
@@ -957,6 +957,14 @@ components:
         nextTurnId:
           type: integer
           minimum: 1
+    ReanudarRequest:
+      type: object
+      additionalProperties: false
+      required: [gameId, roundId]
+      properties:
+        gameId: { type: string, minLength: 1, maxLength: 128 }
+        roundId: { enum: [1, 2, 3] }
+        seed: { type: string, minLength: 1, maxLength: 256 }
     PausarRequest:
       type: object
       additionalProperties: false
