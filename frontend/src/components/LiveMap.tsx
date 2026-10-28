@@ -3,6 +3,7 @@ import {
   Circle,
   MapContainer,
   Marker,
+  Pane,
   Polyline,
   Popup,
   TileLayer,
@@ -249,31 +250,45 @@ export function LiveMap() {
         );
       })}
 
-      {/* Cierres: segmento completo en rojo discontinuo */}
-      {snapshot?.blockedEdges
-        .filter((blocked) => blocked.desbloqueadaEnTurno === null)
-        .map((blocked) =>
-          blocked.edgeIds.map((edgeId) => {
-            const edge = edgeById.get(edgeId);
-            if (!edge) return null;
-            const from = nodeIndex.get(edge.origen);
-            const to = nodeIndex.get(edge.destino);
-            if (!from || !to) return null;
-            return (
-              <Polyline
-                key={`blocked-${edgeId}`}
-                positions={[from, to]}
-                pathOptions={{
-                  color: "#ff5a5a",
-                  weight: 4,
-                  dashArray: "6 6",
-                }}
-              >
-                <Popup>{blocked.motivo}</Popup>
-              </Polyline>
-            );
-          }),
-        )}
+      {/* Los cierres quedan sobre vías y círculos de riesgo, debajo de los marcadores. */}
+      <Pane name="segment-closures" style={{ zIndex: 450 }}>
+        {snapshot?.blockedEdges
+          .filter((blocked) => blocked.desbloqueadaEnTurno === null)
+          .map((blocked) =>
+            blocked.edgeIds.map((edgeId) => {
+              const edge = edgeById.get(edgeId);
+              if (!edge) return null;
+              const from = nodeIndex.get(edge.origen);
+              const to = nodeIndex.get(edge.destino);
+              if (!from || !to) return null;
+              return (
+                <Fragment key={`blocked-${edgeId}`}>
+                  <Polyline
+                    positions={[from, to]}
+                    interactive={false}
+                    pathOptions={{ color: "#06100a", weight: 10, opacity: 1 }}
+                  />
+                  <Polyline
+                    positions={[from, to]}
+                    pathOptions={{
+                      color: "#ff5a5a",
+                      weight: 6,
+                      opacity: 1,
+                      dashArray: "8 6",
+                    }}
+                  >
+                    <Tooltip sticky>Segmento cerrado · {blocked.segmentoId}</Tooltip>
+                    <Popup>
+                      <strong>Segmento cerrado</strong><br />
+                      {blocked.segmentoId}<br />
+                      {blocked.motivo}
+                    </Popup>
+                  </Polyline>
+                </Fragment>
+              );
+            }),
+          )}
+      </Pane>
 
       {/* Refugios con ocupación/capacidad */}
       {graph.refugios.map((refugio) => {
