@@ -14,9 +14,6 @@ import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld"
 import { ZOMBIE_COLOR, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
 import type { GraphEdge, GraphNode, RoadType, Zone } from "../types/contracts";
 
-// Centro aproximado de Manta; solo se usa si todavía no hay grafo cargado.
-const FALLBACK_CENTER: LatLngTuple = [-0.9677, -80.7089];
-
 const ROAD_COLOR: Record<RoadType, string> = {
   avenida: "#9aa8c0",
   calle: "#6b7683",
@@ -30,6 +27,31 @@ function buildNodeIndex(
   const index = new Map<string, LatLngTuple>();
   for (const n of nodos) index.set(n.id, [n.lat, n.lng]);
   return index;
+}
+
+/**
+ * Caja que encierra todos los nodos del grafo. Se usa para encuadrar el
+ * mapa a su extensión real en vez de centrar en graph.nodos[0] (arbitrario,
+ * puede quedar en un borde) con un zoom fijo adivinado.
+ */
+function buildBounds(
+  nodos: { lat: number; lng: number }[],
+): [LatLngTuple, LatLngTuple] | null {
+  if (nodos.length === 0) return null;
+  let south = nodos[0].lat;
+  let north = nodos[0].lat;
+  let west = nodos[0].lng;
+  let east = nodos[0].lng;
+  for (const n of nodos) {
+    if (n.lat < south) south = n.lat;
+    if (n.lat > north) north = n.lat;
+    if (n.lng < west) west = n.lng;
+    if (n.lng > east) east = n.lng;
+  }
+  return [
+    [south, west],
+    [north, east],
+  ];
 }
 
 /** Centroide aproximado por zona, solo para rotular el mapa (no es dato del juego). */
@@ -113,10 +135,10 @@ export function LiveMap() {
     return map;
   }, [graph]);
   const zoneLabels = useMemo(() => (graph ? buildZoneLabels(graph.nodos) : []), [graph]);
-
-  const center = graph?.nodos[0]
-    ? ([graph.nodos[0].lat, graph.nodos[0].lng] as LatLngTuple)
-    : FALLBACK_CENTER;
+  const bounds = useMemo(
+    () => (graph ? buildBounds(graph.nodos) : null),
+    [graph],
+  );
 
   if (!graph) {
     return (
@@ -142,7 +164,15 @@ export function LiveMap() {
   }
 
   return (
-    <MapContainer center={center} zoom={14} className="h-full w-full bg-night-900">
+    // bounds: encuadra automáticamente toda la extensión real del grafo en
+    // vez de adivinar center/zoom. El esquema de SPEC.md §2.1 exige
+    // nodos.minItems=250, así que bounds nunca es null aquí; el "!" solo
+    // documenta esa garantía de datos, no una suposición nueva.
+    <MapContainer
+      bounds={bounds!}
+      boundsOptions={{ padding: [24, 24] }}
+      className="h-full w-full bg-night-900"
+    >
       {/* CartoDB Dark Matter dejó de servirse gratis sin cuenta (devuelve
           tiles con marca "API KEY REQUIRED"). En vez de depender de una key
           de un servicio pago, se usa el tile OSM estándar (gratis, sin key,

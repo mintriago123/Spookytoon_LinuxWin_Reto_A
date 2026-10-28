@@ -27,7 +27,10 @@ export function ConnectionStatus() {
 
   return (
     <div className="glass flex flex-col gap-1 rounded-lg px-3 py-2 text-xs text-slate-100">
-      <div className="flex items-center gap-2">
+      {/* aria-live: la pérdida/recuperación de WS es la señal más crítica
+          de esta UI (SPEC.md §6 reconexión); debe anunciarse igual que el
+          error, no solo cambiar de color/texto en silencio. */}
+      <div className="flex items-center gap-2" role="status" aria-live="polite">
         <span
           className={`h-2.5 w-2.5 rounded-full ${DOT_CLASSES[socketStatus]}`}
           aria-hidden

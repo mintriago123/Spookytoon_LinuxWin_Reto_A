@@ -65,6 +65,10 @@ body {
   }
 }
 .threat-marker {
+  /* display obligatorio: transform no aplica a un <span> inline no
+     reemplazado (spec CSS); inline-block lo hace efectivo sin alterar el
+     layout del div que Leaflet posiciona por fuera. */
+  display: inline-block;
   animation: threat-pulse 1.4s ease-in-out infinite;
   transform-origin: center;
 }

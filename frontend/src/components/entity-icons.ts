@@ -69,9 +69,15 @@ export function zombieIcon(tipo: ZombieType, estado: "activo" | "dormido"): L.Di
   // reacción inmediata del operador (persiguen o bloquean nodos). Caminante
   // y dormido se quedan quietos a propósito para no diluir la señal.
   const isActiveThreat = (tipo === "corredor" || tipo === "horda") && estado !== "dormido";
+  const svg = wrapSvg(size, zombieBody(tipo, ZOMBIE_COLOR[tipo], estado === "dormido"));
+  // La clase de la animación va en un <span> interno, nunca en el div que
+  // Leaflet posiciona (ese div recibe su propio transform: translate3d(...)
+  // inline en cada pan/zoom; una animación CSS de "transform" en el mismo
+  // elemento lo sobrescribe durante el pulso y el marcador salta al origen
+  // del mapa). Así el pulso escala en el sitio sin tocar la posición real.
   const icon = L.divIcon({
-    html: wrapSvg(size, zombieBody(tipo, ZOMBIE_COLOR[tipo], estado === "dormido")),
-    className: isActiveThreat ? "threat-marker" : "",
+    html: isActiveThreat ? `<span class="threat-marker">${svg}</span>` : svg,
+    className: "",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
   });
