@@ -50,7 +50,7 @@ export function SelectedSegment({ graph, selection }: {
         pathOptions={{ color: "#22d3ee", weight: 6, opacity: 1, dashArray: "10 5" }} />
       <CircleMarker center={midpoint} radius={8}
         pathOptions={{ color: "#ffffff", weight: 3, fillColor: "#22d3ee", fillOpacity: 1 }}>
-        <Tooltip permanent direction="top" offset={[0, -10]}>
+        <Tooltip permanent direction="top" offset={[0, -10]} className="segment-selection-tooltip">
           <strong>Segmento seleccionado</strong><br />
           {selection.label}
         </Tooltip>

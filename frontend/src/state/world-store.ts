@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import type { MantaGraph, WorldSnapshot } from "../types/contracts";
+import { observeReceipt, reconcileSelection, type ControlReceipt, type Selection } from "../lib/command-center";
 
 export type SocketStatus = "connecting" | "open" | "reconnecting" | "closed";
 
@@ -38,6 +39,11 @@ export interface WorldStoreState {
   socketStatus: SocketStatus;
   pendingControl: PendingControl;
   lastError: string | null;
+  selection: Selection;
+  receipts: ControlReceipt[];
+  selectEntity: (selection: Selection) => void;
+  addReceipt: (receipt: ControlReceipt) => void;
+  updateReceipt: (eventId: string, patch: Partial<ControlReceipt>) => void;
 
   setGraph: (graph: MantaGraph) => void;
   applySnapshot: (snapshot: WorldSnapshot) => void;
@@ -55,9 +61,22 @@ export const useWorldStore = create<WorldStoreState>((set, get) => ({
   socketStatus: "connecting",
   pendingControl: null,
   lastError: null,
+  selection: null,
+  receipts: [],
+  selectEntity: selection => set({ selection: reconcileSelection(selection, get().graph, get().currentSnapshot) }),
+  addReceipt: receipt => {
+    if (receipt.gameId === get().currentSnapshot?.gameId) set(state => ({ receipts: [receipt, ...state.receipts].slice(0, 50) }));
+  },
+  updateReceipt: (eventId, patch) => set(state => ({ receipts: state.receipts.map(receipt => {
+    if (receipt.eventId !== eventId) return receipt;
+    const updated = { ...receipt, ...patch };
+    return state.currentSnapshot ? observeReceipt(updated, state.currentSnapshot) : updated;
+  }) })),
 
-  setGraph: (graph) =>
-    set({ graph, graphVersion: graph.metadata.graphVersion }),
+  setGraph: (graph) => set(state => ({ graph, graphVersion: graph.metadata.graphVersion,
+    selection: state.graphVersion === graph.metadata.graphVersion ? reconcileSelection(state.selection, graph, state.currentSnapshot) : null,
+    receipts: state.graphVersion === graph.metadata.graphVersion ? state.receipts : [],
+  })),
 
   applySnapshot: (snapshot) => {
     const current = get().currentSnapshot;
@@ -85,10 +104,12 @@ export const useWorldStore = create<WorldStoreState>((set, get) => ({
         previousSnapshot: sameGame ? current : null,
         currentSnapshot: snapshot,
         receivedAt: Date.now(),
+        selection: sameGame && current.graphVersion === snapshot.graphVersion ? reconcileSelection(get().selection, get().graph, snapshot) : null,
+        receipts: sameGame && current.graphVersion === snapshot.graphVersion ? get().receipts.map(receipt => observeReceipt(receipt, snapshot)) : [],
       });
       return;
     }
-    set({ previousSnapshot: null, currentSnapshot: snapshot, receivedAt: Date.now() });
+    set({ previousSnapshot: null, currentSnapshot: snapshot, receivedAt: Date.now(), selection: null, receipts: [] });
   },
 
   setSocketStatus: (status) => set({ socketStatus: status }),

@@ -8,6 +8,7 @@ import { useWorldStore } from "../state/world-store";
 export function ShelterOccupancy() {
   const graph = useWorldStore((s) => s.graph);
   const shelters = useWorldStore((s) => s.currentSnapshot?.shelters);
+  const selectEntity = useWorldStore(s => s.selectEntity);
 
   if (!graph || graph.refugios.length === 0) return null;
 
@@ -25,9 +26,9 @@ export function ShelterOccupancy() {
           return (
             <li key={refugio.id} className="flex flex-col gap-1">
               <div className="flex items-center justify-between">
-                <span>{refugio.id}</span>
+                <button type="button" className="text-button" onClick={() => selectEntity({ kind: "shelter", id: refugio.id })}>{refugio.id}</button>
                 <span className={lleno ? "text-accent-rose" : "text-slate-300"}>
-                  {ocupacion}/{refugio.capacidad} {lleno ? "lleno" : ""}
+                  {live ? `${ocupacion}/${live.capacidad} ${lleno ? "lleno" : ""}` : "Sin dato"}
                 </span>
               </div>
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#14323a]">
