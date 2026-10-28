@@ -330,7 +330,7 @@ export interface RoutingStatusResponse {
 }
 ```
 
-Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes y nunca exceden capacidad; reservados solo contiene vivos y no ocupantes; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
+Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes; ocupantes.length + reservados.length <= capacidad en cada refugio; reservados solo contiene vivos y no ocupantes, sin reservas simultáneas en distintos refugios; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
 
 ## 3. OpenAPI y eventos
 
@@ -844,7 +844,7 @@ Máximo de mensaje: 1 MiB. Ping/pong cada 30 s; cerrar conexión sin heartbeat. 
 
 Usar índices enteros, outEdges e inEdges. El grafo es inmutable. Después de mover zombies y aplicar eventos, el Simulador sincroniza un snapshot; routing calcula una sola vez el plan para ese worldVersion y lo publica a todos sus workers. Una llamada /paso no ejecuta Dijkstra: valida identidad/versión y consulta bestMoveByNode[currentNodeId], una búsqueda O(1).
 
-El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
+El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y reservas, y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
 
 RoutePlanSnapshot tiene exactamente una entrada bestMoveByNode por nodo de grafo y está asociado a gameId, turnId, worldVersion y graphVersion. Los workers rechazan plan con versión distinta. buildLatencyMs mide solo el precompute del plan, no se suma a la latencia de cada /paso.
 
@@ -862,7 +862,7 @@ H incluye vecinos directos entrantes y salientes de cada horda activa. Z_t son n
 
 ### 4.2 Nivel Base (obligatorio)
 
-Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios no llenos como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
+Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios con plazas generales disponibles como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, además de los planes para reservas descritos abajo, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
 
 Penalización corredor Base: para cada corredor despierto, d(c,v) es distancia mínima en saltos dirigidos, hasta 2. Sea dmin(v) el mínimo sobre corredores. Wc=4*L:
 
@@ -873,9 +873,11 @@ Pcor(v) = Wc * (3 - dmin(v)), si dmin(v) ∈ {0,1,2}
 
 Penalización de incertidumbre Base: el Simulador produce una lista de nodos próximos a dormidos no despiertos, sin incluir sus IDs ni coordenadas. Si v aparece, Pincertidumbre(v)=0.25*L; en otro caso es 0. Es un costo blando: nunca bloquea una calle ni identifica/despierta zombies. Dormidos siguen estáticos e invisibles como entidades del motor. Si no se puede formar este agregado, usar lista vacía.
 
-Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. Refugios llenos no son fuentes; disponibilidad se evalúa con la ocupación del snapshot. Llegadas simultáneas se arbitran en el Simulador y nunca exceden capacidad.
+Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. La disponibilidad general es capacidad - ocupantes.length - reservados.length; un refugio sin plazas generales no es fuente del plan general. Llegadas simultáneas se arbitran en el Simulador conforme a la prioridad de reservas de §5.3 y nunca exceden capacidad.
 
-El plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. targetShelterId en request es compatible con Pro; Base elige el refugio disponible de menor costo.
+Una reserva válida retiene una plaza para un sobreviviente vivo que no sea ocupante ni tenga otro refugio asignado como destino. Routing conserva reservedPlans por refugio con reservas, precomputados en la sincronización y reutilizados por sus titulares: estos pueden recibir ruta hacia su plaza aunque no haya disponibilidad general. El lookup de /paso sigue siendo O(1); no se calcula una ruta por sobreviviente ni se modifica WorldState desde el motor. Una reserva no autoriza entrar en aristas cerradas, peligros o cruces frontales. El Simulador consume la reserva al admitir, y libera las de mordidos, evacuados y quienes cambian de destino; una reserva válida de alguien todavía en camino sigue reteniendo su plaza.
+
+Cada plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. Base respeta la plaza retenida de quien tiene reserva; para los demás elige el refugio con disponibilidad general de menor costo. targetShelterId en request es compatible con Pro.
 
 El cruce frontal excluye u→v cuando F_t(u,v) es true. H, aristas cerradas y nodos inexistentes son restricciones duras. Corredor e incertidumbre son penalizaciones blandas. El Simulador valida la respuesta contra el mismo snapshot antes de mover; un sobreviviente avanza máximo una arista por turno.
 
@@ -964,7 +966,11 @@ loop mientras status == running:
     (2) está en nodo horda o vecino directo de horda, o
     (3) survivor A→B y zombie B→A en el turno
   primero resolver mordidas; después refugios
-  por refugio ordenar llegadas survivorId; admitir solo cupos libres
+  liberar reservas de mordidos, evacuados y quienes cambiaron de destino
+  por refugio:
+    admitir llegadas con reserva válida, ordenadas por survivorId; consumir su reserva
+    admitir demás llegadas por survivorId usando capacidad - ocupantes - reservados
+    mantener ocupantes.length + reservados.length <= capacidad
   no admitidos quedan vivos en el nodo del refugio
   despertar dormidos por posiciones nuevas; recalcular reservas/métricas
 
@@ -980,7 +986,7 @@ loop mientras status == running:
   si status == running: esperar hasta t0 + 2.000 ms
 ```
 
-Una persona mordida no se evacúa aunque termine en refugio. La capacidad nunca se excede; admisión simultánea desempata por survivorId. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
+Una persona mordida no se evacúa aunque termine en refugio y tenga reserva. La admisión simultánea prioriza primero reservas válidas y después llegadas sin reserva, con orden lexicográfico por survivorId dentro de cada grupo. Al admitir se consume la reserva; las plazas aún reservadas para vivos en camino no se ofrecen al grupo sin reserva. Sin reservas, la admisión sigue estrictamente el orden por survivorId. Siempre se cumple ocupantes.length + reservados.length <= capacidad. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
 
 ### 5.4 Concurrencia y latencia
 
