@@ -56,3 +56,8 @@ test("dos workers calculan plan equivalente, lookup queda local y cola responde 
     assert.throws(() => engine.sync({ ...request, baseWorldVersion: 100 }));
   } finally { await pool.close(); }
 });
+
+
+test("configuración inválida del pool HTTP falla antes de readiness", async () => {
+  await assert.rejects(createBackendApp({ apiKey: "workers-readiness-key", logger: false, routingMaxSockets: 0 }), /ROUTING_HTTP_MAX_SOCKETS/);
+});

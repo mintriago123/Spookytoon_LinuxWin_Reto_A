@@ -80,7 +80,7 @@ Cada turno recalcula vivos, mordidos, evacuados y zombies activos.
 | `wsClients` | Conexiones WS presentes al comprometer el snapshot |
 
 El cliente HTTP interno despacha el lote de hasta 200 intentos y conserva
-conexiones con un pool de 16 sockets en el servidor (configurable entre 1 y 200 en su fábrica),
+conexiones con un pool de 8 sockets en el servidor (`ROUTING_HTTP_MAX_SOCKETS`) (configurable entre 1 y 200 en su fábrica),
 respeta AbortSignal y no sigue redirecciones. Las reservas tienen planes
 precalculados por refugio para no bloquear a quien ya posee un cupo.
 
@@ -130,3 +130,9 @@ exitoso a PM2, manteniendo requestId/gameId/turnId/worldVersion en los eventos
 relevantes y excluyendo API key, seed y snapshots. El experimento aislado en
 `tests/fixtures/request-logging-experiment.ts` alterna ambos modos con R3 y
 persistencia en memoria para medir el efecto sin tocar producción.
+
+La medición aislada en EC2 comparó 4/8/16/32 sockets con tres repeticiones,
+orden alternado y nueve lotes de R3 por tamaño. Máximos p95: 118,8 / 58,4 /
+64,2 / 184,5 ms, sin timeouts. El servidor usa 8 sockets; la fábrica genérica
+conserva su default de 16. El lote de hasta 200 promesas sigue despachándose
+junto y su espera en cola consume el presupuesto individual de 500 ms.
