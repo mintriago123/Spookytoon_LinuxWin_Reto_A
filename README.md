@@ -2,19 +2,13 @@
 
 Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en vivo.
 
-## Estado actual
+## Estado
 
-| Área | Estado |
-|---|---|
-| Grafo de Manta | Publicado y validado: 300 nodos, 736 aristas, un componente fuertemente conexo y cuatro refugios alcanzables. El backend y el frontend distribuyen la misma versión del grafo. |
-| Routing | Calcula planes por `worldVersion`; los workers precalculan durante la sincronización y `/paso` consulta la tabla instalada. |
-| Simulador | Integra rondas R1/R2/R3, movimientos, cierres de segmentos, pausas y reanudación. El simulador es el único escritor del estado de la partida. |
-| Realtime | `GET /estado` y `WSS /ws` publican snapshots comprometidos. |
-| Ojos de Águila | Detecciones simuladas temporales afectan rutas y se muestran en el mapa. Referencias y coberturas aproximadas; sin video ni conexión real. Esta integración local requiere despliegue para verificarse. |
-| Persistencia | Cola asíncrona y recuperación pausada están implementadas localmente. Las escrituras de esta versión integrada requieren despliegue para validarse en AWS. |
-| Frontend | React/Vite/TypeScript/Leaflet: mapa, métricas, refugios, controles de operador y reconexión WebSocket. |
+El backend incluye grafo peatonal, motor Base de rutas, simulador, telemetría, publicación HTTP/WebSocket, persistencia DynamoDB asíncrona, recuperación pausada y workers de precompute. La release `a09f235` se desplegó y verificó en EC2 con persistencia real y tres rondas de 150 turnos. Sus máximos p95 fueron 26,4 / 50,1 / 89,3 ms y la disponibilidad fue del 100 %; R2 registró un cierre tardío y un deadline miss, por lo que el criterio de cero incumplimientos sigue pendiente. La evidencia está en [integracion-2026-10-28](docs/evidence/integracion-2026-10-28/README.md). Los cambios posteriores incluidos en esta rama, entre ellos las detecciones simuladas de Ojos de Águila, aún requieren despliegue para validarse en AWS.
 
-El equipo reportó la configuración desplegada en EC2 el 28 de octubre de 2026. Los cambios locales de esta rama requieren despliegue para verificarse en AWS; las pruebas locales no acreditan por sí mismas escrituras ni aceptación en la cuenta.
+## Despliegue confirmado en EC2
+
+Configuración comunicada por el equipo el 28 de octubre de 2026. La SCP de la organización permite operar en Ohio.
 
 | Parámetro | Valor reportado |
 |---|---|

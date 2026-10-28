@@ -79,3 +79,23 @@ precompute en worker y lookup local sin IPC por sobreviviente. El objetivo local
 EC2 t3.micro ni tres rondas completas de 150 turnos. La persistencia AWS real,
 el corte/rollback en EC2 y las alarmas no se ejecutaron desde esta sesión.
 No se modificaron archivos del frontend ni el algoritmo del reloj del simulador.
+
+
+## Integración y aceptación EC2 final
+
+Release `a09f235`: 172/172 pruebas de raíz, 32/32 backend tanto localmente como
+en EC2; ambos typechecks aprobados. Frontend de `origin/design@6afb9a1`: 11/11,
+typecheck/build y navegador con backend integrado.
+
+Tres rondas de 150 turnos reales por HTTPS/WSS y checkpoints DynamoDB:
+
+| Ronda | Turnos | Tiempo observado ms | Máximo p95 ms | Disponibilidad mínima | Deadline misses | Segmentos bloqueados | DynamoDB turno 150 |
+|---|---:|---:|---:|---:|---:|---:|---|
+| 1 | 150 | 299995 | 26.4 | 100 % | 0 | 0 | Sí |
+| 2 | 150 | 300080 | 50.1 | 100 % | 1 | 1 | Sí |
+| 3 | 150 | 300008 | 89.3 | 100 % | 0 | 2 | Sí |
+
+Rutas y disponibilidad aprobaron. R2 tuvo una pausa por deadline en 138,
+registrada y reanudada; no se declara aprobado el criterio de cero misses.
+Los intentos previos, la medición de pools y la recuperación real están en
+[la evidencia de integración](../../docs/evidence/integracion-2026-10-28/README.md).

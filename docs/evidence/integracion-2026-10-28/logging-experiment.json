@@ -1,0 +1,30 @@
+[
+  {
+    "requestLogging": true,
+    "turns": 6,
+    "maxP95Ms": 160.7,
+    "minAvailability": 100,
+    "deadlineMisses": 0
+  },
+  {
+    "requestLogging": false,
+    "turns": 6,
+    "maxP95Ms": 92.9,
+    "minAvailability": 100,
+    "deadlineMisses": 0
+  },
+  {
+    "requestLogging": false,
+    "turns": 6,
+    "maxP95Ms": 84,
+    "minAvailability": 100,
+    "deadlineMisses": 0
+  },
+  {
+    "requestLogging": true,
+    "turns": 6,
+    "maxP95Ms": 87.4,
+    "minAvailability": 100,
+    "deadlineMisses": 0
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "frontendCommit": "6afb9a1",
+  "backendBase": "01ba7ff",
+  "map": true,
+  "graphVersion": "manta-osm-2026-10-13-d70af9643354ddac",
+  "turnId": 4,
+  "p95Ms": 34.8,
+  "availability": 100,
+  "paused": true,
+  "browserErrors": [],
+  "extraRounds": [
+    {
+      "roundId": 2,
+      "survivors": 80,
+      "p95Ms": 30.4,
+      "turnId": 1
+    },
+    {
+      "roundId": 3,
+      "survivors": 200,
+      "p95Ms": 57.3,
+      "turnId": 1
+    }
+  ]
+}
