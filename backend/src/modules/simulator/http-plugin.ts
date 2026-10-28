@@ -1,6 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
-import { parseEdgeCommand, parseOperatorPassword, parsePauseCommand, parseResumeCommand, parseStartCommand, SimulatorControlError } from "./controls.ts";
+import { parseOperatorPassword, parseEdgeCommand, parsePauseCommand, parseResumeCommand, parseStartCommand, parseRestartCommand, parsePreparationCommand, SimulatorControlError } from "./controls.ts";
 import type { SimulationRuntime } from "./simulation-runtime.ts";
 import { createOperatorSessionStore, OPERATOR_SESSION_COOKIE, parseCookies } from "./operator-session.ts";
 
@@ -79,9 +79,21 @@ export const simulatorPlugin: FastifyPluginAsync<{
     // Permite al Frontend confirmar si la cookie de sesión sigue vigente
     // sin disparar un control real (RoundControls la llama al montar).
     protectedApp.get("/operador/sesion", async (_request, reply) => reply.code(204).send());
+    protectedApp.get("/simulador/rondas", async (_request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.getRoundCatalog();
+    });
+    protectedApp.get<{ Params: { gameId: string } }>("/simulador/configuracion/:gameId", async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.getGameConfiguration(request.params.gameId);
+    });
     protectedApp.post("/simulador/iniciar", async (request, reply) => reply.code(202).send(options.runtime.start(parseStartCommand(request.body))));
+    protectedApp.post("/simulador/prevalidar", async (request, reply) => {
+      reply.header("Cache-Control", "no-store");
+      return options.runtime.prevalidate(parsePreparationCommand(request.body));
+    });
     protectedApp.post("/simulador/reanudar", async (request, reply) => reply.code(202).send(options.runtime.resume(parseResumeCommand(request.body))));
-    protectedApp.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseStartCommand(request.body))));
+    protectedApp.post("/simulador/reiniciar", async (request, reply) => reply.code(202).send(await options.runtime.restart(parseRestartCommand(request.body))));
     protectedApp.post("/simulador/pausar", async (request, reply) => reply.code(202).send(options.runtime.pause(parsePauseCommand(request.body).reason)));
     protectedApp.post("/simulador/bloquear-arista", async (request, reply) => reply.code(202).send(options.runtime.scheduleEdge(parseEdgeCommand(request.body))));
   });

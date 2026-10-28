@@ -1,3 +1,4 @@
+import { GameConfigurationDetails } from "../components/GameConfigurationDetails";
 import { useEffect, useRef, useState } from "react";
 import { LiveMap } from "../components/LiveMap";
 import { RoundControls } from "../components/RoundControls";
@@ -18,6 +19,7 @@ export function App() {
   const setGraph = useWorldStore(s => s.setGraph);
   const setLastError = useWorldStore(s => s.setLastError);
   const lastError = useWorldStore(s => s.lastError);
+  const snapshot = useWorldStore(s => s.currentSnapshot);
   const selection = useWorldStore(s => s.selection);
   const [panelOpen, setPanelOpen] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const explorerTools = useRef<HTMLDetailsElement>(null);
@@ -63,6 +65,10 @@ export function App() {
             <RoundControls key={`${selection.kind}:${selection.id}`} operator={operator} segments={segments} mode="segment" />
           } /> : null} />
         </details>
+        {snapshot && operator.authState === "in" && <GameConfigurationDetails
+          key={`${snapshot.gameId}:${snapshot.roundId}:${snapshot.graphVersion}`}
+          baseUrl={import.meta.env.VITE_API_BASE_URL ?? ""} gameId={snapshot.gameId} roundId={snapshot.roundId}
+          graphVersion={snapshot.graphVersion} status={snapshot.status} onUnauthorized={operator.onUnauthorized} />}
         <details className="secondary-panel"><summary>Rendimiento</summary><MetricsPanel technical /></details>
       </aside>
     </div>

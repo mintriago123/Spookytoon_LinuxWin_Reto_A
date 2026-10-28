@@ -1,3 +1,4 @@
+import { buildGraphBounds } from "../lib/map-bounds";
 import { Fragment, useMemo } from "react";
 import {
   AttributionControl,
@@ -33,31 +34,6 @@ function buildNodeIndex(
   const index = new Map<string, LatLngTuple>();
   for (const n of nodos) index.set(n.id, [n.lat, n.lng]);
   return index;
-}
-
-/**
- * Caja que encierra todos los nodos del grafo. Se usa para encuadrar el
- * mapa a su extensión real en vez de centrar en graph.nodos[0] (arbitrario,
- * puede quedar en un borde) con un zoom fijo adivinado.
- */
-function buildBounds(
-  nodos: { lat: number; lng: number }[],
-): [LatLngTuple, LatLngTuple] | null {
-  if (nodos.length === 0) return null;
-  let south = nodos[0].lat;
-  let north = nodos[0].lat;
-  let west = nodos[0].lng;
-  let east = nodos[0].lng;
-  for (const n of nodos) {
-    if (n.lat < south) south = n.lat;
-    if (n.lat > north) north = n.lat;
-    if (n.lng < west) west = n.lng;
-    if (n.lng > east) east = n.lng;
-  }
-  return [
-    [south, west],
-    [north, east],
-  ];
 }
 
 /** Centroide aproximado por zona, solo para rotular el mapa (no es dato del juego). */
@@ -144,7 +120,7 @@ export function LiveMap({ selection = null }: { selection?: SegmentSelection | n
   }, [graph]);
   const zoneLabels = useMemo(() => (graph ? buildZoneLabels(graph.nodos) : []), [graph]);
   const bounds = useMemo(
-    () => (graph ? buildBounds(graph.nodos) : null),
+    () => (graph ? buildGraphBounds(graph.nodos) : null),
     [graph],
   );
 
@@ -171,14 +147,12 @@ export function LiveMap({ selection = null }: { selection?: SegmentSelection | n
     );
   }
 
+  if (!bounds) return <div role="alert">El grafo no contiene nodos para encuadrar Manta.</div>;
+
   return (
-    // bounds: encuadra automáticamente toda la extensión real del grafo en
-    // vez de adivinar center/zoom. El esquema de SPEC.md §2.1 exige
-    // nodos.minItems=250, así que bounds nunca es null aquí; el "!" solo
-    // documenta esa garantía de datos, no una suposición nueva.
     <MapContainer
       attributionControl={false}
-      bounds={bounds!}
+      bounds={bounds}
       boundsOptions={{ padding: [24, 24] }}
       maxBoundsViscosity={1}
       maxZoom={19}
@@ -197,7 +171,7 @@ export function LiveMap({ selection = null }: { selection?: SegmentSelection | n
         noWrap
       />
       <AttributionControl position="bottomright" prefix={false} />
-      <MantaMapArea bounds={bounds!} />
+      <MantaMapArea bounds={bounds} />
       <MapSelectionFocus graph={graph} />
       <SelectedSegment graph={graph} selection={selection} />
 

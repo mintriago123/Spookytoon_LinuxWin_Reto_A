@@ -13,6 +13,15 @@ export function recoverWorld(game: StoredGame, graph: MantaGraph, cameras: reado
   }
   const initial = createWorldState({ gameId: game.gameId, graph, roundConfig: game.roundConfig,
     randomState: game.randomState, initialMetrics: game.metrics, updatedAt: game.updatedAt, cameras });
+  if (game.roundId !== initial.roundId) throw new Error("La ronda del checkpoint no coincide con su configuración");
+  const savedIdentity = game.configurationIdentity;
+  const legacy = !Object.hasOwn(game, "configurationIdentity");
+  if (!legacy && (!savedIdentity || savedIdentity.format !== initial.configurationIdentity.format ||
+      savedIdentity.graphVersion !== initial.configurationIdentity.graphVersion ||
+      savedIdentity.revision !== initial.configurationIdentity.revision ||
+      !["recorded-at-start", "derived-from-legacy-checkpoint"].includes(savedIdentity.provenance))) {
+    throw new Error("La huella de configuración del checkpoint no coincide con el grafo y la ronda");
+  }
   const sameIds = (a: readonly { id: string }[], b: readonly { id: string }[]) =>
     a.length === b.length && new Set(b.map(x => x.id)).size === a.length && a.every(x => b.some(y => y.id === x.id));
   if (!sameIds(initial.survivors, game.survivors) || !sameIds(initial.zombies, game.zombies)) throw new Error("Entidades del checkpoint no coinciden con el escenario");
@@ -24,8 +33,11 @@ export function recoverWorld(game: StoredGame, graph: MantaGraph, cameras: reado
       !graph.aristas.some(edge => edge.id === e.edgeId) || !Number.isSafeInteger(e.effectiveTurnId) ||
       e.effectiveTurnId < 1 || e.effectiveTurnId > 150 || !["bloquear-segmento", "desbloquear-segmento"].includes(e.tipo) ||
       (e.effectiveTurnId <= game.turnId && !e.aplicado))) throw new Error("Eventos recuperados inválidos");
-  const { graphVersion: _graphVersion, ...dynamic } = game;
-  const world: WorldState = { ...initial, ...dynamic, graph, cameras: initial.cameras,
+  const { graphVersion: _graphVersion, ...dynamic } = structuredClone(game);
+  const world: WorldState = { ...initial, ...dynamic, graph: initial.graph, roundConfig: initial.roundConfig,
+    configurationIdentity: Object.freeze({ ...initial.configurationIdentity,
+      provenance: legacy ? "derived-from-legacy-checkpoint" : savedIdentity!.provenance }),
+    cameras: initial.cameras,
     cameraObservations: dynamic.cameraObservations ?? [], activeTurn: null, activeTurnId: null,
     routing: { confirmed: null, uncertain: false, attemptedRequest: null } };
   buildWorldSyncRequest(world, Math.max(1, world.turnId));

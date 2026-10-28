@@ -2,6 +2,7 @@ import type { MantaGraph } from "../../contracts/types.ts";
 import type { Immutable, RandomState, RoundConfig, SurveillanceCamera, TelemetryMetrics, WorldState } from "./types.ts";
 import { validateRoundConfig } from "./round-validation.ts";
 import { validateRandomState } from "./random.ts";
+import { createConfigurationIdentity } from "./configuration-identity.ts";
 
 function frozenCopy<T>(value: T): Immutable<T> {
   function freeze(item: unknown): void {
@@ -55,6 +56,7 @@ export function createWorldState(input: {
     gameId: input.gameId, roundId: roundConfig.roundId, status: "idle", phase: "idle",
     turnId: 0, worldVersion: 0, activeTurnId: null, activeTurn: null,
     graph: frozenCopy(input.graph), roundConfig: frozenCopy(roundConfig),
+    configurationIdentity: frozenCopy(createConfigurationIdentity(input.graph, roundConfig)),
     zombies: roundConfig.zombieSpawns.map(spawn => ({ ...spawn,
       estado: spawn.tipo === "dormido" ? "dormido" : "activo",
       despertadoEnTurno: null,

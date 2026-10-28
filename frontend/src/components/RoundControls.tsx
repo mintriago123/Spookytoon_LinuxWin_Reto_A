@@ -25,9 +25,15 @@ export function RoundControls({ operator, segments, mode = "session" }: {
         onChange={e => operator.setRoundId(Number(e.target.value) as 1 | 2 | 3)}>
         <option value={1}>1 · Anochecer</option><option value={2}>2 · Medianoche</option><option value={3}>3 · Apocalipsis</option>
       </select></label>
+      <details className="selection-technical"><summary>Opciones de partida</summary>
+        <label htmlFor="round-seed">Semilla reproducible (opcional)</label>
+        <input id="round-seed" value={operator.customSeed ?? ""} maxLength={256} disabled={operator.busy || operator.loggingIn}
+          onChange={event => operator.setCustomSeed(event.target.value)} placeholder="Automática" />
+        <p>Déjala vacía para generar un escenario nuevo.</p>
+      </details>
       <button type="button" className="command-button button-green" disabled={operator.busy || operator.loggingIn} onClick={async () => {
         if (operator.authState === "in" || await operator.login()) await operator.iniciar();
-      }}>{operator.busy || operator.loggingIn ? "Iniciando…" : "Iniciar ronda"}</button>
+      }}>{operator.startStage === "validating" ? "Validando…" : operator.busy || operator.loggingIn ? "Iniciando…" : "Iniciar ronda"}</button>
     </div>;
     if (operator.authState === "out") return <div className="sidebar-session">
       <span>Modo consulta</span>
