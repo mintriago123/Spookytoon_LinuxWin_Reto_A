@@ -1,0 +1,14 @@
+{
+  "url": "https://3-128-78-190.sslip.io/",
+  "title": "SpookyThon 2026 — Escape de Manta Zombie",
+  "httpStatus": 200,
+  "pageErrors": [],
+  "wsFrames": 1,
+  "gameId": "deploy-prueba-78cff56",
+  "roundId": 1,
+  "turnId": 4,
+  "status": "paused",
+  "cameras": 4,
+  "markers": 40,
+  "mobileMapHeight": 422
+}

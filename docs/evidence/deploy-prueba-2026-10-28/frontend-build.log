@@ -1,0 +1,13 @@
+
+> @spookython/frontend@0.1.0 build
+> tsc -b && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 96 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   1.04 kB │ gzip:   0.60 kB
+dist/assets/index-b4ZBpUPM.css   13.52 kB │ gzip:   3.68 kB
+dist/assets/index-DFPuzLwe.js   326.79 kB │ gzip: 100.79 kB
+✓ built in 1.48s
