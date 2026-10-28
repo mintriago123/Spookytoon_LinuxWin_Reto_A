@@ -68,9 +68,7 @@ export function RoundControls() {
     setAuthState("out");
   };
 
-  const [gameId, setGameId] = useState("game-2026-001");
   const [roundId, setRoundId] = useState<1 | 2 | 3>(1);
-  const [seed, setSeed] = useState("seed-001");
   const [blockMotivo, setBlockMotivo] = useState("");
 
   // El Backend conserva el historial de cierres: una entrada con
@@ -132,7 +130,7 @@ export function RoundControls() {
   const iniciar = () =>
     callControl<IniciarRequest, IniciarResponse>(
       "/simulador/iniciar",
-      { gameId, roundId, seed },
+      { gameId: `game-${crypto.randomUUID()}`, roundId, seed: crypto.randomUUID() },
       "iniciar",
     );
 
@@ -169,7 +167,8 @@ export function RoundControls() {
 
   const busy = pendingControl !== null;
   // Mientras no hay partida en curso, el único paso relevante es arrancar:
-  // gameId/ronda/seed + Iniciar. Los cierres de segmento no aplican todavía
+  // Seleccionar ronda + Iniciar. gameId y seed se generan para cada partida.
+  // Los cierres de segmento no aplican todavía
   // y solo añaden ruido antes de que exista algo que bloquear.
   const started = status === "running" || status === "paused";
 
@@ -223,17 +222,13 @@ export function RoundControls() {
       onSubmit={(e) => e.preventDefault()}
     >
       {started ? (
-        // Paso 2 — sesión activa: gameId/ronda ya están fijados en el
-        // Backend, así que se muestran de solo lectura en una fila compacta
-        // en vez de repetir el formulario de arranque. Se leen del snapshot
-        // (no del formulario local): si la página se recarga o abre otra
-        // pestaña con la misma sesión, el formulario local vuelve a sus
-        // valores por defecto pero el snapshot sigue siendo la verdad.
+        // Ronda y estado vienen del snapshot. gameId y seed quedan internos;
+        // reanudar conserva la identidad y la semilla que tiene el backend.
         <div className="flex items-center justify-between gap-2 rounded bg-night-700 px-2 py-1.5">
           <div className="min-w-0 leading-tight">
-            <p className="truncate font-semibold text-slate-100">{snapshotGameId ?? gameId}</p>
+            <p className="truncate font-semibold text-slate-100">Ronda {snapshotRoundId ?? roundId}</p>
             <p className="text-[11px] text-slate-400">
-              Ronda {snapshotRoundId ?? roundId} · {status === "running" ? "en curso" : "pausada"}
+              {status === "running" ? "En curso" : "Pausada"}
             </p>
           </div>
           <div className="flex shrink-0 gap-2">
@@ -258,28 +253,17 @@ export function RoundControls() {
       ) : (
         // Paso 1 — arranque: lo único que necesita el operador para empezar.
         <>
-          <div className="flex gap-2">
-            <label className="flex min-w-0 flex-1 flex-col gap-1">
-              <span>gameId</span>
-              <input value={gameId} onChange={(e) => setGameId(e.target.value)} className={`w-full ${inputClass}`} />
-            </label>
-            <label className="flex w-32 shrink-0 flex-col gap-1">
-              <span>Ronda</span>
-              <select
-                value={roundId}
-                onChange={(e) => setRoundId(Number(e.target.value) as 1 | 2 | 3)}
-                className={`w-full ${inputClass}`}
-              >
-                <option value={1}>1 — Anochecer</option>
-                <option value={2}>2 — Medianoche</option>
-                <option value={3}>3 — Apocalipsis</option>
-              </select>
-            </label>
-          </div>
-
           <label className="flex flex-col gap-1">
-            <span>seed</span>
-            <input value={seed} onChange={(e) => setSeed(e.target.value)} className={inputClass} />
+            <span>Ronda</span>
+            <select
+              value={roundId}
+              onChange={(e) => setRoundId(Number(e.target.value) as 1 | 2 | 3)}
+              className={`w-full ${inputClass}`}
+            >
+              <option value={1}>1 — Anochecer</option>
+              <option value={2}>2 — Medianoche</option>
+              <option value={3}>3 — Apocalipsis</option>
+            </select>
           </label>
 
           <button
