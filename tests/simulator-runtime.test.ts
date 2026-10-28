@@ -391,3 +391,20 @@ test("el reloj real cancela su espera al pausar sin esperar al próximo tick", a
   controller.abort(); await wait;
   await assert.rejects(clock.waitUntil(Infinity, new AbortController().signal), /inválido/);
 });
+
+test("el reloj real cede a I/O durante el cierre y nunca resuelve antes del deadline", async () => {
+  const clock = createSimulationClock(); const controller = new AbortController();
+  const deadline = clock.now() + 15;
+  let yielded = false;
+  setImmediate(() => { yielded = true; });
+  const wait = clock.waitUntil(deadline, controller.signal);
+  await wait;
+  assert(yielded, "La espera fina debe permitir procesar I/O");
+  assert(clock.now() >= deadline, "No debe adelantar la publicación");
+
+  const cancellation = new AbortController();
+  setImmediate(() => cancellation.abort());
+  const cancelled = clock.waitUntil(clock.now() + 15, cancellation.signal);
+  await cancelled;
+  assert(cancellation.signal.aborted);
+});

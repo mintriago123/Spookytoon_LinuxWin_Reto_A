@@ -47,6 +47,7 @@ export class SimulationRuntime {
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
   getLastTurnTiming() { return this.coordinator?.getLastTurnTiming() ?? null; }
+  getRoutingRequestTimings() { return this.routingClient?.getTimings?.() ?? []; }
   setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };

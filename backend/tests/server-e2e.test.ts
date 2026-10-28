@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { test } from "node:test";
+import { monitorEventLoopDelay } from "node:perf_hooks";
 import WebSocket from "ws";
 import { createBackendApp, startBackendServer } from "../src/server.ts";
 import { createRoundPresets } from "../src/config/round-presets.ts";
@@ -40,6 +41,37 @@ for (const roundId of [1, 2, 3] as const) {
     const socket = new WebSocket(`ws://127.0.0.1:${address.port}/ws`, { origin });
     const worlds: WorldSnapshot[] = [];
     const observers = new Set<(world: WorldSnapshot) => void>();
+    const loopDelay = monitorEventLoopDelay({ resolution: 10 }); loopDelay.enable();
+    let previousCounters = { routeTimeouts: 0, invalidRouteResponses: 0, routeErrors: 0 };
+    const unsubscribe = simulator.subscribeCommitted(world => {
+      if (!world.turnId) return;
+      const requests = simulator.getRoutingRequestTimings().filter(sample => sample.turnId === world.turnId);
+      const steps = requests.filter(sample => sample.operation === "step");
+      const p95 = (values: number[]) => {
+        const sorted = [...values].sort((a, b) => a - b);
+        return sorted.length ? Math.round(sorted[Math.ceil(sorted.length * 0.95) - 1] * 10) / 10 : null;
+      };
+      const deltas = { routeTimeouts: world.metrics.routeTimeouts - previousCounters.routeTimeouts,
+        invalidRouteResponses: world.metrics.invalidRouteResponses - previousCounters.invalidRouteResponses,
+        routeErrors: world.metrics.routeErrors - previousCounters.routeErrors };
+      t.diagnostic(JSON.stringify({ event: "turn-diagnostics", roundId, turnId: world.turnId, status: world.status,
+        counters: deltas, cumulative: { routeTimeouts: world.metrics.routeTimeouts,
+          invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors },
+        availability: world.metrics.routeAvailabilityPercent, rollingP50Ms: world.metrics.routeLatencyP50Ms,
+        rollingP95Ms: world.metrics.routeLatencyP95Ms, turnDurationMs: world.metrics.turnDurationMs,
+        timing: simulator.getLastTurnTiming(), transport: { samples: steps.length,
+          totalP95Ms: p95(steps.map(sample => sample.totalMs)), beforeSocketP95Ms: p95(steps.map(sample => sample.beforeSocketMs)),
+          connectP95Ms: p95(steps.map(sample => sample.connectMs)), responseWaitP95Ms: p95(steps.map(sample => sample.responseWaitMs)),
+          bodyP95Ms: p95(steps.map(sample => sample.bodyMs)), engineP95Ms: p95(steps.flatMap(sample => sample.engineMs === null ? [] : [sample.engineMs])),
+          aborted: steps.filter(sample => sample.aborted).length, reused: steps.filter(sample => sample.reusedSocket).length,
+          errors: steps.filter(sample => sample.errorCode).map(sample => sample.errorCode),
+          httpErrors: steps.filter(sample => sample.httpStatus !== null && sample.httpStatus !== 200).map(sample => sample.httpStatus) },
+        sync: requests.filter(sample => sample.operation === "sync"),
+        eventLoopMaxMs: Math.round(loopDelay.max / 1e5) / 10 }));
+      previousCounters = { routeTimeouts: world.metrics.routeTimeouts,
+        invalidRouteResponses: world.metrics.invalidRouteResponses, routeErrors: world.metrics.routeErrors };
+      loopDelay.reset();
+    });
     socket.on("message", data => {
       const message = JSON.parse(data.toString()) as TurnUpdate;
       if (message.event === "TURN_UPDATE") {
@@ -108,6 +140,7 @@ for (const roundId of [1, 2, 3] as const) {
         assert.equal(world.metrics.activeSurvivors + world.metrics.bittenSurvivors + world.metrics.evacuatedSurvivors, initial.survivors.length);
         assert(world.metrics.routeSamples > 0);
         assert(world.metrics.routeLatencyP95Ms > 0);
+        assert(world.metrics.routeLatencyP95Ms <= 150, `p95 ${world.metrics.routeLatencyP95Ms} ms supera el SLA de 150 ms`);
         assert.equal(world.metrics.routeAvailabilityPercent, 100);
         assert.equal(world.metrics.deadlineMisses, 0);
         assert.equal(world.metrics.turnEfficiencyPercent, 100);
@@ -126,11 +159,14 @@ for (const roundId of [1, 2, 3] as const) {
       const pausing = await control("/simulador/pausar", { reason: "Fin de prueba de humo" });
       assert(pausing.afterTurnId === 3 || pausing.afterTurnId === 4);
       const paused = await waitFor(pausing.afterTurnId, "paused");
+      assert.equal(paused.metrics.deadlineMisses, 0, "El turno que cierra la pausa también debe cumplir el deadline");
+      assert.equal(paused.metrics.routeAvailabilityPercent, 100);
+      assert(paused.metrics.routeLatencyP95Ms <= 150, `p95 de cierre ${paused.metrics.routeLatencyP95Ms} ms supera el SLA de 150 ms`);
       assert.equal(paused.worldVersion, previous.worldVersion + pausing.afterTurnId - 3);
       t.diagnostic(JSON.stringify({ roundId, survivors: initial.survivors.length, turns: 3, movements: movementCount,
         p95Ms: previous.metrics.routeLatencyP95Ms, availability: previous.metrics.routeAvailabilityPercent,
         evacuated: previous.metrics.evacuatedSurvivors, bitten: previous.metrics.bittenSurvivors,
         deadlineMisses: previous.metrics.deadlineMisses }));
-    } finally { socket.terminate(); await app.close(); }
+    } finally { unsubscribe(); loopDelay.disable(); socket.terminate(); await app.close(); }
   });
 }
