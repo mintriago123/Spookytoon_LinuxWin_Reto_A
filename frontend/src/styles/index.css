@@ -88,6 +88,12 @@ body {
   filter: invert(1) hue-rotate(200deg) brightness(0.85) contrast(1.05) saturate(0.35);
 }
 
+/* Los detalles de mapa (incluidas alertas Ojos de Águila) deben quedar
+   sobre la leyenda flotante para que el operador pueda leer el popup completo. */
+.leaflet-popup-pane {
+  z-index: 1200;
+}
+
 /* Rótulo de zona en LiveMap: solo texto, sin el globo/flecha por defecto
    del Tooltip de Leaflet. */
 .zone-label-tooltip {
