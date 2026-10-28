@@ -101,6 +101,30 @@ describe("world-store", () => {
     expect(useWorldStore.getState().currentSnapshot).toBe(first);
   });
 
+  // backend/src/modules/simulator/simulation-runtime.ts publica un commit de
+  // control (reanudar desde paused) con el MISMO turnId pero status distinto
+  // ("Acuerdo Etapa 7"). Si el store lo ignora, la UI muestra "paused" para
+  // siempre aunque la partida ya esté corriendo.
+  it("aplica un snapshot con turnId igual pero status distinto (reanudar desde paused)", () => {
+    const paused = makeSnapshot({ turnId: 20, status: "paused" });
+    const resumed = makeSnapshot({ turnId: 20, status: "running" });
+    useWorldStore.getState().applySnapshot(paused);
+    useWorldStore.getState().applySnapshot(resumed);
+    expect(useWorldStore.getState().currentSnapshot).toBe(resumed);
+  });
+
+  // Una ronda nueva es un gameId distinto que reinicia turnId desde 1. Debe
+  // aceptarse aunque turnId sea menor al de la partida anterior, o el mapa
+  // se queda congelado para siempre en el último snapshot de la ronda vieja.
+  it("acepta una partida nueva (gameId distinto) aunque su turnId sea menor y no interpola contra la anterior", () => {
+    const roundOneFinal = makeSnapshot({ gameId: "game-r1", turnId: 150, status: "completed" });
+    const roundTwoFirstTurn = makeSnapshot({ gameId: "game-r2", turnId: 1, status: "running" });
+    useWorldStore.getState().applySnapshot(roundOneFinal);
+    useWorldStore.getState().applySnapshot(roundTwoFirstTurn);
+    expect(useWorldStore.getState().currentSnapshot).toBe(roundTwoFirstTurn);
+    expect(useWorldStore.getState().previousSnapshot).toBeNull();
+  });
+
   it("hasGraphVersionMismatch es false si todavía no hay grafo o snapshot", () => {
     expect(hasGraphVersionMismatch(useWorldStore.getState())).toBe(false);
     useWorldStore.getState().setGraph(makeGraph("graph-v1"));

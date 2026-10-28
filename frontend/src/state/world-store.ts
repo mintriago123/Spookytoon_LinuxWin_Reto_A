@@ -15,7 +15,17 @@ export type PendingControl = "iniciar" | "pausar" | "bloquear-arista" | null;
  *   rutas, mordidas ni evacuaciones.
  * - Si graphVersion del snapshot difiere del grafo cargado, no se dibujan
  *   entidades (ver useGraphVersionMismatch).
- * - turnId duplicado o menor al actual se ignora (ver applySnapshot).
+ * - Dentro de la MISMA partida (mismo gameId), turnId duplicado o menor al
+ *   ya aplicado se ignora; turnId igual con el mismo status también es
+ *   duplicado. Pero backend/.../simulation-runtime.ts publica a propósito
+ *   snapshots con turnId igual y status distinto (reanudar desde paused,
+ *   o pausar entre turnos sin que haya corrido un turno nuevo — "Acuerdo
+ *   Etapa 7"); esos SÍ deben aplicarse o la UI se queda mostrando un
+ *   status viejo para siempre.
+ * - Una partida nueva (gameId distinto, p.ej. la siguiente ronda) siempre
+ *   se acepta aunque su turnId reinicie por debajo del de la partida
+ *   anterior, y no se interpola contra la posición final de esa partida
+ *   anterior (ver applySnapshot).
  */
 export interface WorldStoreState {
   graph: MantaGraph | null;
@@ -49,15 +59,31 @@ export const useWorldStore = create<WorldStoreState>((set, get) => ({
 
   applySnapshot: (snapshot) => {
     const current = get().currentSnapshot;
-    // SPEC.md §6: ignorar turnId duplicado o menor al ya aplicado.
-    if (current && snapshot.turnId <= current.turnId) {
+    if (current) {
+      const sameGame = current.gameId === snapshot.gameId;
+      if (sameGame) {
+        // Mismo gameId: turnId nunca retrocede (SPEC.md §3.4). Uno MENOR es
+        // duplicado/atrasado (reconexión con mensaje viejo) y se ignora.
+        if (snapshot.turnId < current.turnId) return;
+        // turnId IGUAL solo es duplicado real si además el status no
+        // cambió; si cambió (p.ej. paused → running al reanudar) es el
+        // commit de control que el backend publica a propósito y hay que
+        // aplicarlo.
+        if (snapshot.turnId === current.turnId && snapshot.status === current.status) {
+          return;
+        }
+      }
+      set({
+        // gameId distinto (partida nueva): no interpolar contra la última
+        // posición de la partida anterior, aunque algún id de entidad
+        // coincida entre rondas.
+        previousSnapshot: sameGame ? current : null,
+        currentSnapshot: snapshot,
+        receivedAt: Date.now(),
+      });
       return;
     }
-    set({
-      previousSnapshot: current,
-      currentSnapshot: snapshot,
-      receivedAt: Date.now(),
-    });
+    set({ previousSnapshot: null, currentSnapshot: snapshot, receivedAt: Date.now() });
   },
 
   setSocketStatus: (status) => set({ socketStatus: status }),
