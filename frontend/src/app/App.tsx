@@ -73,6 +73,11 @@ export function App() {
           </div>
         </main>
       </div>
+      {/* Etiquetas de sección (Refugios/Cierres/métricas) en cian de señal:
+          compromete ese acento en toda la barra lateral en vez de un solo
+          punto puntual. El botón Iniciar se queda verde a propósito — es
+          el único color que significa "ir" (ver DESIGN.md, Regla del Verde
+          Único); el cian no debe disputarle ese rol. */}
       <aside className="flex w-full flex-col gap-3 overflow-y-auto border-t border-white/10 bg-night-800 p-3 md:w-80 md:border-l md:border-t-0">
         <MetricsPanel />
         <ShelterOccupancy />

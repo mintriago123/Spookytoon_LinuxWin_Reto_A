@@ -13,7 +13,7 @@ export function ShelterOccupancy() {
 
   return (
     <div className="glass flex flex-col gap-2 rounded-lg p-3 text-xs text-slate-100">
-      <span className="font-semibold uppercase tracking-wide text-slate-400">
+      <span className="font-semibold uppercase tracking-wide text-accent-cyan/85">
         Refugios · ocupación
       </span>
       <ul className="flex flex-col gap-2">
@@ -30,7 +30,7 @@ export function ShelterOccupancy() {
                   {ocupacion}/{refugio.capacidad} {lleno ? "lleno" : ""}
                 </span>
               </div>
-              <div className="h-1.5 w-full overflow-hidden rounded-full bg-night-600">
+              <div className="h-1.5 w-full overflow-hidden rounded-full bg-[#14323a]">
                 <div
                   className={`h-full rounded-full ${lleno ? "bg-accent-rose" : "bg-accent-cyan"}`}
                   style={{ width: `${pct}%` }}

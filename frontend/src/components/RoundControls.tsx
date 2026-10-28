@@ -190,7 +190,7 @@ export function RoundControls() {
       </div>
 
       <div className="flex flex-col gap-2 border-t border-white/10 pt-3">
-        <span className="font-semibold uppercase tracking-wide text-slate-400">
+        <span className="font-semibold uppercase tracking-wide text-accent-cyan/85">
           Cierres en vivo
         </span>
 
