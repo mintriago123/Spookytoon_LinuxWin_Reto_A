@@ -176,7 +176,7 @@ export interface TurnUpdate {
   world: CommittedWorldSnapshot;
 }
 
-/** Captura entre turnos. Restaurar pausado; persistencia y recuperación pendientes.
+/** Captura entre turnos. Se persiste para recuperación pausada al reiniciar.
  * No incluye reloj monotónico ni muestras privadas de telemetría.
  */
 export interface SimulatorCheckpoint {

@@ -4,9 +4,16 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 
 ## Estado actual
 
-El backend integra el grafo peatonal, routing, simulador, telemetría, publicación HTTP/WebSocket, workers reales de precompute y persistencia asíncrona con recuperación pausada desde DynamoDB. El simulador es el único escritor del estado de la partida. El frontend React/Vite/TypeScript consume `GET /estado` y `WSS /ws` y presenta el mapa, las rondas, las métricas y los controles de operador.
+| Área | Estado |
+|---|---|
+| Grafo de Manta | Publicado y validado: 300 nodos, 736 aristas, un componente fuertemente conexo y cuatro refugios alcanzables. El backend y el frontend distribuyen la misma versión del grafo. |
+| Routing | Calcula planes por `worldVersion`; los workers precalculan durante la sincronización y `/paso` consulta la tabla instalada. |
+| Simulador | Integra rondas R1/R2/R3, movimientos, cierres de segmentos, pausas y reanudación. El simulador es el único escritor del estado de la partida. |
+| Realtime | `GET /estado` y `WSS /ws` publican snapshots comprometidos. |
+| Persistencia | Cola asíncrona y recuperación pausada están implementadas localmente. Las escrituras de esta versión integrada requieren despliegue para validarse en AWS. |
+| Frontend | React/Vite/TypeScript/Leaflet: mapa, métricas, refugios, controles de operador y reconexión WebSocket. |
 
-El equipo reportó la configuración desplegada en EC2 el 28 de octubre de 2026. Los cambios locales de esta rama requieren despliegue para ser verificados en AWS; las pruebas locales no acreditan por sí mismas escrituras o aceptación en la cuenta.
+El equipo reportó la configuración desplegada en EC2 el 28 de octubre de 2026. Los cambios locales de esta rama requieren despliegue para verificarse en AWS; las pruebas locales no acreditan por sí mismas escrituras ni aceptación en la cuenta.
 
 | Parámetro | Valor reportado |
 |---|---|
@@ -17,11 +24,11 @@ El equipo reportó la configuración desplegada en EC2 el 28 de octubre de 2026.
 | Estado público | `https://3-128-78-190.sslip.io/estado` |
 | WebSocket | `wss://3-128-78-190.sslip.io/ws` |
 
-DynamoDB es regional: usar `us-east-2` en el cliente AWS; `us-east-2a` identifica la zona de la instancia EC2. Los ejemplos de configuración están en [backend/.env.example](backend/.env.example) e [infra/.env.example](infra/.env.example). La entrada HTTPS/WSS reenvía al backend HTTP interno y debe conservar el upgrade de WebSocket.
+DynamoDB es regional: usar `us-east-2` en el cliente AWS; `us-east-2a` identifica la zona de la instancia EC2. Los ejemplos de configuración están en [backend/.env.example](backend/.env.example) e [infra/.env.example](infra/.env.example). La entrada HTTPS/WSS debe reenviar al backend HTTP interno y conservar el upgrade de WebSocket.
 
 ## Arquitectura
 
-Un proceso Fastify integra los módulos del backend. El estado de juego vive en RAM y solo el simulador lo muta. Routing construye planes durante la sincronización; los workers calculan esos planes y `/paso` consulta las tablas locales en O(1). La cola persiste snapshots comprometidos fuera del ciclo de turno. El frontend es una aplicación independiente que recibe snapshots por HTTP y WebSocket.
+Un proceso Fastify integra los módulos del backend. El estado de juego vive en RAM y solo el simulador lo muta. Routing instala planes durante la sincronización; los workers realizan el precompute y `/paso` consulta las tablas locales en O(1). La cola persiste snapshots comprometidos fuera del ciclo de turno. El frontend recibe snapshots por HTTP y WebSocket.
 
 ```mermaid
 flowchart LR
@@ -46,9 +53,11 @@ flowchart LR
 - [Módulos Backend](backend/src/modules/README.md) y guías de [Michael](docs/team/michael/README.md), [Maykel](docs/team/maykel/README.md) y [Kristhian](docs/team/kristhian/README.md).
 - [Extracción del grafo](scripts/README.md).
 
-## Backend local
+## Ejecutar en local
 
 Requiere Node.js 24.12+ de la serie 24.
+
+### Backend
 
 ```bash
 npm --prefix backend ci
@@ -60,11 +69,12 @@ npm run benchmark:routing
 
 `/health/ready` comprueba que el grafo, routing, workers y persistencia estén listos; no exige una partida activa. Antes de iniciar una partida, `GET /estado` responde `503 GAME_NOT_STARTED`.
 
-## Frontend local
+### Frontend
 
 ```bash
 cd frontend
 npm ci
+cp .env.example .env
 npm run dev
 npm test
 npm run typecheck
@@ -72,4 +82,4 @@ npm run lint
 npm run build
 ```
 
-El frontend carga el grafo desde `frontend/public/data/grafo_manta.json`. Para conectar el backend, configura la URL en `.env` siguiendo `.env.example`. Los controles deben usar el mecanismo de operador/proxy configurado; no se debe incluir una API key privilegiada en el bundle del navegador.
+El frontend carga el grafo estático desde `frontend/public/data/grafo_manta.json` y puede mostrar mapa, leyenda y refugios sin backend. Para conectarlo, configura la URL en `.env` siguiendo `.env.example`. No se debe incluir una API key privilegiada en el bundle del navegador.
