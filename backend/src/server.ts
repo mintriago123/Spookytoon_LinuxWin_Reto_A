@@ -22,6 +22,9 @@ import { parseCameraFixture } from "./modules/simulator/camera-surveillance.ts";
 
 export interface BackendOptions {
   apiKey?: string;
+  /** Contraseña corta para /operador/sesion; por defecto usa la apiKey, pero
+   *  un despliegue real debería definir OPERATOR_PASSWORD por separado. */
+  operatorPassword?: string;
   simulator?: ScenarioOptions;
   frontendOrigin?: string;
   logger?: FastifyServerOptions["logger"];
@@ -53,6 +56,13 @@ export async function createBackendApp(options: BackendOptions = {}) {
   const apiKey = options.apiKey ?? process.env.ROUTE_API_KEY;
   if (!apiKey) throw new Error("ROUTE_API_KEY es obligatoria");
   if (apiKey.length < 16) throw new Error("ROUTE_API_KEY requiere al menos 16 caracteres");
+  // OPERATOR_PASSWORD es la contraseña corta que el operador escribe una vez
+  // en /operador/sesion para obtener la cookie httpOnly; separada de apiKey
+  // para no obligar a memorizar/pegar el secreto largo de 16+ caracteres que
+  // usan /paso y /motor/*. Si no se define, cae a apiKey (no rompe
+  // despliegues existentes, pero un entorno real debería definirla aparte).
+  const operatorPassword = options.operatorPassword ?? process.env.OPERATOR_PASSWORD ?? apiKey;
+  if (operatorPassword.length < 8) throw new Error("OPERATOR_PASSWORD requiere al menos 8 caracteres");
   const routingMaxSockets = options.routingMaxSockets ?? Number(process.env.ROUTING_HTTP_MAX_SOCKETS ?? 8);
   if (!Number.isSafeInteger(routingMaxSockets) || routingMaxSockets < 1 || routingMaxSockets > 200) {
     throw new Error("ROUTING_HTTP_MAX_SOCKETS debe estar entre 1 y 200");
@@ -61,7 +71,11 @@ export async function createBackendApp(options: BackendOptions = {}) {
   const persistence = options.persistence ?? createPersistenceAdapter();
   const engine = new RouteEngine(graph, { workerCount: workers.size });
   const detailedRequests = options.requestLogging ?? process.env.LOG_HTTP_REQUESTS === "true";
-  const app = Fastify({ bodyLimit: 1_048_576, logger: options.logger ?? true, logController: new LogController({ disableRequestLogging: !detailedRequests }) });
+  // trustProxy: el proceso solo escucha en loopback (HOST=127.0.0.1) y el
+  // único cliente directo es Caddy en la misma EC2 (infra/Caddyfile); confiar
+  // en X-Forwarded-Proto ahí es seguro y permite fijar la cookie de sesión de
+  // operador como Secure solo cuando la conexión pública real es https.
+  const app = Fastify({ bodyLimit: 1_048_576, logger: options.logger ?? true, trustProxy: true, logController: new LogController({ disableRequestLogging: !detailedRequests }) });
   // En producción se conservan controles, errores y lentitud; los agregados se
   // publican periódicamente sin dos escrituras de log por cada /paso exitoso.
   if (!detailedRequests) app.addHook("onResponse", async (request, reply) => {
@@ -84,6 +98,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
     reply.header("Access-Control-Allow-Origin", origin)
       .header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
       .header("Access-Control-Allow-Headers", "Content-Type, x-api-key")
+      .header("Access-Control-Allow-Credentials", "true")
       .header("Access-Control-Max-Age", "600");
     if (request.method === "OPTIONS") return reply.code(204).send();
   });
@@ -135,7 +150,7 @@ export async function createBackendApp(options: BackendOptions = {}) {
       return { sync: (r, signal) => get().sync(r, signal), status: (id, signal) => get().status(id, signal),
         step: (r, signal) => get().step(r, signal), close: () => client?.close?.(), getTimings: () => client?.getTimings?.() ?? [] };
     }, emitAlert: alert => app.log.error(alert), onFailure: event => app.log.error(event) });
-  app.register(simulatorPlugin, { runtime: simulator, apiKey });
+  app.register(simulatorPlugin, { runtime: simulator, apiKey, operatorPassword });
   app.register(realtimePlugin, { runtime: simulator, allowedOrigins: origins });
   const unsubscribe = simulator.subscribeCommitted(() => {
     const world = simulator.getCommittedWorld();

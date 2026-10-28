@@ -30,7 +30,7 @@ export function MetricsPanel() {
   if (!snapshot) {
     return (
       <div className="glass rounded-lg p-3 text-xs text-slate-400">
-        Sin datos del backend todavía.
+        Configura la partida abajo y pulsa <span className="text-accent-green">Iniciar</span> para ver métricas en vivo.
       </div>
     );
   }

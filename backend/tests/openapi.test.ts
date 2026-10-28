@@ -13,12 +13,17 @@ test("OpenAPI 3.1 válido, referencias resueltas y endpoints reales con segurida
   assert.equal(document.openapi, "3.1.0");
   for (const route of ["/health/live", "/health/ready", "/motor/sincronizar", "/motor/estado/{gameId}", "/paso",
     "/simulador/iniciar", "/simulador/pausar", "/simulador/reanudar", "/simulador/reiniciar",
-    "/simulador/bloquear-arista", "/estado", "/ws"]) assert(document.paths[route], route);
+    "/simulador/bloquear-arista", "/estado", "/ws", "/operador/sesion", "/operador/salir"]) assert(document.paths[route], route);
   const { app } = await createBackendApp({ apiKey: "openapi-validation-test", logger: false });
   try {
+    // /operador/sesion (login) y /operador/salir (logout) son el único POST
+    // público: sin ellos el operador nunca podría obtener la cookie de
+    // sesión. GET /operador/sesion sí exige credencial (confirma la sesión).
+    const PUBLIC_POST_PATHS = new Set(["/operador/sesion", "/operador/salir"]);
     for (const [path, operations] of Object.entries(document.paths) as [string, any][]) {
       for (const method of Object.keys(operations)) {
-        const isProtected = method === "post" || path.startsWith("/motor/");
+        const isProtected = (method === "post" && !PUBLIC_POST_PATHS.has(path)) || path.startsWith("/motor/") ||
+          (method === "get" && path === "/operador/sesion");
         const route = path.replace("{gameId}", "unknown");
         const response = await app.inject({ method: method.toUpperCase() as "GET" | "POST", url: route });
         assert.notEqual(response.statusCode, 404, `${method} ${path}`);
