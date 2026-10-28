@@ -55,8 +55,9 @@ export function survivorBody(estado: Survivor["estado"], color: string): string 
 }
 
 export function shelterBody(): string {
-  return `<polygon points="12,2 14.9,9 22,9.3 16.3,13.9 18.4,21 12,16.8 5.6,21 7.7,13.9 2,9.3 9.1,9"
-    fill="${SHELTER_COLOR}" stroke="#0a0e16" stroke-width="1"/>`;
+  return `<polygon points="12,3 21,10 21,21 3,21 3,10"
+    fill="${SHELTER_COLOR}" stroke="#0a0e16" stroke-width="1"/>
+    <rect x="9.5" y="14" width="5" height="7" fill="#0a0e16" fill-opacity="0.55"/>`;
 }
 
 const zombieIconCache = new Map<string, L.DivIcon>();
