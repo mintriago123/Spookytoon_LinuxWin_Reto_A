@@ -317,7 +317,10 @@ export function LiveMap({ selection = null }: { selection?: SegmentSelection | n
         const ocupacion = live?.ocupantes.length ?? 0;
         return (
           <Marker key={refugio.id} position={pos} icon={shelterIcon()} title={`Refugio ${refugio.id}`} alt={`Refugio ${refugio.id}`}
-            eventHandlers={{ click: () => selectEntity({ kind: "shelter", id: refugio.id }) }}>
+            eventHandlers={{
+              click: () => selectEntity({ kind: "shelter", id: refugio.id }),
+              keypress: event => { if (event.originalEvent.key === "Enter") selectEntity({ kind: "shelter", id: refugio.id }); },
+            }}>
             <Popup>
               Refugio {refugio.id}: {ocupacion}/{refugio.capacidad}
             </Popup>
@@ -338,7 +341,10 @@ export function LiveMap({ selection = null }: { selection?: SegmentSelection | n
         if (!pos) return null;
         return (
           <Marker key={survivor.id} position={pos} icon={survivorIcon(survivor.estado)} title={`Sobreviviente ${survivor.id}`} alt={`Sobreviviente ${survivor.id}`}
-            eventHandlers={{ click: () => selectEntity({ kind: "survivor", id: survivor.id }) }}>
+            eventHandlers={{
+              click: () => selectEntity({ kind: "survivor", id: survivor.id }),
+              keypress: event => { if (event.originalEvent.key === "Enter") selectEntity({ kind: "survivor", id: survivor.id }); },
+            }}>
             <Popup>
               {survivor.id} — {survivor.estado}
             </Popup>

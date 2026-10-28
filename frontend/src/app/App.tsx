@@ -6,22 +6,19 @@ import { EntityLegend } from "../components/EntityLegend";
 import { ShelterOccupancy } from "../components/ShelterOccupancy";
 import { CommandBar } from "../components/CommandBar";
 import { ContextPanel } from "../components/ContextPanel";
+import { EntityExplorer } from "../components/EntityExplorer";
 import { EventTray } from "../components/EventTray";
 import { useTurnSocket } from "../hooks/useTurnSocket";
 import { useOperatorControls } from "../hooks/useOperatorControls";
 import { useSegments } from "../hooks/useSegments";
 import { useWorldStore } from "../state/world-store";
 import type { MantaGraph } from "../types/contracts";
-import type { Selection } from "../lib/command-center";
 
 export function App() {
   const setGraph = useWorldStore(s => s.setGraph);
   const setLastError = useWorldStore(s => s.setLastError);
   const lastError = useWorldStore(s => s.lastError);
   const selection = useWorldStore(s => s.selection);
-  const selectEntity = useWorldStore(s => s.selectEntity);
-  const graph = useWorldStore(s => s.graph);
-  const snapshot = useWorldStore(s => s.currentSnapshot);
   const [panelOpen, setPanelOpen] = useState(() => window.matchMedia("(min-width: 1024px)").matches);
   const operator = useOperatorControls();
   const segments = useSegments();
@@ -55,14 +52,7 @@ export function App() {
       </main>
       <aside id="context-panel" className="context-panel" hidden={!panelOpen} aria-label="Panel contextual">
         <div className="section-heading"><h2>En el mapa</h2><button type="button" className="text-button" onClick={() => setPanelOpen(false)}>Ocultar panel</button></div>
-        <label className="entity-browser">Explorar en el mapa
-          <select aria-label="Explorar en el mapa" value={selection ? JSON.stringify(selection) : ""} onChange={e => selectEntity(e.target.value ? JSON.parse(e.target.value) as Selection : null)}>
-            <option value="">Selecciona una entidad…</option>
-            <optgroup label="Sobrevivientes">{snapshot?.survivors.map(s => <option key={s.id} value={JSON.stringify({ kind: "survivor", id: s.id })}>{s.id} · {s.estado}</option>)}</optgroup>
-            <optgroup label="Refugios">{graph?.refugios.map(s => <option key={s.id} value={JSON.stringify({ kind: "shelter", id: s.id })}>{s.id}</option>)}</optgroup>
-            <optgroup label="Segmentos">{segments.map(s => <option key={s.segmentoId} value={JSON.stringify({ kind: "segment", id: s.segmentoId })}>{s.label}</option>)}</optgroup>
-          </select>
-        </label>
+        <EntityExplorer segments={segments} />
         <ContextPanel segments={segments} />
         <RoundControls operator={operator} segments={segments} />
         <details className="secondary-panel"><summary>Refugios · ocupación y cupos</summary><ShelterOccupancy /></details>
