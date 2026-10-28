@@ -1,44 +1,45 @@
-<?xml version='1.0' encoding='utf-8'?>
-<mxfile host="app.diagrams.net" type="device" version="24.7.17">
+<mxfile host="app.diagrams.net">
   <diagram name="EC2 Ohio" id="ec2-ohio">
-    <mxGraphModel dx="1200" dy="800" grid="1" page="1" pageWidth="1400" pageHeight="1000">
+    <mxGraphModel dx="1073" dy="707" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1000" math="0" shadow="0">
       <root>
         <mxCell id="0" />
         <mxCell id="1" parent="0" />
-        <mxCell id="ui" value="Navegador / operador&#10;GET /estado · WSS /ws" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="40" y="120" width="230" height="90" as="geometry" />
+        <mxCell id="ui" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Navegador / operador&#xa;GET /estado · WSS /ws" vertex="1">
+          <mxGeometry height="90" width="230" x="40" y="120" as="geometry" />
         </mxCell>
-        <mxCell id="tls" value="Caddy TLS&#10;3-128-78-190.sslip.io&#10;HTTPS / WSS" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="350" y="120" width="270" height="100" as="geometry" />
+        <mxCell id="tls" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="Caddy TLS&#xa;3-128-78-190.sslip.io&#xa;HTTPS / WSS" vertex="1">
+          <mxGeometry height="100" width="270" x="350" y="120" as="geometry" />
         </mxCell>
-        <mxCell id="api" value="EC2 t3.micro · Amazon Linux 2023&#10;us-east-2a · i-010f44e5ec891fc73&#10;PM2 fork (o Docker) · un escritor&#10;Fastify HTTP localhost:3001" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="720" y="100" width="350" height="140" as="geometry" />
+        <mxCell id="api" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="EC2 t3.micro · Amazon Linux 2023&#xa;us-east-2a · i-010f44e5ec891fc73&#xa;PM2 fork (o Docker) · un escritor&#xa;Fastify HTTP localhost:3001" vertex="1">
+          <mxGeometry height="140" width="350" x="720" y="100" as="geometry" />
         </mxCell>
-        <mxCell id="worker" value="worker_threads&#10;precompute por sincronización&#10;/paso: lookup local sin IPC" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="720" y="320" width="350" height="100" as="geometry" />
+        <mxCell id="worker" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="worker_threads&#xa;precompute por sincronización&#xa;/paso: lookup local sin IPC" vertex="1">
+          <mxGeometry height="100" width="350" x="720" y="320" as="geometry" />
         </mxCell>
-        <mxCell id="db" value="DynamoDB On-Demand&#10;us-east-2 (Ohio)&#10;spookython-manta-state&#10;cola acotada · checkpoint gzip + SHA256&#10;recuperación pausada · IAM Role" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="720" y="510" width="350" height="150" as="geometry" />
+        <mxCell id="db" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="DynamoDB On-Demand&#xa;us-east-2 (Ohio)&#xa;spookython-manta-state&#xa;cola acotada · checkpoint gzip + SHA256&#xa;recuperación pausada · IAM Role" vertex="1">
+          <mxGeometry height="150" width="350" x="720" y="510" as="geometry" />
         </mxCell>
-        <mxCell id="cw" value="CloudWatch / logs JSON&#10;CPU, status EC2, p95 y persistencia&#10;Budget: límite US$1,00&#10;uso reportado US$0,00" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="310" y="510" width="320" height="150" as="geometry" />
+        <mxCell id="cw" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="CloudWatch / logs JSON&#xa;CPU, status EC2, p95 y persistencia&#xa;Budget: límite US$1,00&#xa;uso reportado US$0,00" vertex="1">
+          <mxGeometry height="150" width="320" x="310" y="510" as="geometry" />
         </mxCell>
-        <mxCell id="note" value="SCP: solo us-east-2&#10;TLS termina en Caddy&#10;health/motor/paso: acceso local&#10;AWS: IAM Role sin llaves&#10;No ejecutar dos escritores" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" vertex="1" parent="1">
-          <mxGeometry x="50" y="320" width="340" height="120" as="geometry" />
+        <mxCell id="note" parent="1" style="rounded=1;whiteSpace=wrap;html=0;fillColor=#dae8fc;strokeColor=#6c8ebf;" value="SCP: solo us-east-2&#xa;TLS termina en Caddy&#xa;health/motor/paso: acceso local&#xa;AWS: IAM Role sin llaves&#xa;No ejecutar dos escritores" vertex="1">
+          <mxGeometry height="120" width="340" x="50" y="320" as="geometry" />
         </mxCell>
-        <mxCell id="edge0" value="HTTPS/WSS" edge="1" parent="1" source="ui" target="tls" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;">
+        <mxCell id="edge0" edge="1" parent="1" source="ui" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;" target="tls" value="HTTPS/WSS">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="edge1" value="reverse_proxy" edge="1" parent="1" source="tls" target="api" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;">
+        <mxCell id="edge1" edge="1" parent="1" source="tls" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;" target="api" value="reverse_proxy">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="edge2" value="sync / plan" edge="1" parent="1" source="api" target="worker" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;">
+        <mxCell id="edge2" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;" target="worker" value="sync / plan">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
-        <mxCell id="edge3" value="fire-and-forget" edge="1" parent="1" source="api" target="db" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;">
-          <mxGeometry relative="1" as="geometry" />
+        <mxCell id="edge3" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;" target="db" value="fire-and-forget">
+          <mxGeometry relative="1" x="0.4815" as="geometry">
+            <mxPoint as="offset" />
+          </mxGeometry>
         </mxCell>
-        <mxCell id="edge4" value="JSON cada 30 s" edge="1" parent="1" source="api" target="cw" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;">
+        <mxCell id="edge4" edge="1" parent="1" source="api" style="edgeStyle=orthogonalEdgeStyle;endArrow=block;html=0;" target="cw" value="JSON cada 30 s">
           <mxGeometry relative="1" as="geometry" />
         </mxCell>
       </root>
