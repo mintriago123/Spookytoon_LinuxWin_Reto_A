@@ -14,6 +14,10 @@ export interface ScenarioOptions {
   /** Solo configuración aprobada suministrada por el composition root; no hay escenario de respaldo. */
   rounds?: Partial<Record<RoundId, unknown>>;
   initialMetrics?: (roundId: RoundId) => Immutable<TelemetryMetrics>;
+  /** Inyección para verificar el reloj sin cambiar los intervalos del escenario. */
+  clock?: SimulationClock;
+  /** Tolerancia de cierre explícita; por defecto 10 ms. No se aplica al cálculo. */
+  commitJitterToleranceMs?: number;
 }
 interface RuntimeOptions extends ScenarioOptions {
   graph: Immutable<MantaGraph>;
@@ -23,6 +27,7 @@ interface RuntimeOptions extends ScenarioOptions {
   onFailure: (event: { code: "SIMULATOR_TURN_FAILED"; gameId: string; turnId: number }) => void;
   clock?: SimulationClock;
   isoNow?: () => string;
+  getPersistenceProgress?: () => { snapshotQueueDepth: number; lastSnapshotTurnId: number | null };
 }
 
 /** Programa turnos; la escritura del mundo permanece exclusivamente en TurnCoordinator. */
@@ -35,11 +40,45 @@ export class SimulationRuntime {
   private closed = false;
   private snapshot: CommittedWorldSnapshot | null = null;
   private readonly listeners = new Set<(snapshot: CommittedWorldSnapshot) => void>();
+  private realtimeClientCount = 0;
+  private routingClient: RoutingClient | null = null;
 
   constructor(options: RuntimeOptions) { this.options = options; this.clock = options.clock ?? createSimulationClock(); }
 
   getCommittedWorld(): Immutable<WorldState> | null { return this.coordinator?.getCommittedWorld() ?? null; }
+  /** Recuperación entre turnos: no arranca reloj ni conserva planes del proceso anterior. */
+  restorePaused(world: WorldState): void {
+    if (this.coordinator || this.runner || world.status !== "paused" || world.turnId >= 150) {
+      throw new Error("La recuperación requiere un runtime vacío y una partida pausada incompleta");
+    }
+    this.routingClient = this.options.clientFactory();
+    this.coordinator = new TurnCoordinator(world, { client: this.routingClient, syncTimeoutMs: this.options.syncTimeoutMs,
+      now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+      commitJitterToleranceMs: this.options.commitJitterToleranceMs,
+      getWsClientCount: () => this.realtimeClientCount, getPersistenceProgress: this.options.getPersistenceProgress,
+      onCommitted: state => this.publishCommitted(state) });
+    this.usedGameIds.add(world.gameId);
+    this.publishCommitted(this.coordinator.getCommittedWorld());
+  }
+
+  resume(command: StartCommand) {
+    if (this.getCommittedWorld()?.status !== "paused") throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Solo se reanuda una partida pausada");
+    return this.start(command);
+  }
+
+  async restart(command: StartCommand) {
+    const current = this.getCommittedWorld();
+    if (!current || !["paused", "completed"].includes(current.status)) throw new SimulatorControlError(409, "GAME_STATE_CONFLICT", "Pausa la partida antes de reiniciar");
+    if (this.usedGameIds.has(command.gameId)) throw new SimulatorControlError(409, "GAME_IDENTITY_CONFLICT", "Reiniciar requiere un gameId nuevo");
+    validateRoundConfig(this.options.rounds?.[command.roundId], this.options.graph);
+    await this.whenStopped();
+    this.routingClient?.close?.(); this.routingClient = null; this.coordinator = null;
+    return this.start(command);
+  }
   getCommittedSnapshot(): CommittedWorldSnapshot | null { return this.snapshot; }
+  getLastTurnTiming() { return this.coordinator?.getLastTurnTiming() ?? null; }
+  getRoutingRequestTimings() { return this.routingClient?.getTimings?.() ?? []; }
+  setRealtimeClientCount(count: number): void { this.realtimeClientCount = count; }
   subscribeCommitted(listener: (snapshot: CommittedWorldSnapshot) => void): () => void {
     this.listeners.add(listener); return () => { this.listeners.delete(listener); };
   }
@@ -73,9 +112,14 @@ export class SimulationRuntime {
       catch { throw new SimulatorControlError(503, "ROUTING_NOT_READY", "El cliente de routing aún no está disponible"); }
       const coordinator = new TurnCoordinator(initial, { client, syncTimeoutMs: this.options.syncTimeoutMs,
         now: () => this.clock.now(), isoNow: () => this.isoNow(), emitAlert: this.options.emitAlert,
+        getWsClientCount: () => this.realtimeClientCount,
+        getPersistenceProgress: this.options.getPersistenceProgress,
+        commitJitterToleranceMs: this.options.commitJitterToleranceMs,
         onCommitted: world => this.publishCommitted(world) });
-      coordinator.resume();
+      this.routingClient?.close?.();
+      this.routingClient = client;
       this.coordinator = coordinator; this.usedGameIds.add(command.gameId);
+      coordinator.resume();
     }
     const nextTurnId = this.coordinator!.getCommittedWorld().turnId + 1;
     this.launch();
@@ -99,6 +143,8 @@ export class SimulationRuntime {
     this.runner?.controller.abort();
     if (this.getCommittedWorld()?.status === "running") this.coordinator!.requestPause("Cierre del proceso");
     await this.whenStopped();
+    this.routingClient?.close?.();
+    this.routingClient = null;
   }
 
   private isoNow(): string { return this.options.isoNow?.() ?? new Date().toISOString(); }
@@ -118,12 +164,12 @@ export class SimulationRuntime {
     const origin = this.clock.now();
     this.runner = runner;
     runner.promise = Promise.resolve().then(async () => {
-      let nextTick = origin; // Acuerdo Etapa 6: turno 1 inmediato; turno 150 en origin + 298.000 ms.
+      // Calcular desde T0; publicar en fronteras absolutas T0+2.000..T0+300.000.
+      let closesAt = origin + 2_000;
       while (!runner.controller.signal.aborted && coordinator.getCommittedWorld().status === "running") {
-        await this.clock.waitUntil(nextTick, runner.controller.signal);
-        if (runner.controller.signal.aborted || coordinator.getCommittedWorld().status !== "running") break;
-        await coordinator.runTurn(nextTick + 2_000);
-        nextTick += 2_000; // Absoluto: el tiempo de cálculo no desplaza los ticks siguientes.
+        const boundary = closesAt;
+        await coordinator.runTurn(boundary, () => this.clock.waitUntil(boundary, runner.controller.signal));
+        closesAt += 2_000; // Absoluto: ni el cálculo ni la publicación desplazan ventanas.
       }
     }).catch(() => {
       const world = coordinator.getCommittedWorld();

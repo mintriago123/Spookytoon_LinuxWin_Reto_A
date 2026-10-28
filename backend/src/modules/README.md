@@ -4,54 +4,47 @@ El Backend es un solo monolito modular: un proceso Fastify, un estado autoritati
 
 ## Módulos y ownership
 
-| Módulo | Responsable principal | Responsabilidad | Estado en `design` |
+| Módulo | Responsable principal | Responsabilidad | Estado integrado |
 |---|---|---|---|
-| graph | Michael | Carga del artefacto inmutable, validación y adyacencia | Implementado, grafo real publicado |
-| routing | Michael | POST /paso, sincronización de snapshot y workers de ruta | Implementado |
-| simulator | Maykel | Único escritor de WorldState, reloj, zombies, sobrevivientes y mordidas | Game loop integrado; `config/` de rondas reales sigue solo `.gitkeep` aquí (ver nota abajo) |
-| telemetry | Michael | Ventana p95, métricas del motor y del turno | Solo `.gitkeep` en `design`. Implementado y verificado (12/12 tests) en `feat/backend-rounds-metrics`, sin mergear |
-| persistence | Michael | Cola asíncrona y snapshots DynamoDB | Sin implementar en ninguna rama; solo `.gitkeep` |
+| graph | Michael | Carga del artefacto inmutable, validación y adyacencia | Implementado; grafo real publicado |
+| routing | Michael | POST /paso, sincronización de snapshot y pool de workers | Implementado |
+| simulator | Maykel | Único escritor de WorldState, reloj, zombies, sobrevivientes y mordidas | Rondas R1/R2/R3 cableadas |
+| telemetry | Michael | Ventana p95, métricas del motor y del turno | Implementado |
+| persistence | Michael | Cola asíncrona, snapshots DynamoDB y recuperación pausada | Implementado localmente; AWS requiere despliegue para verificar |
 | realtime | Maykel | Publicar TURN_UPDATE después del commit del simulador | Implementado |
 
-`backend/src/config/` (rounds/env) también es solo `.gitkeep` en `design`. La
-implementación real (`round-presets.ts`, con los spawns/eventos de las tres
-rondas sobre el grafo de Manta) está en `feat/backend-rounds-metrics`,
-verificada de forma independiente (12/12 tests propios, p95 y disponibilidad
-medidos) pero pendiente de integrar. Sin ella, `POST /simulador/iniciar`
-siempre responde 503 `ROUND_NOT_CONFIGURED` en este checkout.
+Los presets están en `backend/src/config/round-presets.ts` y se validan contra
+el grafo de Manta. La integración local no acredita por sí misma el estado del
+backend desplegado ni escrituras en AWS.
 
 ## Límites de dependencia
 
-1. **backend/src/server.ts** es el composition root ejecutable: verifica manifiesto, carga el grafo, crea una instancia de RouteEngine y registra el plugin Fastify en el servidor común. El plugin del game loop debe registrarse en este mismo root y recibir las mismas instancias.
+1. **backend/src/server.ts** verifica el manifiesto, carga el grafo y los tres presets de ronda, crea RouteEngine y SimulationRuntime y registra routing, simulador y realtime en el servidor Fastify común.
 2. **contracts/** contiene DTOs y validadores compartidos. Todos los módulos dependen de estos tipos públicos y de SPEC.md.
 3. **graph** expone datos inmutables. **routing** mantiene su snapshot de lectura y nunca muta WorldState.
-4. **routing** calcula Dijkstra inverso una vez por worldVersion y publica un plan inmutable en RAM. La implementación actual corre con un worker lógico; cada POST /paso consulta bestMoveByNode en O(1).
+4. **routing** calcula el plan Base por worldVersion y planes por refugio cuando hay reservas, siempre durante sync. Un pool de `worker_threads` precomputa y publica tablas inmutables en RAM; cada POST /paso consulta su tabla en O(1).
 5. **simulator** es el único dueño de la escritura de WorldState. Invoca POST /motor/sincronizar y POST /paso por loopback con los contratos HTTP definidos; valida el resultado antes de aplicar un movimiento. Una respuesta 401 activa `pauseCause=routing-unauthorized` y `alertCode=ROUTING_UNAUTHORIZED`; `applyRoutingFailureSignal` programa la pausa y devuelve el evento crítico que el coordinador debe publicar.
 6. **persistence** y **realtime** reciben snapshots ya comprometidos. No escriben de vuelta al simulador ni retrasan el loop por I/O.
 7. No importar archivos internos de otro módulo. Las integraciones pasan por su interfaz pública, contrato HTTP o snapshot tipado.
 
-## Secuencia de integración
+## Integración actual
 
-- [x] Michael entregó graph, contracts y el módulo routing con sync de versión.
-- [x] Maykel conectó game-loop a los endpoints internos, mantiene WorldState y publica el snapshot al cierre.
-- [ ] Michael habilita persistencia (DynamoDB, sin empezar) y métricas/rondas reales (hecho en `feat/backend-rounds-metrics`, pendiente de mergear a `design`).
-- [x] Maykel conectó realtime al commit.
-- [x] Kristhian consume GET /estado y WSS /ws sin depender de imports del Backend.
+- Graph/contracts/routing, simulador y realtime están ensamblados en `server.ts`; los presets se validan contra el grafo de Manta.
+- Telemetría actualiza contadores y porcentajes de entidades, ventana de 1.000 solicitudes, disponibilidad y eficiencia al cerrar cada turno. El DTO público conserva compatibilidad con los campos existentes.
+- Persistencia DynamoDB escribe snapshots de forma asíncrona y permite recuperar partidas pausadas; la cola no bloquea el loop.
+- Los consumidores reciben GET /estado y WS /ws; CORS y orígenes WS comparten configuración. La guía operativa y los indicadores están en [backend/README.md](../../README.md).
 
 Si una regla cambia, actualizar primero SPEC.md, luego contratos y finalmente módulos consumidores. Mantener el despliegue único y el escritor único por partida.
 
 ## Motor Base ejecutable
 
 Configurar `ROUTE_API_KEY` (mínimo 16 caracteres) y ejecutar `npm run backend:start`.
-Para ECS, definir `HOST=0.0.0.0`; en local escucha `127.0.0.1`. `/health/ready`
-responde 503 hasta instalar el primer snapshot. `GET /motor/estado/:gameId`
+Para EC2 o ECS, definir `HOST=0.0.0.0`; en local escucha `127.0.0.1`. `/health/ready`
+verifica grafo, workers y persistencia; no requiere una partida activa. `GET /motor/estado/:gameId`
 permite reconciliar una sincronización incierta; repetir el mismo payload es
 idempotente, `baseWorldVersion` sigue siendo estricta y los `turnId` pueden
 avanzar con saltos después de turnos sin plan confirmado. `simulator/routing-sync.ts`
 conserva el payload incierto y reconcilia el estado antes de volver a rutear. Las
 llegadas y la mutación de WorldState siguen perteneciendo al simulador.
 
-En este checkout de `design`, `POST /simulador/iniciar` responde 503
-`ROUND_NOT_CONFIGURED`: no hay `RoundConfig` real cableado en
-`createBackendApp()` (ver tabla de arriba). Para probar una ronda completa
-localmente hace falta la rama `feat/backend-rounds-metrics`.
+`POST /simulador/iniciar` dispone de presets R1/R2/R3 en la configuración integrada.

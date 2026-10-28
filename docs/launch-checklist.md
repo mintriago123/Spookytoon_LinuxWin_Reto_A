@@ -1,28 +1,32 @@
 # Checklist de lanzamiento y demo
 
-Orden operativo tomado de las prioridades del Track. Marcar completado solo con evidencia real.
+Estado revisado contra `EZMayk` en `05d6145`. Marcar una puerta como completada solo con evidencia reproducible; los presets generados actuales no equivalen a escenarios oficiales aprobados.
 
-| Prioridad | Responsable | Trabajo | Evidencia | Estado |
-|---|---|---|---|---|
-| Hoy | Michael | Extraer, normalizar y validar grafo peatonal; fijar refugios/capacidades | Grafo versionado, atribución y validación fuerte | Completado: 300 nodos (298 intersecciones)/736 aristas, un SCC, cuatro refugios alcanzables desde todos los nodos; copias sincronizadas |
-| Hoy | Michael | Implementar motor Base de rutas, sincronización por turno, x-api-key y fallback | POST /motor/sincronizar, GET /motor/estado, POST /paso, pruebas y benchmark local | 7 archivos de pruebas pasan; benchmark sintético de 200 sobrevivientes, sin zombies, con keep-alive precalentado: 200/200 respuestas, HTTP p95 46,1 ms (p50 45,0; p99 46,1), lookup p95 0,008 ms y build 10,1 ms; integrar el game loop y medir roster real pendientes |
-| Hoy | Michael | Elegir región, crear AWS Budget y alertas | Captura real en docs/evidence/aws-budget.png | Pendiente |
-| Hoy / mañana | Michael + Maykel | Integrar motor precomputado con simulador y validar movimiento antes del commit | API desplegable y flujo de turno integrado | Pendiente de integrar con el game loop |
-| Mañana | Michael + Maykel | Medir carga con 20, 80 y 200 sobrevivientes en el entorno integrado | p50/p95/p99, buildLatencyMs del plan, timeouts, deadline misses y configuración usada | Pendiente; falta medir el game loop integrado en el entorno objetivo |
-| Miércoles temprano | Equipo | README/diagrama listos; completar costos reales, commits incrementales y URL pública estable | README/diagrama disponibles; docs/costos.md conciliado, historial real y URL verificada aún pendientes | Parcial |
-| Hasta el viernes | Kristhian + equipo | Preparar pitch de 5 min y video de respaldo | Video reproducible sin red y guion de demo | Pendiente |
+| Área | Responsable(s) | Estado actual | Próxima evidencia requerida |
+|---|---|---|---|
+| Grafo y routing Base | Michael | Implementados y conectados al servidor del simulador. El grafo versionado tiene 300 nodos, 736 aristas y cuatro refugios. El benchmark sintético documentado sigue siendo una medición del motor, no del escenario final. | Integrar la política `.gitattributes` propuesta en `origin/design` y verificar manifiesto/checksum en Windows; volver a ejecutar validación de grafo y pruebas afectadas. |
+| Game loop, controles y realtime | Maykel | `SimulationRuntime`, coordinación HTTP con routing, controles, `GET /estado` y `WS /ws` están ensamblados en `backend/src/server.ts`. | Aceptación con configuraciones de ronda aprobadas y ejecución de 150 turnos con reloj real. |
+| Presets R1/R2/R3 | Maykel + equipo | `backend/src/config/round-presets.ts` genera presets deterministas y el servidor los activa por defecto. Las cantidades zombie y la distribución son valores de implementación sin aprobación documentada ni fuente censal. | Confirmar/ajustar cantidades, composición, spawns y eventos; documentar fuente y aprobación antes de llamarlos oficiales. |
+| Telemetría de turno | Michael + Maykel | `updateTurnMetrics()` y métricas de clientes WS están integradas. Backend registra pruebas para métricas y smoke tests; su resultado no acredita aún el SLA de producción. | Medir las rondas aprobadas en el entorno final, con muestras, timeouts y deadline misses. |
+| Integración de backend | Michael + Maykel | `backend/tests/RESULTS.md` registra 12 pruebas aprobadas, incluyendo smoke tests HTTP/WS de tres turnos por ronda con reloj real. La Etapa 8 sintética anterior usa fixture de grafo ficticio. | Ejecutar aceptación completa con grafo validado, escenarios aprobados y 150 turnos; repetir en entorno de despliegue. |
+| Frontend y demo | Kristhian + equipo | La rama revisada contiene el grafo público; la integración del frontend con los endpoints y los controles debe confirmarse en la rama de trabajo compartida. | Verificar mapa, reconciliación GET/WS, reconexión y controles con el backend actual; probar URL externa y preparar video de respaldo. |
+| Persistencia y despliegue | Michael | Persistencia DynamoDB y recuperación pausada están implementadas; falta confirmar esta versión integrada en AWS, junto con presupuesto/alarma y aceptación final. | Desplegar la versión integrada, verificar recuperación/escrituras en la tabla, cerrar presupuesto/alarma y documentar costos/rollback. |
+| Datos demográficos de Manta | Equipo; coordinación de Maykel | No hay datos censales integrados al repo. | Investigar Censo 2022 INEC y documentos GAD para proponer distribución espacial de sobrevivientes. Tratar focos de infección como hipótesis narrativa separada. |
 
-## Puertas de salida
+## Puertas de aceptación
 
-1. No iniciar rondas hasta que el grafo y las posiciones/cantidades de entidades estén configurados y validados.
-2. No declarar SLA hasta medir p95 con 20/80/200 sobrevivientes en la configuración final. El objetivo contractual es p95 ≤150 ms y timeout de 500 ms.
-3. No dejar ECS/ALB encendidos sin Budget y alarma configurados. Confirmar AWS_REGION antes de estimar y desplegar.
-4. La demo debe mostrar movimiento real, eventos de ciudad, refugios, métricas y recuperación de WebSocket.
-5. Mantener commits pequeños y reales durante el trabajo. No fabricar historial ni aplazar todos los cambios a un único commit final.
-6. Mantener una URL pública estable y probarla desde una conexión externa. El video de respaldo debe reproducir la ruta crítica de la demo.
+1. No presentar los presets actuales como escenario oficial hasta que el equipo apruebe sus valores. SPEC §5.1 establece que las cantidades y posiciones del escenario no deben inventarse.
+2. Verificar el grafo y el SHA-256 del manifiesto en el checkout de Windows antes de basar la aceptación en `createBackendApp()`.
+3. Medir 20, 80 y 200 sobrevivientes con las configuraciones aprobadas. La evidencia actual de smoke tests cubre tres turnos reales por ronda, y las mediciones de fixtures sintéticas no prueban SLA ni cadencia real de cinco minutos.
+4. Para declarar el objetivo de routing, medir p95 ≤150 ms con hasta 200 decisiones concurrentes y timeout individual de 500 ms en el entorno objetivo.
+5. Confirmar que HTTP y WS publican el mismo snapshot comprometido, y que pausas/reanudaciones con igual turno y versión se reflejan correctamente.
+6. Confirmar región, Budget y alarma antes de encender recursos ECS/ALB; probar URL pública desde una conexión externa.
+7. La demo debe enseñar movimiento, eventos de ciudad, refugios, métricas y recuperación de WebSocket. El video debe cubrir la ruta crítica sin red.
 
-## Bloqueos de datos
+## Bloqueos de decisión/datos
 
-- Región AWS final, límite del Budget y contacto de alertas.
-- Roster de zombies y posiciones iniciales por ronda.
-- URL/dominio disponible para API y Frontend.
+- Aprobación de cantidades y spawns de zombies/sobrevivientes y turnos de eventos para R1, R2 y R3.
+- Fuentes espaciales oficiales para orientar la distribución de sobrevivientes; no inferir brotes únicamente desde densidad residencial.
+- Integración y verificación de `.gitattributes` para evitar divergencia LF/CRLF y checksum en Windows.
+- Región, límite de Budget y contacto de alertas AWS.
+- Estado/URL del frontend integrado, dominio de API y responsable de la aprobación final del escenario.

@@ -63,7 +63,6 @@ export function resolveSurvivorDecisions(
     const wait = (cause: WaitCause, targetShelterId = survivor.targetShelterId): SurvivorDecision => ({
       survivorId: survivor.id, decision: "esperar", nodeId: survivor.nodeId, targetShelterId, cause,
     });
-    if (unauthorized) return wait("authorization-failed");
     if (!confirmed) return wait("sync-failed");
     const list = attempts.get(survivor.id);
     if (!list?.length) return wait("missing-response");
@@ -84,7 +83,8 @@ export function resolveSurvivorDecisions(
         !nodes.has(response.fromNodeId) || !nodes.has(response.toNodeId)) return wait("invalid-response");
     const shelter = response.targetShelterId === null ? null : shelters.get(response.targetShelterId);
     if (response.targetShelterId !== null && (!shelter ||
-        shelter.ocupantes.length + shelter.reservados.length >= shelter.capacidad)) return wait("invalid-response");
+        shelter.ocupantes.length + shelter.reservados.length >= shelter.capacidad &&
+        !shelter.reservados.includes(survivor.id))) return wait("invalid-response");
     if (response.decision === "esperar") {
       if (response.toNodeId !== survivor.nodeId || response.edgeId !== null || response.routeCost !== null ||
           (shelter && shelter.nodoId !== survivor.nodeId)) return wait("invalid-response");
@@ -102,8 +102,16 @@ export function resolveSurvivorDecisions(
       targetShelterId: shelter.id, routeCost: response.routeCost,
     } };
   });
+  const validResponseSurvivorIds = decisions.filter(decision => decision.decision === "mover" ||
+    decision.cause === "routing-wait").map(decision => decision.survivorId);
+  const survivorsById = new Map(context.survivors.map(survivor => [survivor.id, survivor]));
+  const applied: SurvivorDecision[] = unauthorized ? decisions.map(decision => ({
+    survivorId: decision.survivorId, decision: "esperar", nodeId: survivorsById.get(decision.survivorId)!.nodeId,
+    targetShelterId: survivorsById.get(decision.survivorId)!.targetShelterId, cause: "authorization-failed",
+  })) : decisions;
   return {
-    gameId: context.gameId, turnId: context.turnId, worldVersion: context.worldVersion, decisions,
+    gameId: context.gameId, turnId: context.turnId, worldVersion: context.worldVersion,
+    decisions: applied, validResponseSurvivorIds,
     pauseCause: unauthorized ? "routing-unauthorized" : null,
     alertCode: unauthorized ? "ROUTING_UNAUTHORIZED" : null,
   };
@@ -177,19 +185,31 @@ export function resolveShelterAdmissions(input: {
   survivorsAfterBites: Immutable<RouteSurvivor[]>;
   shelters: Immutable<RouteShelter[]>;
 }): ShelterAdmissionResult {
-  // No interpretar ni reasignar reservas hasta acordar la política con el equipo.
-  if (input.shelters.some(shelter => shelter.reservados.length > 0)) {
-    throw new Error("Admisión con reservas pendiente de acuerdo; solo se admite escenario Base sin reservas");
-  }
   const survivors = input.survivorsAfterBites.map(survivor => ({ ...survivor }));
+  const byId = new Map(survivors.map(survivor => [survivor.id, survivor]));
+  const claimedReservations = new Set<string>();
   const shelters = input.shelters.map(shelter => ({ ...shelter,
-    ocupantes: [...shelter.ocupantes], reservados: [...shelter.reservados] }));
+    ocupantes: [...new Set(shelter.ocupantes)], reservados: [...new Set(shelter.reservados)].filter(id => {
+      const survivor = byId.get(id);
+      if (!survivor || survivor.estado !== "vivo" || claimedReservations.has(id) ||
+          (survivor.targetShelterId !== null && survivor.targetShelterId !== shelter.id)) return false;
+      claimedReservations.add(id); return true;
+    }) }));
   const admissions: ShelterAdmissionResult["admissions"] = [];
   for (const shelter of shelters) {
+    if (shelter.ocupantes.length + shelter.reservados.length > shelter.capacidad) {
+      throw new Error(`El refugio ${shelter.id} excede su capacidad`);
+    }
+    const reserved = new Set(shelter.reservados);
     const candidates = survivors.filter(survivor => survivor.estado === "vivo" && survivor.nodeId === shelter.nodoId)
-      .sort((a, b) => a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-    const free = Math.max(0, shelter.capacidad - shelter.ocupantes.length);
-    for (const survivor of candidates.slice(0, free)) {
+      .sort((a, b) => Number(reserved.has(b.id)) - Number(reserved.has(a.id)) ||
+        (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    for (const survivor of candidates) {
+      const holdsReservation = shelter.reservados.includes(survivor.id);
+      const free = shelter.capacidad - shelter.ocupantes.length - shelter.reservados.length;
+      if (!holdsReservation && free <= 0) continue;
+      if (shelter.ocupantes.length >= shelter.capacidad) continue;
+      shelter.reservados = shelter.reservados.filter(id => id !== survivor.id);
       survivor.estado = "evacuado";
       survivor.evacuadoEnTurno = input.turnId;
       survivor.targetShelterId = shelter.id;
@@ -197,5 +217,7 @@ export function resolveShelterAdmissions(input: {
       admissions.push({ survivorId: survivor.id, shelterId: shelter.id });
     }
   }
+  // Una llegada a otro refugio libera la reserva anterior en el mismo commit.
+  for (const shelter of shelters) shelter.reservados = shelter.reservados.filter(id => byId.get(id)?.estado === "vivo");
   return { survivors, shelters, admissions };
 }

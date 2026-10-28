@@ -8,6 +8,8 @@ export interface RoutingServerOptions {
   apiKey: string;
   bodyLimitBytes?: number;
   logger?: boolean;
+  readiness?: () => boolean;
+  synchronize?: (value: unknown) => Promise<unknown>;
 }
 
 function authorized(header: string | string[] | undefined, expectedHash: Buffer) {
@@ -46,7 +48,7 @@ export const routingPlugin: FastifyPluginAsync<RoutingServerOptions> = async (ap
 
   app.get("/health/live", async () => ({ status: "live" }));
   app.get("/health/ready", async (_request, reply) => {
-    const ready = options.engine.isReady();
+    const ready = options.readiness?.() ?? options.engine.isInitialized();
     return reply.code(ready ? 200 : 503).send({ status: ready ? "ready" : "not-ready" });
   });
   app.get<{ Params: { gameId: string }; Reply: RoutingStatusResponse }>("/motor/estado/:gameId", {
@@ -56,7 +58,7 @@ export const routingPlugin: FastifyPluginAsync<RoutingServerOptions> = async (ap
     catch (error) { return sendError(request, reply, error); }
   });
   app.post("/motor/sincronizar", { preHandler: auth }, async (request, reply) => {
-    try { return options.engine.sync(request.body); }
+    try { return options.synchronize ? await options.synchronize(request.body) : options.engine.sync(request.body); }
     catch (error) { return sendError(request, reply, error); }
   });
   app.post("/paso", { preHandler: auth }, async (request, reply) => {

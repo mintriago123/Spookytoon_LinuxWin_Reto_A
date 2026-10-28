@@ -239,10 +239,63 @@ test("admisión incluye quienes esperan, desempata por código de ID y respeta c
     shelters: result.shelters }).admissions, []);
 });
 
-test("no interpreta reservas mientras su política siga pendiente", () => {
-  const ctx = context(); ctx.shelters[0].reservados = ["S"];
-  assert.throws(() => resolveShelterAdmissions(freeze({ turnId: 2,
-    survivorsAfterBites: ctx.survivors, shelters: ctx.shelters })), /reservas pendiente/);
+test("una plaza reservada admite Z antes que A sin reserva", () => {
+  const shelter = { ...context().shelters[0], capacidad: 1, reservados: ["Z"] };
+  const people = [survivor("A", "R"), { ...survivor("Z", "R"), targetShelterId: "REF" }];
+  const input = { turnId: 2, survivorsAfterBites: people, shelters: [shelter] };
+  const before = structuredClone(input);
+  const result = resolveShelterAdmissions(freeze(input));
+  assert.deepEqual(result.admissions, [{ survivorId: "Z", shelterId: "REF" }]);
+  assert.equal(result.survivors.find(s => s.id === "A")!.estado, "vivo");
+  assert.deepEqual(result.shelters[0].ocupantes, ["Z"]);
+  assert.deepEqual(result.shelters[0].reservados, []);
+  assert.deepEqual(input, before);
+});
+
+test("admite por ID dentro de cada grupo y retiene la plaza de un reservado en camino", () => {
+  const shelter = { ...context().shelters[0], capacidad: 6, ocupantes: ["old"], reservados: ["Z", "F", "Y"] };
+  const people = [survivor("C", "R"), survivor("B", "R"), survivor("A", "R"), survivor("old", "R", "evacuado"),
+    ...["Z", "Y"].map(id => ({ ...survivor(id, "R"), targetShelterId: "REF" })),
+    { ...survivor("F", "A"), targetShelterId: "REF" }];
+  const result = resolveShelterAdmissions(freeze({ turnId: 2, survivorsAfterBites: people, shelters: [shelter] }));
+  assert.deepEqual(result.admissions.map(a => a.survivorId), ["Y", "Z", "A", "B"]);
+  assert.deepEqual(result.shelters[0].reservados, ["F"]);
+  assert.equal(result.shelters[0].ocupantes.length + result.shelters[0].reservados.length, 6);
+  assert.equal(result.survivors.find(s => s.id === "C")!.estado, "vivo");
+  const reversed = resolveShelterAdmissions({ turnId: 2, survivorsAfterBites: [...people].reverse(),
+    shelters: [{ ...shelter, reservados: [...shelter.reservados].reverse() }] });
+  assert.deepEqual(reversed.admissions, result.admissions);
+});
+
+test("libera reservas de mordidos, evacuados y quienes asignaron otro destino", () => {
+  const people = [survivor("A", "R"), survivor("bitten", "A", "mordido"), survivor("out", "C", "evacuado"),
+    { ...survivor("changed", "A"), targetShelterId: "OTHER" }];
+  const shelters = [{ ...context().shelters[0], capacidad: 3, reservados: ["bitten", "out", "changed"] },
+    { id: "OTHER", nodoId: "C", capacidad: 2, ocupantes: ["out"], reservados: [] }];
+  const result = resolveShelterAdmissions(freeze({ turnId: 2, survivorsAfterBites: people, shelters }));
+  assert.deepEqual(result.admissions, [{ survivorId: "A", shelterId: "REF" }]);
+  assert.deepEqual(result.shelters[0].reservados, []);
+  for (const shelter of result.shelters) assert(shelter.ocupantes.length + shelter.reservados.length <= shelter.capacidad);
+});
+
+test("mordida por cruce libera la reserva antes de admitir al sobreviviente seguro", () => {
+  const people = [survivor("A", "R"), { ...survivor("Z", "R"), targetShelterId: "REF" }];
+  const bites = detectBites({ survivors: people, visibleZombies: [{ ...zombie("B"), id: "walker" }], hordeDangerNodeIds: [],
+    survivorTraversals: [{ survivorId: "Z", fromNodeId: "B", toNodeId: "R", edgeId: "BR" }],
+    zombieTraversals: [{ zombieId: "walker", fromNodeId: "R", toNodeId: "B", edgeId: "RB", stepIndex: 1 }] });
+  assert.deepEqual(bites.map(b => b.survivorId), ["Z"]);
+  const result = resolveShelterAdmissions({ turnId: 2, survivorsAfterBites: applyBites(2, people, bites),
+    shelters: [{ ...context().shelters[0], capacidad: 1, reservados: ["Z"] }] });
+  assert.deepEqual(result.admissions, [{ survivorId: "A", shelterId: "REF" }]);
+  const bitten = result.survivors.find(s => s.id === "Z")!;
+  assert.equal(bitten.estado, "mordido"); assert.equal(bitten.evacuadoEnTurno, null);
+  assert.deepEqual(result.shelters[0].reservados, []);
+});
+
+test("rechaza un estado que excede capacidad incluso si todas las plazas son reservas", () => {
+  assert.throws(() => resolveShelterAdmissions({ turnId: 2,
+    survivorsAfterBites: [survivor("A"), survivor("Z")],
+    shelters: [{ ...context().shelters[0], capacidad: 1, reservados: ["A", "Z"] }] }), /excede su capacidad/);
 });
 
 test("un lote de 200 decisiones no depende del orden de respuestas ni del orden de sobrevivientes", () => {

@@ -231,7 +231,7 @@ test("acepta los dos recorridos ordenados de un corredor y bloquea ambos cruces 
 test("Fastify exige x-api-key, reconcilia estado y devuelve una respuesta vecina", async () => {
   const graph = await realGraph(); const engine = new RouteEngine(graph); const body = syncRequest(graph, 1);
   await withApp(engine, async app => {
-    assert.equal((await app.inject({ method: "GET", url: "/health/ready" })).statusCode, 503);
+    assert.equal((await app.inject({ method: "GET", url: "/health/ready" })).statusCode, 200);
     assert.equal((await app.inject({ method: "POST", url: "/motor/sincronizar", payload: body })).statusCode, 401);
     assert.equal((await app.inject({ method: "GET", url: `/motor/estado/${body.gameId}` })).statusCode, 401);
     const syncResponse = await app.inject({ method: "POST", url: "/motor/sincronizar", payload: body,

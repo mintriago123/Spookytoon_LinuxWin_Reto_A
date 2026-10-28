@@ -1,7 +1,7 @@
 # SPEC.md — SpookyThon 2026 · Track A: Escape de Manta Zombie
 
 - Estado: especificación normativa v1.0.
-- Región AWS: configurable. Valor inicial sugerido: us-east-1; no es requisito. Confirmar la región de despliegue antes de provisionar recursos y calcular costos.
+- Región AWS del despliegue confirmado: `us-east-2` (Ohio), conforme a la SCP de la organización. Zona EC2: `us-east-2a`; usar `AWS_REGION=us-east-2`, no la zona, para clientes regionales. Tabla activa: `DYNAMODB_TABLE_NAME=spookython-manta-state`. Entrada pública: `https://3-128-78-190.sslip.io` y base `wss://3-128-78-190.sslip.io` (canal `/ws`). Valores verificados por el equipo el 28 de octubre de 2026.
 - Fuente de verdad: este archivo. OpenAPI, tipos, validadores y diagramas de implementación son proyecciones de esta especificación.
 - Unidades: WGS84, metros, milisegundos y turnos numerados desde 1 (estado inicial en turno 0).
 - DEBE indica requisito obligatorio.
@@ -10,31 +10,39 @@
 
 ### 1.1 Arquitectura
 
-Un Backend Node.js + TypeScript con Fastify y ws hospeda el game loop, el motor de rutas, HTTP y WebSocket. El grafo es inmutable y reside en RAM. El Simulador ejecuta cada fase en serie e invoca POST /paso por cada sobreviviente vivo, en paralelo. Una piscina acotada de worker_threads ejecuta las rutas sin bloquear el event loop. Todos los workers reciben la misma versión inmutable del mundo mediante POST /motor/sincronizar antes de aceptar decisiones del turno.
+Un Backend Node.js + TypeScript con Fastify y ws hospeda el game loop, el motor de rutas, HTTP y WebSocket. El grafo es inmutable y reside en RAM. El Simulador ejecuta cada fase en serie e invoca POST /paso por cada sobreviviente vivo, en paralelo. Un pool acotado de worker_threads calcula los planes pesados durante la sincronización; cada POST /paso consulta una copia del plan instalado en RAM, sin IPC por sobreviviente. Todos los workers reciben la misma versión inmutable del mundo mediante POST /motor/sincronizar antes de aceptar decisiones del turno.
 
-El Backend es un monolito modular, no dos backends: Michael lidera graph y routing; Maykel lidera simulator y realtime. Ambos módulos corren en el mismo proceso/tarea, pero mantienen límites de ownership y contratos explícitos. El composition root app.ts los conecta; simulator consume routing por los endpoints internos definidos y no importa su implementación privada. contracts/ es el DTO compartido y simulator es el único escritor de WorldState.
+El Backend es un monolito modular, no dos backends: Michael lidera graph y routing; Maykel lidera simulator y realtime. Ambos módulos corren en el mismo proceso/tarea, pero mantienen límites de ownership y contratos explícitos. El composition root server.ts los conecta; simulator consume routing por los endpoints internos definidos y no importa su implementación privada. contracts/ es el DTO compartido y simulator es el único escritor de WorldState.
 
 Se ejecuta una sola tarea Backend activa por partida. No escalar horizontalmente el escritor: memoria, reloj y estado tienen un solo dueño. Una futura escala requiere líder con fencing y partición explícita por partida. El proceso no usa Lambda ni cold starts en la ruta crítica. En el arranque carga el grafo, verifica invariantes y workers; solo entonces reporta readiness.
 
 ```text
-Frontend (S3 + CloudFront)
-  ├── HTTPS GET /estado
-  └── WSS /ws
+Frontend / operador
+  ├── HTTPS https://3-128-78-190.sslip.io
+  └── WSS   wss://3-128-78-190.sslip.io/ws
           │
           ▼
-ALB (HTTPS/WSS) → ECS Fargate, AWS_REGION seleccionada (un escritor por partida)
-                    ├── Fastify: API de ruta, estado y controles
-                    ├── Game Loop: turnos seriales de 2.000 ms
-                    ├── Route Workers: grafo y snapshot inmutables en RAM
-                    ├── ws: evento TURN_UPDATE
-                    └── cola asíncrona → DynamoDB On-Demand
+Caddy (TLS automático, reverse proxy localhost:3001)
+  EC2 t3.micro · Amazon Linux 2023 · us-east-2a
+    └── un proceso escritor Node 24 / Fastify / ws
+        ├── PM2 fork, instances=1 (o Docker, nunca ambos a la vez)
+        ├── game loop y lookup O(1) de rutas en RAM
+        ├── worker_threads: precompute por sync, 1 worker en t3.micro
+        └── cola asíncrona → DynamoDB On-Demand
+            us-east-2 · spookython-manta-state
 ```
 
-AWS: imagen en ECR; Backend en ECS Fargate detrás de ALB; TLS en ALB; API key en Secrets Manager; snapshots en DynamoDB On-Demand; logs/métricas/alertas en CloudWatch; frontend estático en S3 y CloudFront. El artefacto del grafo se incorpora versionado a la imagen y al build web, no se descarga durante el turno. GET /estado y WSS son de solo lectura; CORS se limita al dominio configurado. La API key nunca se incluye en el bundle del navegador.
+La arquitectura productiva es EC2 `t3.micro` (2 vCPU, 1 GiB) con Amazon Linux 2023, Caddy y un solo escritor administrado por PM2. Docker es una alternativa de empaquetado del mismo escritor. ECS/Fargate y ALB no son dependencias del despliegue actual. El sizing es una decisión medida para esta instancia, no una garantía del SLA; vigilar memoria y créditos CPU. Credenciales AWS mediante IAM Role de instancia, nunca llaves en código. La API key se carga desde un archivo externo protegido, no desde el bundle del navegador. El grafo y su manifiesto viajan en cada release/imagen. Caddy expone `/estado`, `/ws` y controles autenticados; bloquea `/health/*`, `/motor/*` y `/paso` hacia Internet. CORS se limita al origen configurado.
 
-Después de cada turno comprometido, se encola un snapshot dinámico para DynamoDB sin esperar su escritura. Claves: PK=GAME#<gameId>, SK=TURN#<turnId con 6 dígitos>. Validar el tamaño serializado: hasta 350 KiB se escribe como un ítem; encima, dividir en fragmentos con manifiesto. Cola limitada, reintentos con backoff exponencial y jitter. Cola llena dispara alarma y pausa tras cerrar el turno activo. Tras reinicio, restaurar el último snapshot completo y dejar la partida pausada.
+Readiness no exige partida activa ni sync previa: requiere checksum y validación del grafo, motor inicializado, todos los workers operativos y persistencia inicializada. Un fallo de inicialización impide servir el backend. La salud de dependencias y de la cola se vuelve a comprobar en cada `/health/ready`.
 
-### 1.2 Árbol exacto
+Después de cada turno comprometido, se encola un snapshot dinámico para DynamoDB sin esperar su escritura. Claves: PK=GAME#<gameId>, SK=TURN#<turnId con 6 dígitos>. Validar el tamaño serializado: hasta 350 KiB se escribe como un ítem; encima, dividir en fragmentos con manifiesto. Cola limitada, hasta tres reintentos con backoff exponencial y jitter (cuatro intentos totales, SDK sin reintentos adicionales). Cola llena dispara alarma y pausa tras cerrar el turno activo. Tras reinicio, restaurar el último checkpoint completo de la partida no completada en estado pausado. Se persisten estado público y metadatos internos necesarios (configuración, PRNG, eventos, reservas); el grafo se referencia por versión. El puntero `PK=META#LATEST, SK=SNAPSHOT` y el manifiesto de turno se publican en una transacción después de escribir todos los fragmentos. Payload gzip binario con SHA-256, fragmentos de hasta 256 KiB; controles del mismo turno reemplazan el manifiesto atómicamente. Fragmentos de revisiones fallidas pueden quedar huérfanos y requieren retención operativa. La recuperación verifica checksum, versión de grafo y semántica antes de servir GET/WS. Una última partida completada no se reanuda automáticamente. En recuperación se reinicia la instalación privada del motor (baseWorldVersion=0); el turnId/worldVersion público conserva el checkpoint. Las muestras de latencia deslizantes son locales al proceso.
+
+La tabla productiva verificada en EC2 usa `gameId` (S) y `turnId` (N). El adaptador detecta este esquema sin migrarlo: los manifiestos usan gameId=`GAME#<id>` y turnId numérico; el puntero usa gameId=`META#LATEST`, turnId=-1; cada fragmento usa una partición propia y turnId=-1. `PK`/`SK` se conservan como identidad lógica y atributos auxiliares. También se admite el esquema canónico PK/SK de texto para tablas nuevas. La autodetección se valida antes de readiness.
+
+Sin `DYNAMODB_TABLE_NAME`, y en pruebas unitarias sin red, se usa `InMemoryPersistenceAdapter`. Al seleccionar DynamoDB los defaults del adaptador son `AWS_REGION=us-east-2` y `DYNAMODB_TABLE_NAME=spookython-manta-state`. Errores de IAM, tabla o red de un despliegue configurado con DynamoDB no se ocultan usando memoria.
+
+### 1.2 Estructura de referencia
 
 ```text
 .
@@ -79,9 +87,8 @@ Después de cada turno comprometido, se encola un snapshot dinámico para Dynamo
 │   │       │   └── dynamodb-store.ts
 │   │       └── realtime/
 │   │           └── broadcaster.ts
-│   ├── infra/
-│   │   ├── ecs-task.json
-│   │   └── cloudwatch-alarms.json
+│   ├── Dockerfile
+│   ├── infra/README.md               # enlace al infra/ compartido
 │   ├── package.json
 │   └── tsconfig.json
 ├── frontend/
@@ -105,6 +112,15 @@ Después de cada turno comprometido, se encola un snapshot dinámico para Dynamo
 │   ├── tailwind.config.ts
 │   ├── tsconfig.json
 │   └── vite.config.ts
+├── infra/
+│   ├── Caddyfile
+│   ├── ecosystem.config.cjs
+│   ├── deploy-ec2.sh
+│   ├── rollback-ec2.sh
+│   ├── iam-policy-dynamodb.json
+│   ├── cloudwatch-agent.json
+│   └── cloudwatch-alarms.sh
+├── .dockerignore
 ├── scripts/
 │   ├── extract-manta-osm.ts
 │   ├── normalize-graph.ts
@@ -130,9 +146,11 @@ La extracción debe conservar atribución OpenStreetMap/ODbL y registrar fuente,
 
 ### 1.3 Operación y costo
 
-Las llamadas del Simulador a POST /paso y /motor/sincronizar se hacen por loopback/intra-tarea, sin pasar por el ALB. Configuración inicial del Backend: mínimo 2 vCPU y 2 GiB RAM, ajustar con carga medida; workers = max(1, vCPU asignadas − 1), máximo 8, cola de hasta 200 solicitudes. No aceptar configuración que incumpla p95. Health endpoints: /health/live y /health/ready. Readiness requiere grafo, estado y todos los workers listos.
+Las llamadas a `/paso` y `/motor/sincronizar` van por loopback, sin Caddy. En EC2 t3.micro usar un worker y un proceso; se admite hasta 8 workers al dimensionar otra máquina. La cola de sincronización acepta hasta 200 trabajos y rechaza exceso con 429. No hay IPC en `/paso`. La preparación aislada de un plan no lo hace visible hasta confirmación de todos los workers y validación de versión en el escritor. Objetivo local p95 ≤120 ms a 200 decisiones; límite de aceptación ≤150 ms y timeout de cliente 500 ms.
 
-CloudWatch registra JSON con requestId, gameId, turnId y worldVersion. Métricas: p50/p95/p99 de rutas, timeouts, rutas inválidas, profundidad/edad de cola de snapshots, conexiones WS, CPU, memoria y salud de tarea. Alertas para p95 >150 ms, timeout, cola creciente o tarea no saludable. No incluir API keys ni snapshots completos en logs. Etiquetar recursos Project, Environment, Owner y Round. Fargate de escritor sin autoescalado horizontal; DynamoDB On-Demand; CloudFront cachea estáticos, nunca estado/control. Estimar gasto con configuración medida en AWS Pricing Calculator antes del evento; On-Demand no tiene costo fijo.
+Los JSON de operación incluyen requestId, gameId, turnId y worldVersion cuando corresponden, sin secretos ni snapshots completos. Por defecto se registran controles, errores y respuestas lentas; LOG_HTTP_REQUESTS=true activa el detalle por petición para diagnóstico, fuera de las mediciones de SLA. Las métricas de todas las rutas se calculan independientemente de ese detalle de logs. Cada 30 s se registra p95 de rutas, timeouts, clientes WS, RSS, salud de workers y profundidad/edad/fallos de cola. CloudWatch Agent recoge logs; alarmas AWS/EC2: CPU promedio >80% durante dos periodos de 5 min, StatusCheckFailed ≥1 durante dos periodos de 60 s. Los filtros de logs habilitan alarmas de p95 >150 ms y errores de persistencia. Configurar SNS para entrega de notificaciones. Vigilar CPUCreditBalance en la instancia burstable.
+
+`infra/deploy-ec2.sh` prepara una release del commit, instala dependencias y verifica typecheck/tests, detiene al escritor anterior y solo después inicia el nuevo. Healthcheck local antes de promover el symlink `current`. Fallo revierte al proceso anterior. `infra/rollback-ec2.sh` vuelve a la release previa sin revertir los datos DynamoDB. No escalar horizontalmente ni ejecutar PM2 y Docker simultáneamente. Los scripts se ejecutan en EC2 por el operador; versionarlos no equivale a desplegarlos. Costos, fórmula de créditos y evidencia del Budget en `docs/costos.md`; procedimiento en `docs/operacion-rollback.md`.
 
 ## 2. Modelos y JSON Schemas
 
@@ -268,6 +286,10 @@ export interface TelemetryMetrics {
   activeSurvivors: number; bittenSurvivors: number; evacuatedSurvivors: number;
   activeZombies: number; wsClients: number; snapshotQueueDepth: number;
   lastSnapshotTurnId: number | null;
+  routeErrors: number; routeAvailabilityPercent: number;
+  survivalRatePercent: number; activeSurvivorsPercent: number;
+  bittenSurvivorsPercent: number; evacuatedSurvivorsPercent: number;
+  turnDurationMs: number; turnBudgetUsedPercent: number; turnEfficiencyPercent: number;
 }
 export interface WorldState {
   gameId: string; roundId: 1 | 2 | 3; status: GameStatus; phase: TurnPhase;
@@ -326,7 +348,7 @@ export interface RoutingStatusResponse {
 }
 ```
 
-Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes y nunca exceden capacidad; reservados solo contiene vivos y no ocupantes; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
+Invariantes: IDs únicos; estado mordido/evacuado terminal; evacuados figuran una vez en ocupantes; ocupantes.length + reservados.length <= capacidad en cada refugio; reservados solo contiene vivos y no ocupantes, sin reservas simultáneas en distintos refugios; cada nodeId existe; dormido solo aplica a zombies tipo dormido; al despertar conserva tipo dormido pero se comporta como caminante. Horda no se mueve. Cada edgeId bloqueado pertenece a segmentoId. Cambios de estado se preparan y comprometen atómicamente.
 
 ## 3. OpenAPI y eventos
 
@@ -386,15 +408,17 @@ Decision mover|esperar. Para esperar: toNodeId=fromNodeId, edgeId=null, routeCos
 
 ### 3.3 Otros endpoints
 
-POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check interno del ALB.
+POST /paso, sincronización y controles requieren x-api-key; GET /estado y health endpoints no la requieren. Los health endpoints solo son accesibles desde el health check local de EC2.
 
 - GET /estado: 200 WorldSnapshot del último estado completo comprometido, Cache-Control no-store. Antes de crear la primera partida responde 503 con error.code=GAME_NOT_STARTED; no inventa gameId, roundId ni entidades. Una partida creada tiene snapshot inicial en turno 0. En un turno en curso aún devuelve el snapshot anterior, nunca mezcla fases. Los controles comprometidos de inicio, pausa entre ticks y reanudación actualizan status sin avanzar turnId/worldVersion.
 - POST /simulador/iniciar: request {gameId, roundId: 1|2|3, seed}; respuesta 202 {gameId, roundId, status:"running", nextTurnId}. Desde idle crea partida en turno 1; desde paused solo reanuda el mismo gameId/roundId/seed desde el siguiente turno; desde completed permite una partida nueva con gameId distinto y turno 1. Un gameId/roundId/seed incompatible o un inicio mientras running da 409. Ronda de 150 turnos, 2 s cada uno.
+- POST /simulador/reanudar: alias explícito de inicio para una partida pausada; request y respuesta iguales a iniciar. Exige el mismo gameId, roundId y seed; sin partida pausada responde 409.
+- POST /simulador/reiniciar: request y respuesta iguales a iniciar. Solo desde paused/completed y con gameId nuevo; rechaza running con 409. Conserva el historial persistido de la partida anterior y crea turno 0 para la nueva.
 - POST /simulador/pausar: request {reason}; 202 {status:"pausing", afterTurnId}. Cierra el turno activo antes de pausar. Sin turno activo responde paused.
 - POST /simulador/bloquear-arista: request {eventId, edgeId, bloqueada, motivo, effectiveTurnId?}; programa bloqueo/desbloqueo del segmento completo identificado por edgeId. Default: siguiente turno si está running. Mismo eventId y contenido es idempotente; contenido distinto da 409. Acepta 202 con {eventId, segmentoId, effectiveTurnId, status:"programado"}. ID inexistente da 404; turno pasado 400.
 - POST /motor/sincronizar: request {gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds}; snapshot post-movimiento zombie para el turno activo. `zombieTraversals` contiene los pasos efectivamente recorridos, ordenados por `zombieId` y `stepIndex`, con `edgeId`; el último paso coincide con `zombies[].nodeId`. Un corredor puede aportar hasta dos pasos contiguos. `baseWorldVersion` debe coincidir con la última versión instalada; `turnId` debe ser mayor que el último instalado, pero puede saltar turnos que cerraron sin un plan confirmado. Repetición idéntica (mismo turno y digest) idempotente; distinta para el mismo turno, versión base incorrecta o turno menor devuelve 409. Responde 200 {turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready:true}. No publica estado parcial.
 - GET /motor/estado/{gameId}: requiere `x-api-key` y devuelve `{gameId, installed}` con la última respuesta de sincronización confirmada, o `installed:null` si no hay snapshot. El simulador usa este estado o reintenta exactamente el mismo payload para resolver un timeout de sincronización; nunca usa una tabla de un turno anterior.
-- GET /health/live y /health/ready: liveness/readiness interna para ALB.
+- GET /health/live y /health/ready: liveness/readiness interna en EC2.
 
 Proyección OpenAPI 3.1: debe cubrir todos los endpoints previos y usar esquemas cerrados (additionalProperties=false) derivados de las interfaces anteriores.
 
@@ -403,138 +427,377 @@ openapi: 3.1.0
 info:
   title: SpookyThon Manta Zombie API
   version: 1.0.0
+  description: Contrato del backend EC2 en Ohio. API key solo para operador y routing
+    interno; nunca incluirla en el bundle web.
 paths:
   /paso:
     post:
       operationId: calcularPaso
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/PasoRequest" }
+            schema:
+              $ref: '#/components/schemas/PasoRequest'
       responses:
-        "200":
+        '200':
           description: Decisión de movimiento o espera
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PasoResponse" }
-        "400": { $ref: "#/components/responses/Error" }
-        "401": { $ref: "#/components/responses/Error" }
-        "404": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
-        "429": { $ref: "#/components/responses/Error" }
-        "503": { $ref: "#/components/responses/Error" }
-        "504": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/PasoResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /estado:
     get:
       operationId: obtenerEstado
       responses:
-        "200":
+        '200':
           description: Último snapshot completo
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/WorldSnapshot" }
-        "503": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/WorldSnapshot'
+        '503':
+          $ref: '#/components/responses/Error'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      security: []
   /simulador/iniciar:
     post:
       operationId: iniciarSimulador
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/IniciarRequest" }
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
       responses:
-        "202":
+        '202':
           description: Ronda aceptada
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/IniciarResponse" }
-        "400": { $ref: "#/components/responses/Error" }
-        "401": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /simulador/pausar:
     post:
       operationId: pausarSimulador
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/PausarRequest" }
+            schema:
+              $ref: '#/components/schemas/PausarRequest'
       responses:
-        "202":
+        '202':
           description: Pausa solicitada al cerrar turno
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/PausarResponse" }
-        "400": { $ref: "#/components/responses/Error" }
-        "401": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/PausarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /simulador/bloquear-arista:
     post:
       operationId: bloquearArista
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/BloquearAristaRequest" }
+            schema:
+              $ref: '#/components/schemas/BloquearAristaRequest'
       responses:
-        "202":
+        '202':
           description: Evento programado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/BloquearAristaResponse" }
-        "400": { $ref: "#/components/responses/Error" }
-        "404": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/BloquearAristaResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
   /motor/sincronizar:
     post:
       operationId: sincronizarMotor
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       requestBody:
         required: true
         content:
           application/json:
-            schema: { $ref: "#/components/schemas/WorldSyncRequest" }
+            schema:
+              $ref: '#/components/schemas/WorldSyncRequest'
       responses:
-        "200":
+        '200':
           description: Snapshot instalado y plan precalculado
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/SyncResponse" }
-        "400": { $ref: "#/components/responses/Error" }
-        "401": { $ref: "#/components/responses/Error" }
-        "409": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/SyncResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+        '504':
+          $ref: '#/components/responses/Error'
   /motor/estado/{gameId}:
     get:
       operationId: estadoMotor
-      security: [{ ApiKey: [] }]
+      security:
+      - ApiKey: []
       parameters:
-        - in: path
-          name: gameId
-          required: true
-          schema: { type: string, minLength: 1 }
+      - in: path
+        name: gameId
+        required: true
+        schema:
+          type: string
+          minLength: 1
       responses:
-        "200":
-          description: Última versión instalada para conciliar una sincronización incierta
+        '200':
+          description: Última versión instalada para conciliar una sincronización
+            incierta
           content:
             application/json:
-              schema: { $ref: "#/components/schemas/RoutingStatusResponse" }
-        "401": { $ref: "#/components/responses/Error" }
+              schema:
+                $ref: '#/components/schemas/RoutingStatusResponse'
+        '401':
+          $ref: '#/components/responses/Error'
+        '400':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
   /health/live:
     get:
       operationId: healthLive
       responses:
-        "200": { description: Proceso vivo }
+        '200':
+          description: Proceso vivo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      security: []
   /health/ready:
     get:
       operationId: healthReady
       responses:
-        "200": { description: Backend listo }
-        "503": { description: Grafo o workers no listos }
+        '200':
+          description: Backend listo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '503':
+          description: Grafo o workers no listos
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+      security: []
+  /simulador/reanudar:
+    post:
+      operationId: reanudarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
+      responses:
+        '202':
+          description: Ronda aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      description: Misma identidad gameId/roundId/seed de una partida pausada.
+  /simulador/reiniciar:
+    post:
+      operationId: reiniciarSimulador
+      security:
+      - ApiKey: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IniciarRequest'
+      responses:
+        '202':
+          description: Ronda aceptada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IniciarResponse'
+        '400':
+          $ref: '#/components/responses/Error'
+        '401':
+          $ref: '#/components/responses/Error'
+        '409':
+          $ref: '#/components/responses/Error'
+        '403':
+          $ref: '#/components/responses/Error'
+        '404':
+          $ref: '#/components/responses/Error'
+        '429':
+          $ref: '#/components/responses/Error'
+        '503':
+          $ref: '#/components/responses/Error'
+        '413':
+          $ref: '#/components/responses/Error'
+        '500':
+          $ref: '#/components/responses/Error'
+      description: Requiere partida pausada o completada y gameId nuevo; crea estado
+        inicial y conserva el historial anterior.
+  /ws:
+    get:
+      operationId: conectarWebSocket
+      security: []
+      description: Upgrade WebSocket (wss://3-128-78-190.sslip.io/ws). TURN_UPDATE
+        al conectar y tras cada commit. Ping/pong 30 s; payload máximo 1 MiB. Sin
+        partida no inventa snapshot. Clientes lentos se desconectan. Canal solo lectura.
+      x-websocket-message:
+        $ref: '#/components/schemas/TurnUpdate'
+      responses:
+        '101':
+          description: WebSocket conectado; mensajes JSON TURN_UPDATE
+        '403':
+          $ref: '#/components/responses/Error'
+        '426':
+          $ref: '#/components/responses/Error'
 components:
   securitySchemes:
     ApiKey:
@@ -547,234 +810,657 @@ components:
       content:
         application/json:
           schema:
-            type: object
-            additionalProperties: false
-            required: [error]
-            properties:
-              error:
-                type: object
-                additionalProperties: false
-                required: [code, message, requestId]
-                properties:
-                  code: { type: string }
-                  message: { type: string }
-                  requestId: { type: string }
+            $ref: '#/components/schemas/Error'
   schemas:
     PasoRequest:
       type: object
       additionalProperties: false
-      required: [gameId, turnId, worldVersion, survivorId, currentNodeId]
+      required:
+      - gameId
+      - turnId
+      - worldVersion
+      - survivorId
+      - currentNodeId
       properties:
-        gameId: { type: string, minLength: 1 }
-        turnId: { type: integer, minimum: 1 }
-        worldVersion: { type: integer, minimum: 1 }
-        survivorId: { type: string, minLength: 1 }
-        currentNodeId: { type: string, minLength: 1 }
-        targetShelterId: { type: [string, "null"] }
+        gameId:
+          type: string
+          minLength: 1
+        turnId:
+          type: integer
+          minimum: 1
+        worldVersion:
+          type: integer
+          minimum: 1
+        survivorId:
+          type: string
+          minLength: 1
+        currentNodeId:
+          type: string
+          minLength: 1
+        targetShelterId:
+          type:
+          - string
+          - 'null'
     PasoResponse:
       type: object
       additionalProperties: false
-      required: [gameId, turnId, worldVersion, survivorId, fromNodeId, toNodeId, edgeId, decision, targetShelterId, reason, routeCost, latencyMs]
+      required:
+      - gameId
+      - turnId
+      - worldVersion
+      - survivorId
+      - fromNodeId
+      - toNodeId
+      - edgeId
+      - decision
+      - targetShelterId
+      - reason
+      - routeCost
+      - latencyMs
       properties:
-        gameId: { type: string }
-        turnId: { type: integer }
-        worldVersion: { type: integer }
-        survivorId: { type: string }
-        fromNodeId: { type: string }
-        toNodeId: { type: string }
-        edgeId: { type: [string, "null"] }
-        decision: { enum: [mover, esperar] }
-        targetShelterId: { type: [string, "null"] }
-        reason: { enum: [ruta-segura, sin-ruta-segura, nodo-bloqueado, no-hay-refugio-disponible, fallback-interno] }
-        routeCost: { type: [number, "null"], minimum: 0 }
-        latencyMs: { type: number, minimum: 0 }
+        gameId:
+          type: string
+        turnId:
+          type: integer
+        worldVersion:
+          type: integer
+        survivorId:
+          type: string
+        fromNodeId:
+          type: string
+        toNodeId:
+          type: string
+        edgeId:
+          type:
+          - string
+          - 'null'
+        decision:
+          enum:
+          - mover
+          - esperar
+        targetShelterId:
+          type:
+          - string
+          - 'null'
+        reason:
+          enum:
+          - ruta-segura
+          - sin-ruta-segura
+          - nodo-bloqueado
+          - no-hay-refugio-disponible
+          - fallback-interno
+        routeCost:
+          type:
+          - number
+          - 'null'
+          minimum: 0
+        latencyMs:
+          type: number
+          minimum: 0
     IniciarRequest:
       type: object
       additionalProperties: false
-      required: [gameId, roundId, seed]
+      required:
+      - gameId
+      - roundId
+      - seed
       properties:
-        gameId: { type: string }
-        roundId: { enum: [1, 2, 3] }
-        seed: { type: string }
+        gameId:
+          type: string
+          minLength: 1
+          maxLength: 128
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        seed:
+          type: string
+          minLength: 1
+          maxLength: 256
     IniciarResponse:
       type: object
       additionalProperties: false
-      required: [gameId, roundId, status, nextTurnId]
+      required:
+      - gameId
+      - roundId
+      - status
+      - nextTurnId
       properties:
-        gameId: { type: string }
-        roundId: { enum: [1, 2, 3] }
-        status: { const: running }
-        nextTurnId: { type: integer, minimum: 1 }
+        gameId:
+          type: string
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        status:
+          const: running
+        nextTurnId:
+          type: integer
+          minimum: 1
     PausarRequest:
       type: object
       additionalProperties: false
-      required: [reason]
+      required:
+      - reason
       properties:
-        reason: { type: string, minLength: 1 }
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 256
     PausarResponse:
       type: object
       additionalProperties: false
-      required: [status]
+      required:
+      - status
+      - afterTurnId
       properties:
-        status: { enum: [pausing, paused] }
-        afterTurnId: { type: integer, minimum: 0 }
+        status:
+          enum:
+          - pausing
+          - paused
+        afterTurnId:
+          type: integer
+          minimum: 0
     BloquearAristaRequest:
       type: object
       additionalProperties: false
-      required: [eventId, edgeId, bloqueada, motivo]
+      required:
+      - eventId
+      - edgeId
+      - bloqueada
+      - motivo
       properties:
-        eventId: { type: string }
-        edgeId: { type: string }
-        bloqueada: { type: boolean }
-        motivo: { type: string }
-        effectiveTurnId: { type: integer, minimum: 1 }
+        eventId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        edgeId:
+          type: string
+          minLength: 1
+          maxLength: 256
+        bloqueada:
+          type: boolean
+        motivo:
+          type: string
+          minLength: 1
+          maxLength: 256
+        effectiveTurnId:
+          type: integer
+          minimum: 1
+          maximum: 150
     BloquearAristaResponse:
       type: object
       additionalProperties: false
-      required: [eventId, segmentoId, effectiveTurnId, status]
+      required:
+      - eventId
+      - segmentoId
+      - effectiveTurnId
+      - status
       properties:
-        eventId: { type: string }
-        segmentoId: { type: string }
-        effectiveTurnId: { type: integer, minimum: 1 }
-        status: { const: programado }
+        eventId:
+          type: string
+        segmentoId:
+          type: string
+        effectiveTurnId:
+          type: integer
+          minimum: 1
+        status:
+          const: programado
     SyncResponse:
       type: object
       additionalProperties: false
-      required: [turnId, worldVersion, graphVersion, workerCount, buildLatencyMs, ready]
+      required:
+      - turnId
+      - worldVersion
+      - graphVersion
+      - workerCount
+      - buildLatencyMs
+      - ready
       properties:
-        turnId: { type: integer, minimum: 1 }
-        worldVersion: { type: integer, minimum: 1 }
-        graphVersion: { type: string, minLength: 1 }
-        workerCount: { type: integer, minimum: 1 }
-        buildLatencyMs: { type: number, minimum: 0 }
-        ready: { const: true }
+        turnId:
+          type: integer
+          minimum: 1
+        worldVersion:
+          type: integer
+          minimum: 1
+        graphVersion:
+          type: string
+          minLength: 1
+        workerCount:
+          type: integer
+          minimum: 1
+        buildLatencyMs:
+          type: number
+          minimum: 0
+        ready:
+          const: true
     RoutingStatusResponse:
       type: object
       additionalProperties: false
-      required: [gameId, installed]
+      required:
+      - gameId
+      - installed
       properties:
-        gameId: { type: string, minLength: 1 }
+        gameId:
+          type: string
+          minLength: 1
         installed:
           oneOf:
-            - $ref: "#/components/schemas/SyncResponse"
-            - type: "null"
+          - $ref: '#/components/schemas/SyncResponse'
+          - type: 'null'
     WorldSyncRequest:
       type: object
       additionalProperties: false
-      required: [gameId, turnId, baseWorldVersion, survivors, zombies, shelters, blockedEdges, zombieTraversals, dormantUncertaintyNodeIds]
+      required:
+      - gameId
+      - turnId
+      - baseWorldVersion
+      - survivors
+      - zombies
+      - shelters
+      - blockedEdges
+      - zombieTraversals
+      - dormantUncertaintyNodeIds
       properties:
-        gameId: { type: string }
-        turnId: { type: integer, minimum: 1 }
-        baseWorldVersion: { type: integer, minimum: 0 }
-        survivors: { type: array, items: { $ref: "#/components/schemas/Survivor" } }
+        gameId:
+          type: string
+        turnId:
+          type: integer
+          minimum: 1
+        baseWorldVersion:
+          type: integer
+          minimum: 0
+        survivors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Survivor'
         zombies:
           type: array
           description: Solo zombies visibles; excluir dormidos no despiertos.
-          items: { $ref: "#/components/schemas/Zombie" }
-        shelters: { type: array, items: { $ref: "#/components/schemas/Shelter" } }
-        blockedEdges: { type: array, items: { $ref: "#/components/schemas/BlockedEdge" } }
+          items:
+            $ref: '#/components/schemas/Zombie'
+        shelters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shelter'
+        blockedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedEdge'
         zombieTraversals:
           type: array
-          description: Recorridos reales ordenados por zombieId y stepIndex; los pasos de cada zombie son contiguos.
-          items: { $ref: "#/components/schemas/ZombieTraversal" }
-        dormantUncertaintyNodeIds: { type: array, uniqueItems: true, items: { type: string } }
+          description: Recorridos reales ordenados por zombieId y stepIndex; los pasos
+            de cada zombie son contiguos.
+          items:
+            $ref: '#/components/schemas/ZombieTraversal'
+        dormantUncertaintyNodeIds:
+          type: array
+          uniqueItems: true
+          items:
+            type: string
     Zombie:
       type: object
       additionalProperties: false
-      required: [id, tipo, estado, nodeId, despertadoEnTurno, siguienteMovimientoTurno]
+      required:
+      - id
+      - tipo
+      - estado
+      - nodeId
+      - despertadoEnTurno
+      - siguienteMovimientoTurno
       properties:
-        id: { type: string }
-        tipo: { enum: [caminante, corredor, horda, dormido] }
-        estado: { enum: [activo, dormido] }
-        nodeId: { type: string }
-        despertadoEnTurno: { type: [integer, "null"] }
-        siguienteMovimientoTurno: { type: [integer, "null"] }
+        id:
+          type: string
+        tipo:
+          enum:
+          - caminante
+          - corredor
+          - horda
+          - dormido
+        estado:
+          enum:
+          - activo
+          - dormido
+        nodeId:
+          type: string
+        despertadoEnTurno:
+          type:
+          - integer
+          - 'null'
+        siguienteMovimientoTurno:
+          type:
+          - integer
+          - 'null'
     Survivor:
       type: object
       additionalProperties: false
-      required: [id, nodeId, estado, targetShelterId, eliminadoEnTurno, evacuadoEnTurno]
+      required:
+      - id
+      - nodeId
+      - estado
+      - targetShelterId
+      - eliminadoEnTurno
+      - evacuadoEnTurno
       properties:
-        id: { type: string }
-        nodeId: { type: string }
-        estado: { enum: [vivo, mordido, evacuado] }
-        targetShelterId: { type: [string, "null"] }
-        eliminadoEnTurno: { type: [integer, "null"] }
-        evacuadoEnTurno: { type: [integer, "null"] }
+        id:
+          type: string
+        nodeId:
+          type: string
+        estado:
+          enum:
+          - vivo
+          - mordido
+          - evacuado
+        targetShelterId:
+          type:
+          - string
+          - 'null'
+        eliminadoEnTurno:
+          type:
+          - integer
+          - 'null'
+        evacuadoEnTurno:
+          type:
+          - integer
+          - 'null'
     Shelter:
       type: object
       additionalProperties: false
-      required: [id, nodoId, capacidad, ocupantes, reservados]
+      required:
+      - id
+      - nodoId
+      - capacidad
+      - ocupantes
+      - reservados
       properties:
-        id: { type: string }
-        nodoId: { type: string }
-        capacidad: { type: integer, minimum: 1 }
-        ocupantes: { type: array, items: { type: string } }
-        reservados: { type: array, items: { type: string } }
+        id:
+          type: string
+        nodoId:
+          type: string
+        capacidad:
+          type: integer
+          minimum: 1
+        ocupantes:
+          type: array
+          items:
+            type: string
+        reservados:
+          type: array
+          items:
+            type: string
     BlockedEdge:
       type: object
       additionalProperties: false
-      required: [segmentoId, edgeIds, motivo, origen, bloqueadaDesdeTurno, desbloqueadaEnTurno]
+      required:
+      - segmentoId
+      - edgeIds
+      - motivo
+      - origen
+      - bloqueadaDesdeTurno
+      - desbloqueadaEnTurno
       properties:
-        segmentoId: { type: string }
-        edgeIds: { type: array, items: { type: string } }
-        motivo: { type: string }
-        origen: { enum: [evento-ciudad, control] }
-        bloqueadaDesdeTurno: { type: integer, minimum: 1 }
-        desbloqueadaEnTurno: { type: [integer, "null"] }
+        segmentoId:
+          type: string
+        edgeIds:
+          type: array
+          items:
+            type: string
+        motivo:
+          type: string
+        origen:
+          enum:
+          - evento-ciudad
+          - control
+        bloqueadaDesdeTurno:
+          type: integer
+          minimum: 1
+        desbloqueadaEnTurno:
+          type:
+          - integer
+          - 'null'
     ZombieTraversal:
       type: object
       additionalProperties: false
-      required: [zombieId, stepIndex, edgeId, fromNodeId, toNodeId]
+      required:
+      - zombieId
+      - stepIndex
+      - edgeId
+      - fromNodeId
+      - toNodeId
       properties:
-        zombieId: { type: string }
-        stepIndex: { enum: [1, 2] }
-        edgeId: { type: string }
-        fromNodeId: { type: string }
-        toNodeId: { type: string }
+        zombieId:
+          type: string
+        stepIndex:
+          enum:
+          - 1
+          - 2
+        edgeId:
+          type: string
+        fromNodeId:
+          type: string
+        toNodeId:
+          type: string
     WorldSnapshot:
       type: object
       additionalProperties: false
-      required: [schemaVersion, gameId, roundId, status, turnId, worldVersion, graphVersion, updatedAt, zombies, survivors, shelters, blockedEdges, metrics]
+      required:
+      - schemaVersion
+      - gameId
+      - roundId
+      - status
+      - turnId
+      - worldVersion
+      - graphVersion
+      - updatedAt
+      - zombies
+      - survivors
+      - shelters
+      - blockedEdges
+      - metrics
       properties:
-        schemaVersion: { const: "1.0.0" }
-        gameId: { type: string }
-        roundId: { enum: [1, 2, 3] }
-        status: { enum: [idle, running, paused, completed] }
-        turnId: { type: integer, minimum: 0 }
-        worldVersion: { type: integer, minimum: 0 }
-        graphVersion: { type: string }
-        updatedAt: { type: string, format: date-time }
-        zombies: { type: array, items: { $ref: "#/components/schemas/Zombie" } }
-        survivors: { type: array, items: { $ref: "#/components/schemas/Survivor" } }
-        shelters: { type: array, items: { $ref: "#/components/schemas/Shelter" } }
-        blockedEdges: { type: array, items: { $ref: "#/components/schemas/BlockedEdge" } }
+        schemaVersion:
+          const: 1.0.0
+        gameId:
+          type: string
+        roundId:
+          enum:
+          - 1
+          - 2
+          - 3
+        status:
+          enum:
+          - idle
+          - running
+          - paused
+          - completed
+        turnId:
+          type: integer
+          minimum: 0
+          maximum: 150
+        worldVersion:
+          type: integer
+          minimum: 0
+        graphVersion:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+        zombies:
+          type: array
+          items:
+            $ref: '#/components/schemas/Zombie'
+        survivors:
+          type: array
+          items:
+            $ref: '#/components/schemas/Survivor'
+        shelters:
+          type: array
+          items:
+            $ref: '#/components/schemas/Shelter'
+        blockedEdges:
+          type: array
+          items:
+            $ref: '#/components/schemas/BlockedEdge'
         metrics:
-          type: object
-          additionalProperties: false
-          required: [routeSamples, routeLatencyP50Ms, routeLatencyP95Ms, routeLatencyP99Ms, routeTimeouts, invalidRouteResponses, deadlineMisses, activeSurvivors, bittenSurvivors, evacuatedSurvivors, activeZombies, wsClients, snapshotQueueDepth, lastSnapshotTurnId]
-          properties:
-            routeSamples: { type: integer, minimum: 0 }
-            routeLatencyP50Ms: { type: number, minimum: 0 }
-            routeLatencyP95Ms: { type: number, minimum: 0 }
-            routeLatencyP99Ms: { type: number, minimum: 0 }
-            routeTimeouts: { type: integer, minimum: 0 }
-            invalidRouteResponses: { type: integer, minimum: 0 }
-            deadlineMisses: { type: integer, minimum: 0 }
-            activeSurvivors: { type: integer, minimum: 0 }
-            bittenSurvivors: { type: integer, minimum: 0 }
-            evacuatedSurvivors: { type: integer, minimum: 0 }
-            activeZombies: { type: integer, minimum: 0 }
-            wsClients: { type: integer, minimum: 0 }
-            snapshotQueueDepth: { type: integer, minimum: 0 }
-            lastSnapshotTurnId: { type: [integer, "null"] }
+          $ref: '#/components/schemas/TelemetryMetrics'
     TurnUpdate:
       type: object
       additionalProperties: false
-      required: [event, emittedAt, world]
+      required:
+      - event
+      - emittedAt
+      - world
       properties:
-        event: { const: TURN_UPDATE }
-        emittedAt: { type: string, format: date-time }
-        world: { $ref: "#/components/schemas/WorldSnapshot" }
+        event:
+          const: TURN_UPDATE
+        emittedAt:
+          type: string
+          format: date-time
+        world:
+          $ref: '#/components/schemas/WorldSnapshot'
+      description: Mensaje completo de servidor a cliente; sin comandos entrantes.
+    HealthResponse:
+      type: object
+      additionalProperties: false
+      required:
+      - status
+      properties:
+        status:
+          enum:
+          - live
+          - ready
+          - not-ready
+    Error:
+      type: object
+      additionalProperties: false
+      required:
+      - error
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required:
+          - code
+          - message
+          - requestId
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            requestId:
+              type: string
+    TelemetryMetrics:
+      type: object
+      additionalProperties: false
+      required:
+      - routeSamples
+      - routeLatencyP50Ms
+      - routeLatencyP95Ms
+      - routeLatencyP99Ms
+      - routeTimeouts
+      - invalidRouteResponses
+      - deadlineMisses
+      - activeSurvivors
+      - bittenSurvivors
+      - evacuatedSurvivors
+      - activeZombies
+      - wsClients
+      - snapshotQueueDepth
+      - lastSnapshotTurnId
+      - routeErrors
+      - routeAvailabilityPercent
+      - survivalRatePercent
+      - activeSurvivorsPercent
+      - bittenSurvivorsPercent
+      - evacuatedSurvivorsPercent
+      - turnDurationMs
+      - turnBudgetUsedPercent
+      - turnEfficiencyPercent
+      properties:
+        routeSamples:
+          type: integer
+          minimum: 0
+        routeLatencyP50Ms:
+          type: number
+          minimum: 0
+        routeLatencyP95Ms:
+          type: number
+          minimum: 0
+        routeLatencyP99Ms:
+          type: number
+          minimum: 0
+        routeTimeouts:
+          type: integer
+          minimum: 0
+        invalidRouteResponses:
+          type: integer
+          minimum: 0
+        deadlineMisses:
+          type: integer
+          minimum: 0
+        activeSurvivors:
+          type: integer
+          minimum: 0
+        bittenSurvivors:
+          type: integer
+          minimum: 0
+        evacuatedSurvivors:
+          type: integer
+          minimum: 0
+        activeZombies:
+          type: integer
+          minimum: 0
+        wsClients:
+          type: integer
+          minimum: 0
+        snapshotQueueDepth:
+          type: integer
+          minimum: 0
+        lastSnapshotTurnId:
+          type:
+          - integer
+          - 'null'
+        routeErrors:
+          type: integer
+          minimum: 0
+        routeAvailabilityPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        survivalRatePercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        activeSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        bittenSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        evacuatedSurvivorsPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+        turnDurationMs:
+          type: number
+          minimum: 0
+        turnBudgetUsedPercent:
+          type: number
+          minimum: 0
+        turnEfficiencyPercent:
+          type: number
+          minimum: 0
+          maximum: 100
+servers:
+- url: https://3-128-78-190.sslip.io
+  description: EC2 Ohio / Caddy TLS
+- url: http://localhost:3001
+  description: Desarrollo
 ```
 
 Los validadores runtime de contracts/schemas.ts deben implementar las mismas restricciones y reglas semánticas del OpenAPI; no se permiten objetos libres ni campos extra.
@@ -817,7 +1503,16 @@ El ejemplo reduce las listas de entidades a arreglos vacíos para mostrar la env
       "activeZombies": 12,
       "wsClients": 1,
       "snapshotQueueDepth": 0,
-      "lastSnapshotTurnId": 11
+      "lastSnapshotTurnId": 11,
+      "routeErrors": 0,
+      "routeAvailabilityPercent": 100,
+      "survivalRatePercent": 100,
+      "activeSurvivorsPercent": 100,
+      "bittenSurvivorsPercent": 0,
+      "evacuatedSurvivorsPercent": 0,
+      "turnDurationMs": 100,
+      "turnBudgetUsedPercent": 5,
+      "turnEfficiencyPercent": 100
     }
   }
 }
@@ -831,7 +1526,7 @@ Máximo de mensaje: 1 MiB. Ping/pong cada 30 s; cerrar conexión sin heartbeat. 
 
 Usar índices enteros, outEdges e inEdges. El grafo es inmutable. Después de mover zombies y aplicar eventos, el Simulador sincroniza un snapshot; routing calcula una sola vez el plan para ese worldVersion y lo publica a todos sus workers. Una llamada /paso no ejecuta Dijkstra: valida identidad/versión y consulta bestMoveByNode[currentNodeId], una búsqueda O(1).
 
-El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
+El snapshot de rutas incluye aristas abiertas, H (nodos horda y vecinos), nodos ocupados por zombies visibles, posiciones de corredores despiertos, transiciones observadas, refugios con ocupación y reservas, y un mapa agregado de incertidumbre de dormidos. El Simulador genera dormantUncertaintyNodeIds como unión de nodos alcanzables en ≤2 saltos dirigidos desde cada dormido no despierto. No incluye objetos, IDs ni posiciones de dormidos no despiertos. El mapa agregado solo modifica el coste; no permite perseguir, bloquear ni despertar un dormido. Se invalida en cada worldVersion.
 
 RoutePlanSnapshot tiene exactamente una entrada bestMoveByNode por nodo de grafo y está asociado a gameId, turnId, worldVersion y graphVersion. Los workers rechazan plan con versión distinta. buildLatencyMs mide solo el precompute del plan, no se suma a la latencia de cada /paso.
 
@@ -849,7 +1544,7 @@ H incluye vecinos directos entrantes y salientes de cada horda activa. Z_t son n
 
 ### 4.2 Nivel Base (obligatorio)
 
-Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios no llenos como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
+Coste de calle: B(e)=distancia_m/factor_velocidad. L es la mediana de B sobre aristas abiertas; si no hay ninguna, usar todas las aristas del grafo. Hacer una búsqueda Dijkstra inversa multi-source, con los refugios con plazas generales disponibles como fuentes de costo 0. Se ejecuta una vez después de cada sincronización, además de los planes para reservas descritos abajo, no por sobreviviente. Guardar distToShelter[nodeId] y targetShelter[nodeId].
 
 Penalización corredor Base: para cada corredor despierto, d(c,v) es distancia mínima en saltos dirigidos, hasta 2. Sea dmin(v) el mínimo sobre corredores. Wc=4*L:
 
@@ -860,9 +1555,11 @@ Pcor(v) = Wc * (3 - dmin(v)), si dmin(v) ∈ {0,1,2}
 
 Penalización de incertidumbre Base: el Simulador produce una lista de nodos próximos a dormidos no despiertos, sin incluir sus IDs ni coordenadas. Si v aparece, Pincertidumbre(v)=0.25*L; en otro caso es 0. Es un costo blando: nunca bloquea una calle ni identifica/despierta zombies. Dormidos siguen estáticos e invisibles como entidades del motor. Si no se puede formar este agregado, usar lista vacía.
 
-Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. Refugios llenos no son fuentes; disponibilidad se evalúa con la ocupación del snapshot. Llegadas simultáneas se arbitran en el Simulador y nunca exceden capacidad.
+Con distToShelter calculado, crear una entrada bestMoveByNode por cada nodo. Para cada salida abierta u→v, sumar B(e)+Pcor(v)+Pincertidumbre(v)+distToShelter(v), excluir F_t(u,v), y elegir costo mínimo; desempatar por shelterId y edgeId lexicográficos. Si u∈H∪Z_t, solo considerar v∉H∪Z_t. La tabla guarda edgeId, toNodeId, targetShelterId y routeCost. Si u ya es nodo de refugio disponible, guardar espera en u con reason=ruta-segura y targetShelterId del refugio, para que el Simulador resuelva admisión. La disponibilidad general es capacidad - ocupantes.length - reservados.length; un refugio sin plazas generales no es fuente del plan general. Llegadas simultáneas se arbitran en el Simulador conforme a la prioridad de reservas de §5.3 y nunca exceden capacidad.
 
-El plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. targetShelterId en request es compatible con Pro; Base elige el refugio disponible de menor costo.
+Una reserva válida retiene una plaza para un sobreviviente vivo que no sea ocupante ni tenga otro refugio asignado como destino. Routing conserva reservedPlans por refugio con reservas, precomputados en la sincronización y reutilizados por sus titulares: estos pueden recibir ruta hacia su plaza aunque no haya disponibilidad general. El lookup de /paso sigue siendo O(1); no se calcula una ruta por sobreviviente ni se modifica WorldState desde el motor. Una reserva no autoriza entrar en aristas cerradas, peligros o cruces frontales. El Simulador consume la reserva al admitir, y libera las de mordidos, evacuados y quienes cambian de destino; una reserva válida de alguien todavía en camino sigue reteniendo su plaza.
+
+Cada plan cuesta O((V+E) log V) para el Dijkstra inverso más O(E) para la tabla de siguientes pasos, una vez por worldVersion. Cada /paso hace lookup O(1), sin recorrer el grafo. Si no hay refugio alcanzable o salida segura, guardar espera en el nodo actual. Base respeta la plaza retenida de quien tiene reserva; para los demás elige el refugio con disponibilidad general de menor costo. targetShelterId en request es compatible con Pro.
 
 El cruce frontal excluye u→v cuando F_t(u,v) es true. H, aristas cerradas y nodos inexistentes son restricciones duras. Corredor e incertidumbre son penalizaciones blandas. El Simulador valida la respuesta contra el mismo snapshot antes de mover; un sobreviviente avanza máximo una arista por turno.
 
@@ -907,7 +1604,7 @@ export interface RoundConfig {
 
 La lista de spawns DEBE tener IDs únicos y nodeIds del grafo; su longitud de sobrevivientes debe coincidir con survivorCount y la composición de zombieSpawns con las reglas de la ronda. Ningún sobreviviente inicia en nodo zombie, zona de horda o nodo de refugio. Estas posiciones son datos del escenario, no valores inferidos por el motor.
 
-Turnos seriales con reloj monotónico y ticks absolutos cada 2.000 ms. No solapar ni saltar fases. Cada turno debe cerrar antes de su siguiente tick; si termina antes, esperar. Si no cierra antes del tick, terminar y comprometer ese turno, incrementar deadlineMisses y pausar antes de iniciar otro. La ronda con cualquier deadline miss no cumple aceptación temporal. Sin overruns se completan exactamente 150 turnos en 5 minutos. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
+Turnos seriales con reloj monotónico y ventanas absolutas de 2.000 ms. En ejecución continua sin pausas, el trabajo del turno k tiene inicio nominal T0 + (k-1)×2.000 ms y debe terminar antes de T0 + k×2.000 ms. El turno 1 calcula desde T0; el turno 150 calcula dentro de [T0+298.000, T0+300.000). Si el trabajo acaba antes, conservar el resultado privado y esperar la frontera nominal de cierre. La espera deliberada no cuenta en turnDurationMs. Para el cierre se admite exclusivamente la tolerancia de jitter de §5.4, sin ampliar el presupuesto de cálculo ni desplazar las siguientes ventanas. Un incumplimiento incrementa deadlineMisses una sola vez por turno; comprometer siempre el estado consistente y pausar antes de iniciar otro. En el turno 150 prevalece completed aunque haya incumplimiento. La frontera nominal final es T0+300.000 ms: nunca iniciar allí el cálculo del último turno ni publicar antes de esa frontera. La tolerancia no autoriza afirmar un cierre físico exacto en 300.000 ms. No solapar ni saltar fases. Una reanudación fija un nuevo origen para las ventanas restantes, sin recuperar tiempo pausado. Eventos programados se aplican antes de movimiento zombie en su effectiveTurnId.
 
 ### 5.2 Zombies
 
@@ -916,8 +1613,11 @@ Todos calculan intención desde la misma vista pre-movimiento y aplican movimien
 ### 5.3 Orden exacto
 
 ```text
+T0 = monotonicNow() // al iniciar o reanudar
+frontera = T0 + 2.000 ms
+jitterCierreMs = 10 // fijo durante la partida; configurable explícitamente
 loop mientras status == running:
-  t0 = monotonicNow()
+  inicioTrabajo = monotonicNow()
   k = turnId + 1
 
   phase = city-events
@@ -951,29 +1651,54 @@ loop mientras status == running:
     (2) está en nodo horda o vecino directo de horda, o
     (3) survivor A→B y zombie B→A en el turno
   primero resolver mordidas; después refugios
-  por refugio ordenar llegadas survivorId; admitir solo cupos libres
+  liberar reservas de mordidos, evacuados y quienes cambiaron de destino
+  por refugio:
+    admitir llegadas con reserva válida, ordenadas por survivorId; consumir su reserva
+    admitir demás llegadas por survivorId usando capacidad - ocupantes - reservados
+    mantener ocupantes.length + reservados.length <= capacidad
   no admitidos quedan vivos en el nodo del refugio
   despertar dormidos por posiciones nuevas; recalcular reservas/métricas
 
   phase = publish
-  deadlineMiss = monotonicNow() >= t0 + 2.000 ms
+  preparar métricas de rutas y congelar los datos del nuevo snapshot privado
+  finTrabajo = monotonicNow()
+  esperaPublicacionMs = 0
+  si finTrabajo < frontera:
+    inicioEspera = monotonicNow()
+    esperar hasta frontera manteniendo privado el resultado
+    esperaPublicacionMs = monotonicNow() - inicioEspera
+  incorporar controles recibidos durante cálculo/espera; resolver pausa solicitada
+  completar fecha y conteo WS; los datos pesados ya estaban preparados antes de esperar
+  cierreLogico = monotonicNow() // después de preparar/congelar; antes del sellado e intercambio síncronos
+  turnDurationMs = cierreLogico - inicioTrabajo - esperaPublicacionMs
+  deadlineMiss = finTrabajo >= frontera o turnDurationMs >= 2.000 ms
+                 o cierreLogico > frontera + jitterCierreMs
   si deadlineMiss: incrementar deadlineMisses
+  turnEfficiencyPercent = 100 × (k - deadlineMisses) / k
+  sellar métricas temporales con turnDurationMs, excluyendo la espera deliberada
   si k == 150: status=completed
   si no, si pausa solicitada o deadlineMiss: status=paused
   activeTurnId = null
   comprometer snapshot atómicamente; turnId=k; worldVersion++
+  observar instante posterior al intercambio para diagnóstico interno de retraso real
   actualizar GET /estado y emitir TURN_UPDATE
   encolar snapshot DynamoDB sin esperar
-  si status == running: esperar hasta t0 + 2.000 ms
+  frontera += 2.000 ms // absoluta; comenzar el siguiente cálculo sin otra espera
 ```
 
-Una persona mordida no se evacúa aunque termine en refugio. La capacidad nunca se excede; admisión simultánea desempata por survivorId. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
+Una persona mordida no se evacúa aunque termine en refugio y tenga reserva. La admisión simultánea prioriza primero reservas válidas y después llegadas sin reserva, con orden lexicográfico por survivorId dentro de cada grupo. Al admitir se consume la reserva; las plazas aún reservadas para vivos en camino no se ofrecen al grupo sin reserva. Sin reservas, la admisión sigue estrictamente el orden por survivorId. Siempre se cumple ocupantes.length + reservados.length <= capacidad. Sincronización fallida obliga a quedarse quieto, no ejecutar con versión anterior. Cualquier respuesta de ruta que llegue después de 500 ms se descarta.
 
 ### 5.4 Concurrencia y latencia
 
 Usar Promise.allSettled para hasta 200 solicitudes con límite de 200 en vuelo. Todas comparten turnId/worldVersion; no sincronizar nueva versión hasta cerrar lote. Requests idempotentes. Pool rechaza exceso con 429. Workers no comparten datos mutables; sync publica snapshot completo de forma atómica.
 
 Medir una muestra por request incluyendo error; timeout cuenta como 500 ms. Ring buffer deslizante de últimas 1.000 solicitudes. Percentiles nearest-rank: ordenar muestra, índice ceil(p*n)-1; reportar una decimal. p95 de extremo a extremo de POST /paso. routeTimeouts, invalidRouteResponses y deadlineMisses son acumulados por partida; controles fuera de la ventana. Un timeout no detiene el loop ni mueve al sobreviviente.
+
+**Cierre y jitter.** `commitJitterToleranceMs` es 10 ms por defecto, acordados para el cierre, y queda fijo durante la partida. Puede configurarse explícitamente entre 0 y menos de 2.000 ms; el valor usado debe acompañar la evidencia de aceptación. El trabajo que alcanza el deadline absoluto o consume 2.000 ms de duración activa incumple aunque el exceso sea menor que la tolerancia. Esta solo evita atribuir al cálculo el pequeño retraso del temporizador o del cierre: un cierre lógico exactamente en frontera + tolerancia es admisible; por encima incumple. No se acumula la tolerancia por turno ni se mueve T0, la siguiente frontera o el deadline de cálculo.
+
+La muestra `commitReadyAtMonotonicMs` se toma después de calcular métricas de rutas, actualizar estado/fecha y congelar los datos. Es el punto lógico usado para clasificar el cierre; después solo se sellan los cuatro indicadores temporales y se intercambia la referencia, sin await, callbacks de usuario ni I/O. `turnDurationMs` incluye preparación y congelado hasta esa muestra, descontando la espera completa de publicación. Inmediatamente después del intercambio se observa `committedAtMonotonicMs`; esa segunda muestra es diagnóstica y no introduce otro commit. El diagnóstico interno `TurnTiming` conserva ambos instantes, deadline, tolerancia, retraso del despertar y retraso real observado del commit (sin redondear). No se oculta un retraso por estar dentro de tolerancia y no se amplía el snapshot público de 23 métricas. Para contrastar un cierre físico con 300.000 ms se usa el retraso observado, no solo `deadlineMisses` ni la eficiencia.
+
+La actualización de GET /estado y el encolado de TURN_UPDATE siguen al commit. El broadcast WebSocket usa setImmediate; `emittedAt` es una fecha UTC de codificación del mensaje, no un reloj monotónico ni un acuse de recepción. La entrega WS/red se mide por separado y no determina el cumplimiento del cierre lógico. No se exige igualdad exacta del temporizador del sistema con la frontera nominal.
 
 ## 6. Frontend
 
@@ -993,9 +1718,9 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 
 1. **Extracción y grafo:** 250–350 nodos, cuatro zonas, cuatro refugios con capacidad positiva, IDs únicos, arcos dirigidos/factores/referencias válidos, atribución, graphVersion y hash compartido.
 2. **Estado/sincronización:** carga y validación antes de readiness; instalar versión atómica en workers; sync idéntico idempotente, versión obsoleta/conflicto 409; estado parcial nunca público.
-3. **POST /paso y plan Base:** una búsqueda Dijkstra inversa por worldVersion, tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: jamás devuelve edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
+3. **POST /paso y plan Base:** precomputar por worldVersion el Dijkstra inverso del plan general y los planes por refugio con reservas (reservedPlans), conforme a §4.2; no ejecutar Dijkstra por sobreviviente. Tabla bestMoveByNode y lookup O(1); auth, validación e idempotencia. Aceptación: respetar la disponibilidad general descontando reservas y mantener rutas para sus titulares; jamás devolver edge no adyacente/cerrado, destino horda o cruce frontal; fallo de cálculo retorna el mismo nodo; p95 ≤150 ms con 200 requests; cliente cancela a 500 ms.
 4. **API/OpenAPI/controles:** rutas y contratos alineados; x-api-key exigida en motor/controles; dos inicios concurrentes no aceptados; pausar cierra turno; cierre afecta ambos sentidos del segmento.
-5. **AWS/persistencia/telemetría:** ECS/ALB, DynamoDB On-Demand, Secrets Manager y CloudWatch en la región seleccionada mediante AWS_REGION. Aceptación: región confirmada antes del despliegue; una tarea autoritativa; snapshot por turno asíncrono; reinicio restaura pausado; alertas p95/timeout/cola/health; secretos fuera del frontend/logs.
+5. **AWS/persistencia/telemetría:** EC2/Caddy, PM2 o Docker, DynamoDB On-Demand, IAM Role y CloudWatch en la región seleccionada mediante AWS_REGION. Aceptación: región confirmada antes del despliegue; una tarea autoritativa; snapshot por turno asíncrono; reinicio restaura pausado; alertas p95/timeout/cola/health; secretos fuera del frontend/logs.
 6. **Costos/operación:** documentar sizing medido, retención, alarmas y rollback; estimación vía AWS Pricing Calculator antes del evento.
 
 ### Dev 2 — Maykel · Backend Simulador
@@ -1026,7 +1751,7 @@ Reconexión WS con backoff 1,2,4,8,16, máximo 30 s; al reconectar GET /estado, 
 
 - Grafo dirigido, segmentoId compartido para cierres bidireccionales.
 - Sobreviviente avanza como máximo una arista por turno; caminante zombie cada dos; horda inmóvil.
-- Un escritor ECS por partida; snapshots asíncronos.
+- Un escritor Node en EC2 por partida; snapshots asíncronos.
 - Simulador valida movimientos y resuelve mordidas/capacidad.
 - Clientes reciben solo snapshots completos comprometidos.
 

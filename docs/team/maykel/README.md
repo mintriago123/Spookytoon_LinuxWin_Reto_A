@@ -10,17 +10,18 @@ Dueño del game loop, máquina de estados de zombies/sobrevivientes, eventos de 
 |---|---|
 | Game loop y estado autoritativo | **backend/src/modules/simulator/** |
 | Eventos de ciudad | **backend/src/modules/simulator/city-events.ts** |
-| Coordinación con rutas | **backend/src/app.ts** y cliente interno del motor |
-| Latencia y métricas del turno | **backend/src/modules/telemetry/** |
+| Coordinación con rutas | **backend/src/server.ts** y `backend/src/modules/simulator/routing-client.ts` |
+| Consumo de métricas del turno | `backend/src/modules/telemetry/turn-metrics.ts` (ownership de Michael; coordinar cambios de contrato) |
 | Emisión al Frontend | **backend/src/modules/realtime/** |
 
 ## Secuencia obligatoria por turno
 
-1. Aplicar eventos efectivos del turno y mover zombies.
-2. Guardar transiciones zombie y sincronizar el snapshot con el motor, incluyendo el agregado dormantUncertaintyNodeIds sin objetos/IDs de dormidos no despiertos.
-3. Consultar /paso en paralelo para cada sobreviviente vivo, con timeout de 500 ms.
-4. Validar las decisiones, mover sobrevivientes y resolver mordidas antes de refugios.
-5. Comprometer el estado completo, actualizar /estado, emitir TURN_UPDATE y encolar snapshot.
+1. Aplicar eventos efectivos y mover zombies, conservando cada arista recorrida.
+2. Sincronizar con routing y confirmar la instalación de la versión del turno; ante fallo, nadie usa una tabla vieja.
+3. Consultar `/paso` en paralelo para sobrevivientes vivos, con timeout individual de 500 ms.
+4. Validar respuestas y movimientos; ejecutar movimiento simultáneo y resolver mordidas antes de admisión a refugios.
+5. Actualizar telemetría, cerrar el turno y comprometer un único estado completo.
+6. Publicar el mismo snapshot comprometido en `GET /estado` y `TURN_UPDATE`.
 
 Un timeout, error, respuesta tardía o movimiento inválido deja quieto al sobreviviente afectado, usando su nodo actual. Una falla de sincronización hace que todos esperen; nunca usar una versión anterior del mundo.
 
@@ -37,17 +38,18 @@ Un timeout, error, respuesta tardía o movimiento inválido deja quieto al sobre
 
 - A Michael: consumir exactamente el contrato de /motor/sincronizar y /paso; enviar turnId y worldVersion idénticos durante todo el lote.
 - A Kristhian: publicar un único snapshot completo por turno comprometido. No emitir fases parciales ni cambiar el significado de métricas sin actualizar el contrato.
-- Configurar en **backend/src/config/rounds.ts** las cantidades y posiciones de entidades y los turnos de eventos antes de iniciar una ronda.
+- `backend/src/config/round-presets.ts` genera presets deterministas que el servidor activa por defecto. Sus cantidades zombie y distribución no tienen aprobación de escenario documentada ni se basan aún en datos censales; no presentarlos como escenarios oficiales hasta que el equipo los confirme.
 
-## Aceptación antes de integrar
+## Aceptación técnica y oficial
 
 - 150 turnos de 2.000 ms seriales; nunca hay dos turnos simultáneos.
 - Hasta 200 solicitudes de ruta en paralelo, deadline individual de 500 ms y percentiles en ventana de 1.000 muestras.
 - Se consulta la tabla precomputada por worldVersion; no se ejecuta Dijkstra por sobreviviente.
-- Las tres rondas cumplen sus cantidades de sobrevivientes, composición y eventos de ciudad.
+- Las pruebas de backend incluyen presets y smoke tests HTTP/WS de tres turnos por ronda; no equivalen a una ronda completa de 150 turnos con reloj real.
+- La aceptación oficial requiere cantidades/spawns/eventos aprobados para las tres rondas y una prueba completa contra el grafo real.
 - Mordidas, capacidad, pausa y semilla reproducible cumplen SPEC.md.
 - GET /estado y TURN_UPDATE describen el mismo turnId y worldVersion.
 
-## Datos pendientes
+## Datos y validaciones pendientes
 
-Los conteos/spawns de zombies y las posiciones iniciales de entidades son configuración del escenario. Deben estar completos y validados antes de POST /simulador/iniciar.
+Los presets actuales son valores generados por implementación. El SPEC indica que las cantidades y ubicaciones del escenario no deben inventarse. Confirmar/aprobar esos valores; investigar datos del Censo 2022 del INEC y del GAD para orientar la distribución de sobrevivientes. La densidad poblacional no determina por sí sola los focos infecciosos. También falta ejecutar aceptación oficial y medir carga en la configuración final.

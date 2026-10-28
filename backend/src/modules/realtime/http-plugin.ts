@@ -10,6 +10,7 @@ export interface RealtimeOptions { runtime: SimulationRuntime; allowedOrigins?: 
 /** Comparación exacta de orígenes configurados. Sin configuración, solo mismo origen y clientes sin Origin. */
 export function originPolicy(allowed: readonly string[]) {
   const configured = new Set(allowed.map(origin => {
+    if (origin === "*") return origin;
     const url = new URL(origin);
     if (!["http:", "https:"].includes(url.protocol) || url.origin !== origin) throw new Error("Origen frontend inválido");
     return origin;
@@ -19,7 +20,7 @@ export function originPolicy(allowed: readonly string[]) {
     try {
       const url = new URL(origin);
       if (!["http:", "https:"].includes(url.protocol) || url.origin !== origin) return false;
-      return configured.size ? configured.has(origin) : url.host === host;
+      return configured.size ? configured.has("*") || configured.has(origin) : url.host === host;
     } catch { return false; }
   };
 }
@@ -27,7 +28,7 @@ export function originPolicy(allowed: readonly string[]) {
 /** GET /estado y /ws públicos de solo lectura en el HTTP existente; TLS termina en ALB. */
 export const realtimePlugin: FastifyPluginAsync<RealtimeOptions> = async (app, options) => {
   const allowed = originPolicy(options.allowedOrigins ?? []);
-  const hub = new RealtimeHub();
+  const hub = new RealtimeHub(undefined, count => options.runtime.setRealtimeClientCount(count));
   const current = options.runtime.getCommittedSnapshot();
   if (current) hub.publish(current);
   const unsubscribe = options.runtime.subscribeCommitted(snapshot => hub.publish(snapshot));

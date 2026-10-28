@@ -1,5 +1,5 @@
 import type { MantaGraph } from "../../contracts/types.ts";
-import type { Immutable, RandomState, TelemetryMetrics, WorldState } from "./types.ts";
+import type { Immutable, RandomState, RoundConfig, TelemetryMetrics, WorldState } from "./types.ts";
 import { validateRoundConfig } from "./round-validation.ts";
 import { validateRandomState } from "./random.ts";
 
@@ -13,6 +13,16 @@ function frozenCopy<T>(value: T): Immutable<T> {
   const copy = structuredClone(value);
   freeze(copy);
   return copy as Immutable<T>;
+}
+
+export function createInitialTelemetryMetrics(config: Immutable<RoundConfig>): TelemetryMetrics {
+  return { routeSamples: 0, routeLatencyP50Ms: 0, routeLatencyP95Ms: 0, routeLatencyP99Ms: 0,
+    routeTimeouts: 0, invalidRouteResponses: 0, routeErrors: 0, routeAvailabilityPercent: 0,
+    deadlineMisses: 0, activeSurvivors: config.survivorCount, bittenSurvivors: 0,
+    evacuatedSurvivors: 0, activeZombies: config.zombieSpawns.filter(zombie => zombie.tipo !== "dormido").length,
+    survivalRatePercent: 100, activeSurvivorsPercent: 100, bittenSurvivorsPercent: 0,
+    evacuatedSurvivorsPercent: 0, turnDurationMs: 0, turnBudgetUsedPercent: 0, turnEfficiencyPercent: 100,
+    wsClients: 0, snapshotQueueDepth: 0, lastSnapshotTurnId: null };
 }
 
 /** Construye una partida idle, no inicia reloj, routing, PRNG ni publicaciones.
@@ -56,7 +66,9 @@ export function createWorldState(input: {
       eventId: event.eventId, tipo: "bloquear-segmento", edgeId: event.edgeId,
       motivo: event.reason, effectiveTurnId: event.effectiveTurnId, aplicado: false, origen: "evento-ciudad",
     })),
-    lastZombieTraversals: [], metrics: structuredClone(input.initialMetrics),
+    lastZombieTraversals: [], metrics: { ...createInitialTelemetryMetrics(roundConfig), ...structuredClone(input.initialMetrics),
+      activeSurvivors: roundConfig.survivorCount, bittenSurvivors: 0, evacuatedSurvivors: 0,
+      activeZombies: roundConfig.zombieSpawns.filter(zombie => zombie.tipo !== "dormido").length },
     rngSeed: random.seed, randomState: { ...random }, pause: { status: "none" },
     routing: { confirmed: null, uncertain: false, attemptedRequest: null }, updatedAt: input.updatedAt,
   };
