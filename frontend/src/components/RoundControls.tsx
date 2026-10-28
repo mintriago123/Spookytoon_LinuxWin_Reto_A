@@ -70,6 +70,54 @@ export function RoundControls() {
 
   const [roundId, setRoundId] = useState<1 | 2 | 3>(1);
   const [blockMotivo, setBlockMotivo] = useState("");
+  const [streetCatalog, setStreetCatalog] = useState<{
+    graphVersion: string;
+    namesBySegmentId: Record<string, string>;
+  } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/data/nombres-calles.json")
+      .then(async (res) => {
+        if (!res.ok) throw new Error("Catálogo de calles no disponible");
+        return res.json() as Promise<{
+          graphVersion: string;
+          namesBySegmentId: Record<string, string>;
+        }>;
+      })
+      .then((catalog) => {
+        if (!cancelled && typeof catalog.graphVersion === "string" &&
+            catalog.namesBySegmentId && typeof catalog.namesBySegmentId === "object" &&
+            !Array.isArray(catalog.namesBySegmentId) &&
+            Object.values(catalog.namesBySegmentId).every((name) => typeof name === "string" && name.trim())) {
+          setStreetCatalog(catalog);
+        }
+      })
+      .catch(() => { /* Sin catálogo se muestran el tipo de vía, zona y tramo. */ });
+    return () => { cancelled = true; };
+  }, []);
+
+  const segmentLabels = useMemo(() => {
+    const labels = new Map<string, string>();
+    if (!graph) return labels;
+    const names = streetCatalog?.graphVersion === graph.metadata.graphVersion
+      ? streetCatalog.namesBySegmentId : {};
+    const zones = new Map(graph.nodos.map((node) => [node.id, node.zona]));
+    const roadTypes = { avenida: "Avenida", calle: "Calle", callejon: "Callejón", puente: "Puente" };
+    const counts = new Map<string, number>();
+    // Numeración estable: cerrar un tramo no renumera los demás.
+    const edges = [...graph.aristas].sort((a, b) => a.segmentoId.localeCompare(b.segmentoId, "es", { numeric: true }));
+    for (const edge of edges) {
+      if (labels.has(edge.segmentoId)) continue;
+      const name = names[edge.segmentoId] ?? `${roadTypes[edge.tipo]} sin nombre`;
+      const zone = [...new Set([zones.get(edge.origen), zones.get(edge.destino)])].filter(Boolean).join(" / ");
+      const group = `${name} · ${zone}`;
+      const number = (counts.get(group) ?? 0) + 1;
+      counts.set(group, number);
+      labels.set(edge.segmentoId, `${group} · tramo ${number}`);
+    }
+    return labels;
+  }, [graph, streetCatalog]);
 
   // El Backend conserva el historial de cierres: una entrada con
   // desbloqueadaEnTurno != null ya no está vigente, pero sigue en el
@@ -87,13 +135,14 @@ export function RoundControls() {
   const blockableSegments = useMemo(() => {
     if (!graph) return [];
     const blockedSegmentIds = new Set(activeBlockedEdges.map((b) => b.segmentoId));
-    const bySegment = new Map<string, { segmentoId: string; edgeId: string; tipo: string }>();
+    const bySegment = new Map<string, { segmentoId: string; edgeId: string; label: string }>();
     for (const edge of graph.aristas) {
       if (blockedSegmentIds.has(edge.segmentoId) || bySegment.has(edge.segmentoId)) continue;
-      bySegment.set(edge.segmentoId, { segmentoId: edge.segmentoId, edgeId: edge.id, tipo: edge.tipo });
+      bySegment.set(edge.segmentoId, { segmentoId: edge.segmentoId, edgeId: edge.id,
+        label: segmentLabels.get(edge.segmentoId) ?? edge.segmentoId });
     }
-    return Array.from(bySegment.values()).sort((a, b) => a.segmentoId.localeCompare(b.segmentoId, "en"));
-  }, [graph, activeBlockedEdges]);
+    return Array.from(bySegment.values()).sort((a, b) => a.label.localeCompare(b.label, "es", { numeric: true }));
+  }, [graph, activeBlockedEdges, segmentLabels]);
 
   const [selectedEdgeId, setSelectedEdgeId] = useState("");
 
@@ -291,7 +340,7 @@ export function RoundControls() {
                   className="flex items-center justify-between gap-2 rounded bg-accent-rose/10 px-2 py-1"
                 >
                   <span className="truncate" title={blocked.motivo}>
-                    {blocked.segmentoId} — {blocked.motivo}
+                    {segmentLabels.get(blocked.segmentoId) ?? blocked.segmentoId} — {blocked.motivo}
                   </span>
                   <button
                     type="button"
@@ -316,7 +365,7 @@ export function RoundControls() {
               <option value="">Selecciona un segmento…</option>
               {blockableSegments.map((segment) => (
                 <option key={segment.segmentoId} value={segment.edgeId}>
-                  {segment.segmentoId} ({segment.tipo})
+                  {segment.label}
                 </option>
               ))}
             </select>
