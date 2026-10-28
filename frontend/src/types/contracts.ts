@@ -101,6 +101,14 @@ export interface TelemetryMetrics {
   wsClients: number;
   snapshotQueueDepth: number;
   lastSnapshotTurnId: number | null;
+  /**
+   * Disponibilidad de rutas (%) sobre la ventana de últimas 1.000 llamadas,
+   * calculada por el Backend (backend/src/modules/telemetry/turn-metrics.ts,
+   * rama feat/backend-rounds-metrics — aún no mergeada a design/SPEC.md).
+   * Opcional a propósito: el backend hoy en design no la envía todavía: ver
+   * MetricsPanel.tsx, que calcula localmente cuando falta.
+   */
+  routeAvailabilityPercent?: number;
 }
 
 export interface WorldSnapshot {

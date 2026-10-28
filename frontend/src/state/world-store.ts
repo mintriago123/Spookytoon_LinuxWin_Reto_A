@@ -16,12 +16,14 @@ export type PendingControl = "iniciar" | "pausar" | "bloquear-arista" | null;
  * - Si graphVersion del snapshot difiere del grafo cargado, no se dibujan
  *   entidades (ver useGraphVersionMismatch).
  * - Dentro de la MISMA partida (mismo gameId), turnId duplicado o menor al
- *   ya aplicado se ignora; turnId igual con el mismo status también es
- *   duplicado. Pero backend/.../simulation-runtime.ts publica a propósito
- *   snapshots con turnId igual y status distinto (reanudar desde paused,
- *   o pausar entre turnos sin que haya corrido un turno nuevo — "Acuerdo
- *   Etapa 7"); esos SÍ deben aplicarse o la UI se queda mostrando un
- *   status viejo para siempre.
+ *   ya aplicado se ignora. Con turnId igual, el snapshot SÍ se aplica si
+ *   cambió el status (p.ej. paused → running al reanudar: "Acuerdo Etapa 7"
+ *   en backend/.../simulation-runtime.ts) o si worldVersion avanzó (p.ej.
+ *   backend/.../turn-coordinator.ts ahora también recomete metrics.wsClients
+ *   en resume() sin tocar turnId). No se reimplementa aquí cada motivo
+ *   posible de recommit del backend: cualquier worldVersion mayor al ya
+ *   aplicado para el mismo turnId se considera cambio real y se aplica,
+ *   para no quedar atado a la lista exacta de casos de hoy.
  * - Una partida nueva (gameId distinto, p.ej. la siguiente ronda) siempre
  *   se acepta aunque su turnId reinicie por debajo del de la partida
  *   anterior, y no se interpola contra la posición final de esa partida
@@ -65,11 +67,14 @@ export const useWorldStore = create<WorldStoreState>((set, get) => ({
         // Mismo gameId: turnId nunca retrocede (SPEC.md §3.4). Uno MENOR es
         // duplicado/atrasado (reconexión con mensaje viejo) y se ignora.
         if (snapshot.turnId < current.turnId) return;
-        // turnId IGUAL solo es duplicado real si además el status no
-        // cambió; si cambió (p.ej. paused → running al reanudar) es el
-        // commit de control que el backend publica a propósito y hay que
-        // aplicarlo.
-        if (snapshot.turnId === current.turnId && snapshot.status === current.status) {
+        // turnId IGUAL solo es duplicado real si además no cambiaron el
+        // status NI worldVersion; cualquiera de los dos distinto es un
+        // recommit real del backend (ver nota de la clase) y se aplica.
+        if (
+          snapshot.turnId === current.turnId &&
+          snapshot.status === current.status &&
+          snapshot.worldVersion <= current.worldVersion
+        ) {
           return;
         }
       }

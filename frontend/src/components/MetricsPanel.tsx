@@ -42,14 +42,19 @@ export function MetricsPanel() {
   ).padStart(2, "0")}`;
 
   // Disponibilidad = solicitudes de ruta contestadas con respuesta válida
-  // dentro de 500 ms. Se deriva en el cliente solo para mostrar; el Backend
-  // no publica este porcentaje directamente (SPEC.md §5.4 sí publica los
-  // conteos crudos que lo componen).
+  // dentro de 500 ms. El Backend ya calcula esto sobre su ventana real de
+  // 1.000 muestras (routeAvailabilityPercent); se usa ese valor cuando
+  // existe. El cálculo local es solo un respaldo aproximado para cuando el
+  // Backend desplegado todavía no lo envía (campo opcional, SPEC.md §5.4
+  // solo exige los conteos crudos que lo componen) — no recalcula sobre la
+  // ventana real de 1.000, sino sobre el acumulado de la partida completa.
   const invalidSamples = metrics.routeTimeouts + metrics.invalidRouteResponses;
   const availability =
-    metrics.routeSamples > 0
-      ? `${(((metrics.routeSamples - invalidSamples) / metrics.routeSamples) * 100).toFixed(1)}%`
-      : "—";
+    metrics.routeAvailabilityPercent !== undefined
+      ? `${metrics.routeAvailabilityPercent.toFixed(1)}%`
+      : metrics.routeSamples > 0
+        ? `${(((metrics.routeSamples - invalidSamples) / metrics.routeSamples) * 100).toFixed(1)}%`
+        : "—";
 
   return (
     <div className="glass panel-in grid grid-cols-2 gap-3 rounded-lg p-3 sm:grid-cols-4">

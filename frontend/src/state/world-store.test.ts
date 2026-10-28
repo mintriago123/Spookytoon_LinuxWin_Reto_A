@@ -101,6 +101,25 @@ describe("world-store", () => {
     expect(useWorldStore.getState().currentSnapshot).toBe(first);
   });
 
+  // backend/src/modules/simulator/turn-coordinator.ts (rama
+  // feat/backend-rounds-metrics) recomete metrics.wsClients en resume() sin
+  // tocar turnId ni status en algunos casos; worldVersion es la señal de
+  // "esto es un commit nuevo" que no depende de enumerar cada motivo.
+  it("aplica un snapshot con turnId y status iguales si worldVersion avanzó", () => {
+    const first = makeSnapshot({ turnId: 20, status: "running", worldVersion: 40 });
+    const recommitted = makeSnapshot({ turnId: 20, status: "running", worldVersion: 41 });
+    useWorldStore.getState().applySnapshot(first);
+    useWorldStore.getState().applySnapshot(recommitted);
+    expect(useWorldStore.getState().currentSnapshot).toBe(recommitted);
+  });
+
+  it("ignora un snapshot con turnId, status y worldVersion iguales (duplicado real)", () => {
+    const first = makeSnapshot({ turnId: 20, status: "running", worldVersion: 40 });
+    useWorldStore.getState().applySnapshot(first);
+    useWorldStore.getState().applySnapshot(makeSnapshot({ turnId: 20, status: "running", worldVersion: 40 }));
+    expect(useWorldStore.getState().currentSnapshot).toBe(first);
+  });
+
   // backend/src/modules/simulator/simulation-runtime.ts publica un commit de
   // control (reanudar desde paused) con el MISMO turnId pero status distinto
   // ("Acuerdo Etapa 7"). Si el store lo ignora, la UI muestra "paused" para
