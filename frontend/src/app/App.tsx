@@ -43,7 +43,13 @@ export function App() {
 
   return (
     <div className="flex h-full w-full flex-col bg-night-900 text-slate-100 md:flex-row">
-      <div className="flex flex-col md:w-[calc(100%-20rem)]">
+      {/* min-h-0 flex-1: en móvil (flex-col) este bloque necesita altura
+          propia o <main>'s flex-1 de abajo no tiene contra qué crecer y el
+          mapa queda en 0px — el eje principal es vertical ahí, a diferencia
+          de md: (flex-row), donde el stretch del cross-axis ya le da altura
+          completa sin esto. md:flex-none cancela el grow para que el ancho
+          fijo de md:w-[...] siga mandando en escritorio. */}
+      <div className="flex min-h-0 flex-1 flex-col md:w-[calc(100%-20rem)] md:flex-none">
         <header className="glass z-10 flex items-center gap-3 px-4 py-2.5">
           <svg
             viewBox="0 0 24 24"
@@ -63,7 +69,13 @@ export function App() {
             </p>
           </div>
         </header>
-        <main className="relative flex-1">
+        {/* min-h-[50vh]: la barra lateral apilada en móvil es más alta que
+            el viewport (métricas + refugios + formulario completo), así que
+            flex-1 solo no basta — sin un piso el flexbox le quita todo el
+            alto al mapa. Con el piso, la página crece más que el viewport y
+            el usuario baja con scroll normal a los controles; el mapa, que
+            es lo primero que debe verse, nunca queda en 0px. */}
+        <main className="relative min-h-[50vh] flex-1">
           <LiveMap />
           {/* z-[1100]: por encima de los controles de Leaflet (z-index 1000
               en leaflet.css), si no quedan tapados aunque estén en el DOM. */}
@@ -73,6 +85,11 @@ export function App() {
           </div>
         </main>
       </div>
+      {/* Etiquetas de sección (Refugios/Cierres/métricas) en cian de señal:
+          compromete ese acento en toda la barra lateral en vez de un solo
+          punto puntual. El botón Iniciar se queda verde a propósito — es
+          el único color que significa "ir" (ver DESIGN.md, Regla del Verde
+          Único); el cian no debe disputarle ese rol. */}
       <aside className="flex w-full flex-col gap-3 overflow-y-auto border-t border-white/10 bg-night-800 p-3 md:w-80 md:border-l md:border-t-0">
         <MetricsPanel />
         <ShelterOccupancy />

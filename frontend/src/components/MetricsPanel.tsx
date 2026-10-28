@@ -11,7 +11,7 @@ const ROUND_LABEL: Record<1 | 2 | 3, string> = {
 function Metric({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col">
-      <span className="text-[10px] uppercase tracking-wide text-slate-400">
+      <span className="text-[10px] uppercase tracking-wide text-accent-cyan/85">
         {label}
       </span>
       <span className="text-sm font-bold tabular-nums text-slate-100">{value}</span>
