@@ -41,8 +41,10 @@ export function useOperatorControls() {
         throw new Error(errorBody?.error.message ?? "Contraseña de operador incorrecta");
       }
       setAuthState("in");
+      return true;
     } catch (err) {
       setLastError(err instanceof Error ? err.message : "Fallo al iniciar sesión");
+      return false;
     } finally {
       setLoggingIn(false);
     }

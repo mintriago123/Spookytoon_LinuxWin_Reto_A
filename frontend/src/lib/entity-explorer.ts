@@ -13,6 +13,7 @@ export type ExplorerAction =
   | { type: "query"; value: string }
   | { type: "survivor-filter"; value: ExplorerState["survivorFilter"] }
   | { type: "segment-filter"; value: ExplorerState["segmentFilter"] }
+  | { type: "reveal"; category: ExplorerCategory; id: string }
   | { type: "reset" };
 
 export function initialExplorerState(): ExplorerState {
@@ -26,6 +27,8 @@ export function explorerReducer(state: ExplorerState, action: ExplorerAction): E
     case "query": return { ...state, queries: { ...state.queries, [state.category]: action.value } };
     case "survivor-filter": return { ...state, survivorFilter: action.value };
     case "segment-filter": return { ...state, segmentFilter: action.value };
+    case "reveal": return { ...state, category: action.category, survivorFilter: "all", segmentFilter: "all",
+      queries: { ...state.queries, [action.category]: action.id } };
     case "reset": return initialExplorerState();
   }
 }

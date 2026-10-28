@@ -37,6 +37,16 @@ beforeEach(() => useWorldStore.setState({ graph, graphVersion: "graph-v1", curre
   selection: null, receipts: [], lastError: null, pendingControl: null }));
 
 describe("explorer categories and search", () => {
+  it("reveals the existing selection without selecting or moving another entity", () => {
+    useWorldStore.getState().selectEntity({ kind: "segment", id: "segment-a" });
+    const selection = useWorldStore.getState().selection;
+    const state = { ...initialExplorerState(), survivorFilter: "vivo" as const, segmentFilter: "closed" as const };
+    const revealed = explorerReducer(state, { type: "reveal", category: "segment", id: "segment-a" });
+    expect(revealed.category).toBe("segment");
+    expect(revealed.segmentFilter).toBe("all");
+    expect(explorerResults(revealed, graph, world, segments).items.map(item => item.id)).toEqual(["segment-a"]);
+    expect(useWorldStore.getState().selection).toBe(selection);
+  });
   it("changes category without writing a selection and preserves independent queries", () => {
     useWorldStore.getState().selectEntity({ kind: "survivor", id: "R-S-10" });
     const selected = useWorldStore.getState().selection;
@@ -126,6 +136,14 @@ describe("shared selection and game scope", () => {
 });
 
 describe("explorer presentation states", () => {
+  it("opens the selected result's inline inspector without an extra step", () => {
+    useWorldStore.getState().selectEntity({ kind: "survivor", id: "R-S-10" });
+    const markup = renderToStaticMarkup(<EntityExplorer segments={segments} inspector={<p>Contenido del detalle</p>} />);
+    expect(markup.match(/class="explorer-inspector"/g)).toHaveLength(1);
+    expect(markup).toContain('<details class="explorer-inspector" open=""><summary>Ver detalle</summary>');
+    expect(markup).toMatch(/Contenido del detalle<\/p><\/div><\/details><\/li>/);
+    expect(markup).not.toContain('class="sidebar-selection"');
+  });
   it("renders real radio categories and buttons instead of a mixed dropdown", () => {
     const markup = renderToStaticMarkup(<EntityExplorer segments={segments} />);
     expect(markup).toContain("Categoría de exploración");
