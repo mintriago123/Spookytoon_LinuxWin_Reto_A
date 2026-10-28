@@ -1,18 +1,18 @@
 import type { MantaGraph } from "../../contracts/types.ts";
 import { createWorldState } from "../simulator/world-state.ts";
 import { buildWorldSyncRequest } from "../simulator/routing-world.ts";
-import type { WorldState } from "../simulator/types.ts";
+import type { SurveillanceCamera, WorldState } from "../simulator/types.ts";
 import type { StoredGame } from "./adapter.ts";
 
 /** Valida identidad del artefacto, escenario, entidades y cupos antes de exponer la recuperación. */
-export function recoverWorld(game: StoredGame, graph: MantaGraph): WorldState {
+export function recoverWorld(game: StoredGame, graph: MantaGraph, cameras: readonly SurveillanceCamera[] = []): WorldState {
   if (game.graphVersion !== graph.metadata.graphVersion || game.status !== "paused" ||
       !Number.isSafeInteger(game.turnId) || game.turnId < 0 || game.turnId >= 150 ||
       !Number.isSafeInteger(game.worldVersion) || game.worldVersion < game.turnId || game.rngSeed !== game.randomState.seed) {
     throw new Error("Checkpoint incompatible con el backend");
   }
   const initial = createWorldState({ gameId: game.gameId, graph, roundConfig: game.roundConfig,
-    randomState: game.randomState, initialMetrics: game.metrics, updatedAt: game.updatedAt });
+    randomState: game.randomState, initialMetrics: game.metrics, updatedAt: game.updatedAt, cameras });
   const sameIds = (a: readonly { id: string }[], b: readonly { id: string }[]) =>
     a.length === b.length && new Set(b.map(x => x.id)).size === a.length && a.every(x => b.some(y => y.id === x.id));
   if (!sameIds(initial.survivors, game.survivors) || !sameIds(initial.zombies, game.zombies)) throw new Error("Entidades del checkpoint no coinciden con el escenario");
@@ -25,7 +25,8 @@ export function recoverWorld(game: StoredGame, graph: MantaGraph): WorldState {
       e.effectiveTurnId < 1 || e.effectiveTurnId > 150 || !["bloquear-segmento", "desbloquear-segmento"].includes(e.tipo) ||
       (e.effectiveTurnId <= game.turnId && !e.aplicado))) throw new Error("Eventos recuperados inválidos");
   const { graphVersion: _graphVersion, ...dynamic } = game;
-  const world: WorldState = { ...initial, ...dynamic, graph, activeTurn: null, activeTurnId: null,
+  const world: WorldState = { ...initial, ...dynamic, graph, cameras: initial.cameras,
+    cameraObservations: dynamic.cameraObservations ?? [], activeTurn: null, activeTurnId: null,
     routing: { confirmed: null, uncertain: false, attemptedRequest: null } };
   buildWorldSyncRequest(world, Math.max(1, world.turnId));
   return world;

@@ -46,6 +46,15 @@ export interface RouteZombieTraversal {
   toNodeId: string;
 }
 
+/** Riesgo observado por una cámara de simulación; nunca proviene de video real. */
+export interface CameraObservation {
+  cameraId: string;
+  zombieId: string;
+  nodeId: string;
+  detectedTurnId: number;
+  expiresAfterTurnId: number;
+}
+
 export interface WorldSyncRequest {
   gameId: string;
   turnId: number;
@@ -56,6 +65,7 @@ export interface WorldSyncRequest {
   blockedEdges: RouteBlockedEdge[];
   zombieTraversals: RouteZombieTraversal[];
   dormantUncertaintyNodeIds: string[];
+  cameraObservations?: CameraObservation[];
 }
 
 export interface PasoRequest {

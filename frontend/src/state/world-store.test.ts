@@ -43,6 +43,8 @@ function makeSnapshot(overrides: Partial<WorldSnapshot> = {}): WorldSnapshot {
     survivors: [],
     shelters: [],
     blockedEdges: [],
+    cameras: [],
+    cameraObservations: [],
     metrics: {
       routeSamples: 0,
       routeLatencyP50Ms: 0,

@@ -125,7 +125,7 @@ test("proyección pública es cerrada, independiente e inmutable y no filtra dat
   const metricsBefore = structuredClone(world.metrics);
   const snapshot = createWorldSnapshot(world);
   assert.deepEqual(Object.keys(snapshot).sort(), ["schemaVersion", "gameId", "roundId", "status", "turnId", "worldVersion",
-    "graphVersion", "updatedAt", "zombies", "survivors", "shelters", "blockedEdges", "metrics"].sort());
+    "graphVersion", "updatedAt", "zombies", "survivors", "shelters", "blockedEdges", "cameras", "cameraObservations", "metrics"].sort());
   assert.equal(Object.keys(snapshot.metrics).length, 23);
   assert.deepEqual(Object.keys(snapshot.metrics).sort(), [...publicMetricKeys].sort());
   for (const key of publicMetricKeys) assert.equal(snapshot.metrics[key], metricsBefore[key]);

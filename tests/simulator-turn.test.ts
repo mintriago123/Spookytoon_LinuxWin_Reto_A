@@ -88,7 +88,7 @@ test("dos turnos completos consumen el Fastify real por loopback, mueven y admit
   } finally { await app.close(); }
 });
 
-test("payload cerrado incluye los dos pasos del corredor y solo el agregado de dormidos", async () => {
+test("payload cerrado incluye recorridos, agregado de dormidos y observaciones simuladas", async () => {
   const state = initial(3); const engine = new RouteEngine(state.graph as MantaGraph); const client = engineClient(engine);
   let sent!: WorldSyncRequest;
   const turn = coordinator(state, { ...client, sync: async (request, signal) => {
@@ -96,7 +96,7 @@ test("payload cerrado incluye los dos pasos del corredor y solo el agregado de d
   } });
   await turn.runTurn();
   assert.deepEqual(Object.keys(sent).sort(), ["gameId", "turnId", "baseWorldVersion", "survivors", "zombies", "shelters",
-    "blockedEdges", "zombieTraversals", "dormantUncertaintyNodeIds"].sort());
+    "blockedEdges", "zombieTraversals", "dormantUncertaintyNodeIds", "cameraObservations"].sort());
   assert.equal(sent.zombieTraversals.filter(t => t.zombieId === "runner").length, 2);
   assert.deepEqual(sent.dormantUncertaintyNodeIds, ["D", "E", "F"]);
   assert(!JSON.stringify(sent).includes("hidden"));

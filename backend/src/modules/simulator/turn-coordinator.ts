@@ -9,6 +9,7 @@ import { confirmRoutingSync, markRoutingSyncAttempt, reconcileRoutingStatus } fr
 import { applyRoutingFailureSignal, type RoutingAlert } from "./routing-failure.ts";
 import { applyCityEvents } from "./city-events.ts";
 import { awakenDormantZombies, moveZombies } from "./zombies.ts";
+import { detectCameraObservations } from "./camera-surveillance.ts";
 import { applyBites, applySimultaneousSurvivorMoves, detectBites,
   resolveShelterAdmissions, resolveSurvivorDecisions } from "./survivor-resolution.ts";
 import { updateTurnMetrics, type RouteLatencySample } from "../telemetry/turn-metrics.ts";
@@ -187,6 +188,7 @@ export class TurnCoordinator {
       phase("zombie-move");
       const movedZombies = moveZombies({ ...work, turnId });
       work.zombies = movedZombies.zombies; work.lastZombieTraversals = movedZombies.traversals;
+      work.cameraObservations = detectCameraObservations(work, turnId);
       work.activeTurn.randomCursors = movedZombies.randomCursors;
       phase("sync");
       let unauthorized = false;

@@ -111,6 +111,17 @@ export function shelterIcon(): L.DivIcon {
   return shelterIconInstance;
 }
 
+const cameraIcons = new Map<boolean, L.DivIcon>();
+export function cameraIcon(alerting: boolean): L.DivIcon {
+  const cached = cameraIcons.get(alerting);
+  if (cached) return cached;
+  const color = alerting ? "#ff5a5a" : "#fbbf24";
+  const body = `<rect x="3" y="7" width="13" height="10" rx="2" fill="${color}" stroke="#0a0e16" stroke-width="1.5"/><path d="m16 10 5-3v10l-5-3z" fill="${color}" stroke="#0a0e16" stroke-width="1.5"/><circle cx="9.5" cy="12" r="2" fill="#0a0e16"/>`;
+  const icon = L.divIcon({ html: wrapSvg(26, body), className: "", iconSize: [26, 26], iconAnchor: [13, 13] });
+  cameraIcons.set(alerting, icon);
+  return icon;
+}
+
 /** Ícono invisible, solo para anclar un Tooltip permanente (rótulos de zona). */
 let invisibleIconInstance: L.DivIcon | null = null;
 export function invisibleIcon(): L.DivIcon {

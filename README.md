@@ -10,6 +10,7 @@ Proyecto Track A con backend de baja latencia, simulación por turnos y mapa en 
 | Motor de rutas (graph/routing) | Implementado: Dijkstra inverso por `worldVersion`, `bestMoveByNode` O(1), `x-api-key`, fallback al nodo actual. |
 | Simulador (game loop) | Integrado de punta a punta: `city-events → zombie-move → sync → routing → survivor-move → resolve → publish`, 150 turnos serializados, pausa/reanudación, cierres de segmento. |
 | Realtime | `GET /estado` y `WSS /ws` publican el mismo snapshot tras cada commit. |
+| Ojos de Águila | Rebanada simulada implementada: detecciones temporales de zombies activos modifican rutas y se muestran en el mapa. Ubicaciones y coberturas son aproximadas; sin video ni conexión real. No desplegada. |
 | Rondas reales (R1/R2/R3) y telemetría | Integradas desde `feat/backend-rounds-metrics`; las pruebas de backend se ejecutan en esta rama combinada. |
 | Persistencia (DynamoDB) | Adaptador, cola asíncrona y recuperación pausada implementados localmente. Las escrituras de esta versión requieren despliegue para verificarse en AWS. |
 | Frontend | Scaffold completo Vite + React + TypeScript + Tailwind + Leaflet: mapa en vivo, métricas, ocupación de refugios, controles de operador, leyenda colapsable, reconexión WS con backoff. 11/11 tests. |

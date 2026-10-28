@@ -1,5 +1,5 @@
 import type { MantaGraph } from "../../contracts/types.ts";
-import type { Immutable, RandomState, RoundConfig, TelemetryMetrics, WorldState } from "./types.ts";
+import type { Immutable, RandomState, RoundConfig, SurveillanceCamera, TelemetryMetrics, WorldState } from "./types.ts";
 import { validateRoundConfig } from "./round-validation.ts";
 import { validateRandomState } from "./random.ts";
 
@@ -36,6 +36,7 @@ export function createWorldState(input: {
   randomState: Immutable<RandomState>;
   initialMetrics: Immutable<TelemetryMetrics>;
   updatedAt: string;
+  cameras?: readonly SurveillanceCamera[];
 }): WorldState {
   if (typeof input.gameId !== "string" || !input.gameId.trim() || input.gameId.length > 128) {
     throw new Error("gameId debe ser texto no vacío de hasta 128 caracteres");
@@ -66,7 +67,8 @@ export function createWorldState(input: {
       eventId: event.eventId, tipo: "bloquear-segmento", edgeId: event.edgeId,
       motivo: event.reason, effectiveTurnId: event.effectiveTurnId, aplicado: false, origen: "evento-ciudad",
     })),
-    lastZombieTraversals: [], metrics: { ...createInitialTelemetryMetrics(roundConfig), ...structuredClone(input.initialMetrics),
+    lastZombieTraversals: [], cameras: structuredClone([...(input.cameras ?? [])]), cameraObservations: [],
+    metrics: { ...createInitialTelemetryMetrics(roundConfig), ...structuredClone(input.initialMetrics),
       activeSurvivors: roundConfig.survivorCount, bittenSurvivors: 0, evacuatedSurvivors: 0,
       activeZombies: roundConfig.zombieSpawns.filter(zombie => zombie.tipo !== "dormido").length },
     rngSeed: random.seed, randomState: { ...random }, pause: { status: "none" },

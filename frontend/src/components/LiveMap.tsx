@@ -11,7 +11,7 @@ import {
 import type { LatLngTuple } from "leaflet";
 import { useWorldStore, hasGraphVersionMismatch } from "../state/world-store";
 import { useInterpolatedWorld, lerpLatLng } from "../hooks/useInterpolatedWorld";
-import { ZOMBIE_COLOR, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
+import { ZOMBIE_COLOR, cameraIcon, invisibleIcon, shelterIcon, survivorIcon, zombieIcon } from "./entity-icons";
 import type { GraphEdge, GraphNode, RoadType, Zone } from "../types/contracts";
 
 const ROAD_COLOR: Record<RoadType, string> = {
@@ -203,6 +203,49 @@ export function LiveMap() {
             positions={[from, to]}
             pathOptions={{ color: ROAD_COLOR[edge.tipo], weight: 2, opacity: 0.55 }}
           />
+        );
+      })}
+
+      {/* Referencias aproximadas; los radios son una convención de simulación, no cobertura oficial. */}
+      {snapshot?.cameras.map((camera) => {
+        const center = camera.nodeId ? nodeIndex.get(camera.nodeId) : undefined;
+        const activeObservations = snapshot.cameraObservations.filter((item) => item.cameraId === camera.id);
+        const alerting = activeObservations.length > 0;
+        return (
+          <Fragment key={camera.id}>
+            {camera.enabled && center && (
+              <Fragment>
+                <Polyline positions={[[camera.lat, camera.lng], center]} pathOptions={{ color: "#fbbf24", weight: 1, opacity: 0.55, dashArray: "2 5" }} />
+                <Circle center={center} radius={camera.coverageRadiusMeters} pathOptions={{
+                  color: alerting ? "#ff5a5a" : "#fbbf24", fillColor: alerting ? "#ff5a5a" : "#fbbf24",
+                  fillOpacity: 0.035, weight: 1, dashArray: "5 5",
+                }} />
+              </Fragment>
+            )}
+            <Marker position={[camera.lat, camera.lng]} icon={cameraIcon(alerting)}>
+              <Popup>
+                <strong>{camera.name}</strong><br />
+                Referencia aproximada · {camera.accuracyMeters} m de precisión estimada<br />
+                {camera.enabled ? `Cobertura simulada: ${camera.coverageRadiusMeters} m desde el nodo asociado` : "Solo referencia; fuera del grafo actual"}<br />
+                {activeObservations.length > 0 ? `Alertas simuladas activas: ${activeObservations.length}` : "Sin alertas activas"}
+              </Popup>
+            </Marker>
+          </Fragment>
+        );
+      })}
+
+      {/* Cada observación mantiene temporalmente el nodo detectado como riesgo para routing. */}
+      {snapshot?.cameraObservations.map((observation) => {
+        const position = nodeIndex.get(observation.nodeId);
+        if (!position) return null;
+        return (
+          <Circle key={`${observation.cameraId}-${observation.zombieId}`} center={position} radius={55}
+            pathOptions={{ color: "#ff5a5a", fillColor: "#ff5a5a", fillOpacity: 0.16, weight: 2 }}>
+            <Popup>
+              Detección simulada · {observation.zombieId}<br />
+              Turno {observation.detectedTurnId} · riesgo hasta el turno {observation.expiresAfterTurnId - 1}
+            </Popup>
+          </Circle>
         );
       })}
 

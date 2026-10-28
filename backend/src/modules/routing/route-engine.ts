@@ -228,7 +228,9 @@ export class RouteEngine {
     }
     const zombieNodes = new Set(request.zombies.filter(zombie => zombie.estado === "activo").map(zombie => zombie.nodeId));
     const hordeNodes = this.hordeNeighborhood(request);
-    const hazards = new Set([...zombieNodes, ...hordeNodes]);
+    const cameraObservedNodes = (request.cameraObservations ?? [])
+      .filter(observation => observation.expiresAfterTurnId > request.turnId).map(observation => observation.nodeId);
+    const hazards = new Set([...zombieNodes, ...hordeNodes, ...cameraObservedNodes]);
     const availableShelters = request.shelters.filter(shelter => reservedShelterId
       ? shelter.id === reservedShelterId && shelter.ocupantes.length < shelter.capacidad
       : shelter.ocupantes.length + shelter.reservados.length < shelter.capacidad);

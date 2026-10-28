@@ -8,7 +8,7 @@ El Backend es un solo monolito modular: un proceso Fastify, un estado autoritati
 |---|---|---|---|
 | graph | Michael | Carga del artefacto inmutable, validación y adyacencia | Implementado; grafo real publicado |
 | routing | Michael | POST /paso, sincronización de snapshot y pool de workers | Implementado |
-| simulator | Maykel | Único escritor de WorldState, reloj, zombies, sobrevivientes y mordidas | Rondas R1/R2/R3 cableadas |
+| simulator | Maykel | Único escritor de WorldState, reloj, zombies, sobrevivientes, mordidas y observaciones simuladas de cámara | Rondas R1/R2/R3 y rebanada Ojos de Águila cableadas |
 | telemetry | Michael | Ventana p95, métricas del motor y del turno | Implementado |
 | persistence | Michael | Cola asíncrona, snapshots DynamoDB y recuperación pausada | Implementado localmente; AWS requiere despliegue para verificar |
 | realtime | Maykel | Publicar TURN_UPDATE después del commit del simulador | Implementado |
@@ -31,6 +31,7 @@ backend desplegado ni escrituras en AWS.
 
 - Graph/contracts/routing, simulador y realtime están ensamblados en `server.ts`; los presets se validan contra el grafo de Manta.
 - Telemetría actualiza contadores y porcentajes de entidades, ventana de 1.000 solicitudes, disponibilidad y eficiencia al cerrar cada turno. El DTO público conserva compatibilidad con los campos existentes.
+- `simulator/camera-surveillance.ts` adapta el fixture aproximado, detecta zombies activos dentro de radios sintéticos y mantiene alertas con TTL; routing evita esos nodos y el snapshot los entrega al mapa. No hay video ni integración municipal.
 - Persistencia DynamoDB escribe snapshots de forma asíncrona y permite recuperar partidas pausadas; la cola no bloquea el loop.
 - Los consumidores reciben GET /estado y WS /ws; CORS y orígenes WS comparten configuración. La guía operativa y los indicadores están en [backend/README.md](../../README.md).
 
