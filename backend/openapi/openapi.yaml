@@ -48,11 +48,18 @@ paths:
       operationId: obtenerEstado
       responses:
         '200':
-          description: Último snapshot completo
+          description: Último snapshot completo o estado idle antes de crear la primera partida
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorldSnapshot'
+                oneOf:
+                  - $ref: '#/components/schemas/WorldSnapshot'
+                  - type: object
+                    additionalProperties: false
+                    required: [status]
+                    properties:
+                      status:
+                        const: idle
         '503':
           $ref: '#/components/responses/Error'
         '400':

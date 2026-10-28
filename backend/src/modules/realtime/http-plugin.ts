@@ -62,11 +62,9 @@ export const realtimePlugin: FastifyPluginAsync<RealtimeOptions> = async (app, o
     } });
     if (request.headers.origin) reply.header("Access-Control-Allow-Origin", request.headers.origin);
   });
-  app.get("/estado", async (request, reply) => {
+  app.get("/estado", async () => {
     const snapshot = options.runtime.getCommittedSnapshot();
-    if (!snapshot) return reply.code(503).send({ error: {
-      code: "GAME_NOT_STARTED", message: "Todavía no existe una partida", requestId: request.id,
-    } });
+    if (!snapshot) return { status: "idle" };
     return snapshot;
   });
   app.options("/estado", async (_request, reply) => reply.header("Access-Control-Allow-Methods", "GET").code(204).send());

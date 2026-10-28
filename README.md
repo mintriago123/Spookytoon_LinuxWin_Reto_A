@@ -87,7 +87,7 @@ ROUTE_API_KEY='use-a-secret-of-at-least-16-characters' npm run backend:start
 npm run benchmark:routing
 ```
 
-`/health/ready` comprueba que el grafo, routing, workers y persistencia estén listos; no exige una partida activa. Antes de iniciar una partida, `GET /estado` responde `503 GAME_NOT_STARTED`.
+`/health/ready` comprueba que el grafo, routing, workers y persistencia estén listos; no exige una partida activa. Antes de iniciar una partida, `GET /estado` responde `200` con `{"status":"idle"}`.
 
 ### Frontend
 

@@ -34,12 +34,16 @@ test("OpenAPI 3.1 válido, referencias resueltas y endpoints reales con segurida
     const resolved: any = await SwaggerParser.dereference(structuredClone(document));
     const ajv = new Ajv2020({ strict: false });
     (addFormats as unknown as (ajv: Ajv2020) => void)(ajv);
+    const stateCheck = ajv.compile(resolved.paths["/estado"].get.responses["200"].content["application/json"].schema);
+    assert.equal(stateCheck((await app.inject("/estado")).json()), true);
+    assert.equal(stateCheck({ status: "idle", gameId: "invented" }), false);
     const check = ajv.compile(resolved.components.schemas.WorldSnapshot);
     const started = await app.inject({ method: "POST", url: "/simulador/iniciar",
       headers: { "x-api-key": "openapi-validation-test" }, payload: { gameId: "openapi-game", roundId: 1, seed: "api-contract" } });
     assert.equal(started.statusCode, 202);
     const current = (await app.inject("/estado")).json();
     assert.equal(check(current), true, JSON.stringify(check.errors));
+    assert.equal(stateCheck(current), true, JSON.stringify(stateCheck.errors));
     assert.equal(check({ ...current, injected: true }), false);
     // Un DTO incompleto y campos extra nunca satisfacen el contrato público.
     assert.equal(check({ schemaVersion: "1.0.0", injected: true }), false);

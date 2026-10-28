@@ -100,7 +100,7 @@ for (const roundId of [1, 2, 3] as RoundId[]) {
         });
         return find()!;
       }
-      const initial = await fetch(`${url}/estado`); assert.equal(initial.status, 503); await initial.text();
+      const initial = await fetch(`${url}/estado`); assert.equal(initial.status, 200); assert.deepEqual(await initial.json(), { status: "idle" });
       const response = await fetch(`${url}/simulador/iniciar`, { method: "POST",
         headers: { "content-type": "application/json", "x-api-key": apiKey },
         body: JSON.stringify({ gameId: `integration-fixture-${roundId}`, roundId, seed: "integration-only" }) });
