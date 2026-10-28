@@ -114,6 +114,37 @@ test("eventos son efectivos antes del sync y de las rutas", async () => {
   assert(result.world.survivors.every(s => s.nodeId === "A"));
 });
 
+test("el coordinador rechaza entrar a una observación vigente y permite entrar al vencer", async () => {
+  const state = initial(); state.turnId = 1; state.worldVersion = 1;
+  state.cameraObservations = [{ cameraId: "simulated-camera", zombieId: "walk", nodeId: "B",
+    detectedTurnId: 1, expiresAfterTurnId: 3 }];
+  const engine = new RouteEngine(state.graph as MantaGraph); const client = engineClient(engine);
+  const syncs: WorldSyncRequest[] = [];
+  const turn = coordinator(state, { ...client,
+    sync: (request, signal) => { syncs.push(structuredClone(request)); return client.sync(request, signal); },
+    // Inyecta una propuesta insegura para comprobar la defensa autoritativa;
+    // sincronización y demás decisiones siguen consumiendo el motor real.
+    step: (request, signal) => {
+      if (request.survivorId !== "S-000") return client.step(request, signal);
+      const { currentNodeId, ...identity } = request;
+      return Promise.resolve({ status: 200, body: { ...identity, fromNodeId: currentNodeId,
+        toNodeId: "B", edgeId: "AB", decision: "mover", targetShelterId: "REF",
+        reason: "ruta-segura", routeCost: 2, latencyMs: 0 } });
+    },
+  });
+  const blocked = await turn.runTurn();
+  assert.equal(syncs[0].cameraObservations!.length, 1);
+  assert.equal(blocked.decisions.decisions[0].decision, "esperar");
+  assert.equal(blocked.decisions.decisions[0].decision === "esperar" && blocked.decisions.decisions[0].cause, "invalid-response");
+  assert.equal(blocked.world.survivors[0].nodeId, "A");
+  assert.equal(blocked.world.metrics.invalidRouteResponses, 1);
+  const expired = await turn.runTurn();
+  assert.deepEqual(syncs[1].cameraObservations, []);
+  assert.equal(expired.decisions.decisions[0].decision, "mover");
+  assert.equal(expired.world.survivors[0].nodeId, "B");
+  assert.equal(expired.world.metrics.invalidRouteResponses, 1);
+});
+
 test("sync expirada pero instalada se reconcilia antes de consultar rutas", async () => {
   const state = initial(); const engine = new RouteEngine(state.graph as MantaGraph); const client = engineClient(engine);
   let syncs = 0; let queries = 0;

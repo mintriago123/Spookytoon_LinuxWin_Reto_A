@@ -120,7 +120,7 @@ test("un cupo reservado permite rutear y validar movimientos aun con el refugio 
   assert.equal(response.targetShelterId, shelter.id);
   const decision = resolveSurvivorDecisions({ gameId: world.gameId, turnId: 1, worldVersion: installed.worldVersion,
     graph, survivors: world.survivors, visibleZombies: [], shelters: world.shelters, blockedEdges: [],
-    hordeDangerNodeIds: [], zombieTraversals: [] }, { kind: "confirmed", installed: { ...installed, gameId: world.gameId },
+    hordeDangerNodeIds: [], zombieTraversals: [], cameraObservations: world.cameraObservations }, { kind: "confirmed", installed: { ...installed, gameId: world.gameId },
     attempts: [{ kind: "response", request, body: response, elapsedMs: 10 }] });
   assert.equal(decision.decisions.find(item => item.survivorId === survivor.id)!.decision, "mover");
 });
@@ -136,7 +136,7 @@ test("una respuesta 401 pausa a todos sin convertir otras respuestas válidas en
   });
   const decisions = resolveSurvivorDecisions({ gameId: world.gameId, turnId: 1, worldVersion: 1,
     graph, survivors: world.survivors, visibleZombies: [], shelters: world.shelters, blockedEdges: [],
-    hordeDangerNodeIds: [], zombieTraversals: [] }, { kind: "confirmed", installed: { ...installed, gameId: world.gameId }, attempts });
+    hordeDangerNodeIds: [], zombieTraversals: [], cameraObservations: world.cameraObservations }, { kind: "confirmed", installed: { ...installed, gameId: world.gameId }, attempts });
   assert(decisions.decisions.every(decision => decision.decision === "esperar" && decision.cause === "authorization-failed"));
   assert.equal(decisions.pauseCause, "routing-unauthorized");
   const result = updateTurnMetrics(world, [], attempts, decisions, 10);

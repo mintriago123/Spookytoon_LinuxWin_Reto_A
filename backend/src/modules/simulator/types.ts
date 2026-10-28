@@ -219,6 +219,7 @@ export interface SurvivorResolutionContext {
   graph: Immutable<MantaGraph>;
   survivors: RouteSurvivor[];
   visibleZombies: RouteZombie[];
+  cameraObservations: CameraObservation[];
   shelters: RouteShelter[];
   blockedEdges: RouteBlockedEdge[];
   hordeDangerNodeIds: string[];

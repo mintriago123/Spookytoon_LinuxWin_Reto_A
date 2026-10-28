@@ -31,7 +31,7 @@ function context(): SurvivorResolutionContext {
       })),
       refugios: [{ id: "REF", nodoId: "R", capacidad: 2 }],
     },
-    survivors: [survivor()], visibleZombies: [],
+    survivors: [survivor()], visibleZombies: [], cameraObservations: [],
     shelters: [{ id: "REF", nodoId: "R", capacidad: 2, ocupantes: [], reservados: [] }],
     blockedEdges: [], hordeDangerNodeIds: [], zombieTraversals: [],
   };
@@ -88,6 +88,36 @@ test("sin sync vigente nadie usa un plan viejo", () => {
     assert.equal(decisions[0].decision === "esperar" && decisions[0].cause, "sync-failed");
   }
   assert.equal(resolveSurvivorDecisions(ctx, { kind: "sync-failed" }).decisions[0].decision, "esperar");
+});
+
+test("una observación vigente impide entrar aunque el zombie ya no ocupe el nodo", () => {
+  const ctx = context();
+  ctx.cameraObservations = [{ cameraId: "camera", zombieId: "Z", nodeId: "B", detectedTurnId: 1, expiresAfterTurnId: 3 }];
+  const before = structuredClone(ctx);
+  const batch = resolve(freeze(ctx));
+  assert.deepEqual(batch.decisions, [{ survivorId: "S", decision: "esperar", nodeId: "A",
+    targetShelterId: null, cause: "invalid-response" }]);
+  assert.deepEqual(batch.validResponseSurvivorIds, []);
+  assert.equal(applySimultaneousSurvivorMoves(ctx.survivors, batch.decisions).survivors[0].nodeId, "A");
+  assert.deepEqual(ctx, before);
+});
+
+test("una observación vigente en el origen permite salir a un nodo seguro", () => {
+  const ctx = context();
+  ctx.cameraObservations = [{ cameraId: "camera", zombieId: "Z", nodeId: "A", detectedTurnId: 1, expiresAfterTurnId: 3 }];
+  const batch = resolve(freeze(ctx));
+  assert.equal(batch.decisions[0].decision, "mover");
+  assert.deepEqual(batch.validResponseSurvivorIds, ["S"]);
+  assert.equal(applySimultaneousSurvivorMoves(ctx.survivors, batch.decisions).survivors[0].nodeId, "B");
+});
+
+for (const turnId of [2, 3]) test(`observación vencida en turno 2 no bloquea la entrada en turno ${turnId}`, () => {
+  const ctx = context(); ctx.turnId = turnId;
+  ctx.cameraObservations = [{ cameraId: "camera", zombieId: "Z", nodeId: "B", detectedTurnId: 1, expiresAfterTurnId: 2 }];
+  const item = attempt(response({ turnId })); item.request = { ...item.request, turnId };
+  const batch = resolve(freeze(ctx), [item], { ...installed(), turnId });
+  assert.equal(batch.decisions[0].decision, "mover");
+  assert.equal(applySimultaneousSurvivorMoves(ctx.survivors, batch.decisions).survivors[0].nodeId, "B");
 });
 
 test("rechaza esquema incompleto, campos extra, números inválidos e identidades incorrectas", () => {

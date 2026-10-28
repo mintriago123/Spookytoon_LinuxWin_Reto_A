@@ -246,7 +246,8 @@ export class TurnCoordinator {
       const danger = hordeDangerNodes(work.graph, work.zombies);
       const context = { gameId: work.gameId, turnId, worldVersion: installed?.worldVersion ?? 0,
         graph: work.graph, survivors: work.survivors, visibleZombies: work.zombies.filter(z => z.estado === "activo"),
-        shelters: work.shelters, blockedEdges: work.blockedEdges, hordeDangerNodeIds: danger, zombieTraversals: work.lastZombieTraversals };
+        shelters: work.shelters, blockedEdges: work.blockedEdges, cameraObservations: work.cameraObservations,
+        hordeDangerNodeIds: danger, zombieTraversals: work.lastZombieTraversals };
       const decisions = resolveSurvivorDecisions(context, currentPlan ? { kind: "confirmed", installed, attempts }
         : { kind: "sync-failed", ...(unauthorized ? { status: 401 } : {}) });
       const alert = applyRoutingFailureSignal(work, decisions);

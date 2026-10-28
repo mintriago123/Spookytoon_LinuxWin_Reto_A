@@ -58,6 +58,8 @@ export function resolveSurvivorDecisions(
   const hazards = new Set([
     ...context.hordeDangerNodeIds,
     ...context.visibleZombies.filter(zombie => zombie.estado === "activo").map(zombie => zombie.nodeId),
+    ...context.cameraObservations.filter(observation => observation.expiresAfterTurnId > context.turnId)
+      .map(observation => observation.nodeId),
   ]);
   const decisions: SurvivorDecision[] = context.survivors.filter(s => s.estado === "vivo").map(survivor => {
     const wait = (cause: WaitCause, targetShelterId = survivor.targetShelterId): SurvivorDecision => ({
